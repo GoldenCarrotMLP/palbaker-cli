@@ -17,7 +17,8 @@ class ModsView:
         
         # State Engine
         self.raw_mods: list[dict] = []
-        self.cached_items: list[ft.ContextMenu] = [] 
+        # FIXED: Changed typing constraint from ContextMenu to ModItem
+        self.cached_items: list[ModItem] = [] 
         self.search_query = ""
         self.show_mapped = False
         self.selected_badges: set[str] = set()
@@ -263,7 +264,7 @@ class ModsView:
                     # Append log line silently
                     self.write_log(line.strip(), flush=False)
                     
-                    # Update progress bar variables silently
+                    # Update progress bar properties silently
                     for item in self.cached_items:
                         if getattr(item, "mod_data")["name"] == self.active_mod_name:
                             item.update_progress(line, flush=False)
@@ -274,7 +275,7 @@ class ModsView:
                     # Yield execution briefly back to Flet's asyncio loop to flush socket queues
                     await asyncio.sleep(0.001)
                     
-                    # Throttle visual rendering updates to at most once every 100ms
+                    # Throttle updates to at most once every 100ms
                     current_time = time.time()
                     if current_time - last_update_time >= 0.10:
                         self.force_update()

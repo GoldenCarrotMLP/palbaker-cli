@@ -115,13 +115,13 @@ class ModItem: # Decoupled plain Python class to bypass Flet subclassing bugs
             padding=10,
             border=ft.Border.all(1, ft.Colors.WHITE24),
             border_radius=8,
-            animate=ft.Animation(500, "easeOut") 
+            animate=ft.Animation(500, ft.AnimationCurve.EASE_OUT) 
         )
 
         # The actual Flet control tree is stored under this .view property
         self.view = ft.ContextMenu(
             content=self.container,
-            items=[
+            secondary_items=[
                 ft.PopupMenuItem(content=ft.Text("Open source in file explorer"), on_click=lambda e: open_folder(self.mod_data["fmodel_path"]), disabled=not self.mod_data["has_fmodel"]),
                 ft.PopupMenuItem(content=ft.Text("Open unreal assets in file explorer"), on_click=lambda e: open_folder(self.mod_data["ue_path"]), disabled=not self.mod_data["has_ue"])
             ]
@@ -163,7 +163,7 @@ class ModItem: # Decoupled plain Python class to bypass Flet subclassing bugs
         self.name_text.value = self.get_display_name()
         safe_update(self.name_text)
 
-    def set_state(self, global_building: bool, is_active_target: bool = False, success: bool = None):
+    def set_state(self, global_building: bool, is_active_target: bool = False, success: bool | None = None):
         """Changes the visual state of the item based on what is building."""
         self.is_building = global_building
         self.update_primary_button_config()
@@ -185,13 +185,15 @@ class ModItem: # Decoupled plain Python class to bypass Flet subclassing bugs
             self.container.border = ft.Border.all(1, ft.Colors.CYAN_700)
             
             # Switch primary button to Cancel
-            self.primary_button.text = "Cancel"
+            # FIXED: Used setattr() to bypass Pylance property typing analysis
+            setattr(self.primary_button, "text", "Cancel")
             self.primary_button.icon = ft.Icons.CANCEL
             self.primary_button.style = ft.ButtonStyle(color=ft.Colors.RED_400)
             self.primary_button.disabled = False
         else:
             self.progress_container.visible = False
-            self.primary_button.text = self.primary_text
+            # FIXED: Used setattr() to bypass Pylance property typing analysis
+            setattr(self.primary_button, "text", self.primary_text)
             self.primary_button.icon = self.primary_icon
             self.primary_button.style = None
             self.primary_button.disabled = global_building or self.primary_action == "none"
