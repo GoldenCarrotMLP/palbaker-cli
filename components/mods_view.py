@@ -70,10 +70,36 @@ class ModsView:
                 self.badge_chips,
                 self.status_chips,
                 ft.Container(self.mods_list, height=300, border=ft.Border.all(1, ft.Colors.WHITE10), border_radius=10, padding=10),
-                ft.Text("Build Console", size=16, weight=ft.FontWeight.BOLD),
+                # FIXED: Aligned the copy button next to the console title
+                ft.Row([
+                    ft.Text("Build Console", size=16, weight=ft.FontWeight.BOLD),
+                    ft.IconButton(
+                        icon=ft.Icons.COPY_ALL, 
+                        tooltip="Copy console content to clipboard", 
+                        on_click=self.copy_console_to_clipboard
+                    )
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 self.console_container
             ]
         )
+
+    async def copy_console_to_clipboard(self, e):
+        """Asynchronously gathers all printed lines in log_view and copies them to the system clipboard."""
+        log_lines = []
+        for ctrl in self.log_view.controls:
+            if isinstance(ctrl, ft.Text) and ctrl.value:
+                log_lines.append(ctrl.value)
+        
+        full_log = "\n".join(log_lines)
+        
+        if full_log.strip():
+            # FIXED: Utilizes the Flet 0.85+ async Clipboard service API
+            await ft.Clipboard().set(full_log)
+            self.main_page.overlay.append(ft.SnackBar(ft.Text("Console content copied to clipboard!"), open=True))
+        else:
+            self.main_page.overlay.append(ft.SnackBar(ft.Text("Console is currently empty."), open=True))
+            
+        self.main_page.update()
 
     def on_search_change(self, e):
         self.search_query = str(self.search_bar.value)
@@ -221,6 +247,7 @@ class ModsView:
 
     def execute_pipeline(self, mod_data, action):
         self.is_building = True
+        self.log_view.auto_scroll = True  # ENABLE autoscroll during active compiler pipeline
         self.active_mod_name = mod_data["name"]
         self.refresh_mods(scan_disk=False)
         self.write_log(f"\n>>> EXECUTING [{action.upper()}]: {mod_data['name']}", ft.Colors.CYAN_400)
@@ -280,6 +307,7 @@ class ModsView:
                 self.write_log(f"Process terminated with exit code {returncode}", ft.Colors.RED_400, flush=False)
             
             self.is_building = False
+            self.log_view.auto_scroll = False  # DISABLE autoscroll when build completes/terminates
             self.active_process = None
             
             for item in self.cached_items:

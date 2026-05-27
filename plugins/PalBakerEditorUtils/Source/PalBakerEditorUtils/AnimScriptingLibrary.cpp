@@ -7,6 +7,7 @@
 #include "AnimGraphNode_SpringBone.h"
 #include "AnimGraphNode_LinkedInputPose.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -15,6 +16,7 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
 {
     if (!AnimBP) return false;
 
+    // 1. Load JSON Metadata
     FString JsonStr;
     if (!FFileHelper::LoadFileToString(JsonStr, *JsonPath)) return false;
 
@@ -22,6 +24,7 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
     TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
     if (!FJsonSerializer::Deserialize(Reader, JsonObj)) return false;
 
+    // 2. Locate the AnimGraph
     UEdGraph* AnimGraph = nullptr;
     for (UEdGraph* Graph : AnimBP->FunctionGraphs) {
         if (Graph->GetFName() == TEXT("AnimGraph")) {
@@ -31,6 +34,7 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
     }
     if (!AnimGraph) return false;
 
+    // 3. Locate the Root Node and its Input Pin
     UAnimGraphNode_Root* RootNode = nullptr;
     for (UEdGraphNode* Node : AnimGraph->Nodes) {
         RootNode = Cast<UAnimGraphNode_Root>(Node);
@@ -45,6 +49,8 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
     int32 NodeX = RootNode->NodePosX - 400;
     int32 NodeY = RootNode->NodePosY;
 
+    // If an existing blueprint, intercept the existing feed. 
+    // If empty (newly generated), spawn an Input Pose node to drive the physics chain.
     if (RootInputPin->LinkedTo.Num() > 0) {
         OriginalOutputPin = RootInputPin->LinkedTo[0];
         RootInputPin->BreakAllPinLinks();
@@ -60,6 +66,7 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
         if (!OriginalOutputPin) return false;
     }
 
+    // --- Create Local to Component Space ---
     UAnimGraphNode_LocalToComponentSpace* L2C = NewObject<UAnimGraphNode_LocalToComponentSpace>(AnimGraph);
     AnimGraph->AddNode(L2C);
     L2C->AllocateDefaultPins();
@@ -70,6 +77,7 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
     L2C->FindPin(TEXT("LocalPose"))->MakeLinkTo(OriginalOutputPin);
     UEdGraphPin* CurrentOutputPin = L2C->FindPin(TEXT("ComponentPose"));
 
+    // --- Inject Offset Bones (ModifyBone) ---
     const TArray<TSharedPtr<FJsonValue>>* OffsetBones;
     if (JsonObj->TryGetArrayField(TEXT("offset_bones"), OffsetBones))
     {
@@ -113,12 +121,10 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
                 }
             }
 
-// FIXED: Use the correct Unreal Engine Enum (BMM_Additive)
-            // Scale uses Replace in Local BoneSpace to preserve sizing correctly.
             ModBone->Node.TranslationMode = EBoneModificationMode::BMM_Additive;
             ModBone->Node.RotationMode = EBoneModificationMode::BMM_Additive;
             ModBone->Node.ScaleMode = EBoneModificationMode::BMM_Replace;
-
+            
             ModBone->Node.TranslationSpace = EBoneControlSpace::BCS_ParentBoneSpace;
             ModBone->Node.RotationSpace = EBoneControlSpace::BCS_ParentBoneSpace;
             ModBone->Node.ScaleSpace = EBoneControlSpace::BCS_BoneSpace;
@@ -128,6 +134,7 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
         }
     }
 
+    // --- Inject Jiggle Bones (SpringBone) ---
     const TArray<TSharedPtr<FJsonValue>>* JiggleBones;
     if (JsonObj->TryGetArrayField(TEXT("jiggle_bones"), JiggleBones))
     {
@@ -161,6 +168,7 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
         }
     }
 
+    // --- Create Component to Local Space ---
     UAnimGraphNode_ComponentToLocalSpace* C2L = NewObject<UAnimGraphNode_ComponentToLocalSpace>(AnimGraph);
     AnimGraph->AddNode(C2L);
     C2L->AllocateDefaultPins();
@@ -172,5 +180,6 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
 
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
     FKismetEditorUtilities::CompileBlueprint(AnimBP);
+
     return true;
 }

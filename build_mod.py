@@ -79,6 +79,12 @@ def inject_packaging_settings(ini_path):
     section_found = False
     section_header = "[/Script/UnrealEd.ProjectPackagingSettings]"
     
+    # We strip out existing keys to prevent duplicates when updating
+    keys_to_override = [
+        "DirectoriesToAlwaysCook", "+DirectoriesToAlwaysCook", "-DirectoriesToAlwaysCook",
+        "bCookAll", "bUseIoStore", "bShareMaterialShaderCode", "MapsToCook", "+MapsToCook", "-MapsToCook"
+    ]
+    
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("[") and stripped.endswith("]"):
@@ -86,7 +92,10 @@ def inject_packaging_settings(ini_path):
                 in_section = True
                 section_found = True
                 new_lines.append(line)
+                # Inject settings to disable IoStore and Material Sharing to output loose .uassets
                 new_lines.append("bCookAll=False\n")
+                new_lines.append("bUseIoStore=False\n")
+                new_lines.append("bShareMaterialShaderCode=False\n")
                 new_lines.append(f'+DirectoriesToAlwaysCook=(Path="{UE_VIRTUAL_PATH}")\n')
                 new_lines.append(f'+DirectoriesToAlwaysCook=(Path="{SKELETON_VIRTUAL_PATH}")\n')
                 new_lines.append("MapsToCook=\n")
@@ -95,13 +104,15 @@ def inject_packaging_settings(ini_path):
                 in_section = False
                 
         if in_section:
-            if any(stripped.startswith(k) for k in ["DirectoriesToAlwaysCook", "+DirectoriesToAlwaysCook", "-DirectoriesToAlwaysCook", "bCookAll", "MapsToCook", "+MapsToCook", "-MapsToCook"]):
+            if any(stripped.startswith(k) for k in keys_to_override):
                 continue
         new_lines.append(line)
         
     if not section_found:
         new_lines.append("\n" + section_header + "\n")
         new_lines.append("bCookAll=False\n")
+        new_lines.append("bUseIoStore=False\n")
+        new_lines.append("bShareMaterialShaderCode=False\n")
         new_lines.append(f'+DirectoriesToAlwaysCook=(Path="{UE_VIRTUAL_PATH}")\n')
         new_lines.append(f'+DirectoriesToAlwaysCook=(Path="{SKELETON_VIRTUAL_PATH}")\n')
         
@@ -111,8 +122,17 @@ def inject_packaging_settings(ini_path):
 def main():
     project_dir = os.path.dirname(UPROJECT_PATH)
     target_project_name = os.path.splitext(os.path.basename(UPROJECT_PATH))[0]
-    ini_path = os.path.join(project_dir, "Config", "DefaultGame.ini")
-    ini_backup = os.path.join(project_dir, "Config", "DefaultGame.ini.bak")
+    
+    # Ensure the Config directory and DefaultGame.ini exist for brand-new blank projects
+    config_dir = os.path.join(project_dir, "Config")
+    os.makedirs(config_dir, exist_ok=True)
+    
+    ini_path = os.path.join(config_dir, "DefaultGame.ini")
+    if not os.path.exists(ini_path):
+        with open(ini_path, "w", encoding="utf-8") as f:
+            f.write("[/Script/UnrealEd.ProjectPackagingSettings]\n")
+            
+    ini_backup = os.path.join(config_dir, "DefaultGame.ini.bak")
 
     # Determine Output directory
     output_dir = FMODEL_DIR if os.path.exists(FMODEL_DIR) else project_dir
@@ -212,10 +232,12 @@ def main():
     # -------------------------------------------------------------
     if ACTION in ["cook", "full"]:
         rel_ue_path = UE_VIRTUAL_PATH.replace("/Game/", "").replace("/", os.sep)
-        cooked_dir = os.path.join(project_dir, "Saved", "Cooked", "Windows", "Pal", "Content", rel_ue_path)
+        # FIXED: Use the dynamic target_project_name instead of hardcoded "Pal"
+        cooked_dir = os.path.join(project_dir, "Saved", "Cooked", "Windows", target_project_name, "Content", rel_ue_path)
         
         rel_skel_path = SKELETON_VIRTUAL_PATH.replace("/Game/", "").replace("/", os.sep)
-        cooked_skel_dir = os.path.join(project_dir, "Saved", "Cooked", "Windows", "Pal", "Content", rel_skel_path)
+        # FIXED: Use the dynamic target_project_name instead of hardcoded "Pal"
+        cooked_skel_dir = os.path.join(project_dir, "Saved", "Cooked", "Windows", target_project_name, "Content", rel_skel_path)
         
         if os.path.exists(cooked_dir): shutil.rmtree(cooked_dir, ignore_errors=True)
         if os.path.exists(cooked_skel_dir): shutil.rmtree(cooked_skel_dir, ignore_errors=True)
