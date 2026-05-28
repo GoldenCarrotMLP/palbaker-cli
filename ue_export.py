@@ -1,5 +1,6 @@
 import unreal
 import os
+import json
 
 def run_export():
     working_dir = globals().get('TARGET_FOLDER', os.getcwd())
@@ -13,18 +14,17 @@ def run_export():
     ar = unreal.AssetRegistryHelpers.get_asset_registry()
     assets = ar.get_assets_by_path(ue_path, recursive=True)
 
-    # Normalize working directory path to use forward slashes
     working_dir = os.path.abspath(working_dir).replace("\\", "/")
     os.makedirs(working_dir, exist_ok=True)
+
+    materials_metadata = {}
 
     for asset in assets:
         asset_class = str(asset.asset_class_path.asset_name)
         
-        # FIXED: Skip non-target classes (like animations) BEFORE loading to prevent missing USkeleton crashes
-        if asset_class not in ["SkeletalMesh", "Texture2D"]:
+        if asset_class not in ["SkeletalMesh", "Texture2D", "MaterialInstanceConstant"]:
             continue
 
-        # FIXED: Wrap load_asset in a safe try-except block to gracefully skip corrupted assets [33]
         try:
             loaded_asset = unreal.EditorAssetLibrary.load_asset(asset.package_name)
         except Exception as e:
@@ -40,36 +40,62 @@ def run_export():
             
             if not overwrite and os.path.exists(fbx_path):
                 print(f"Skipping existing FBX: {os.path.basename(fbx_path)}")
-                continue
+            else:
+                print(f"Exporting SkeletalMesh to: {fbx_path}")
+                task = unreal.AssetExportTask()
+                task.set_editor_property('object', loaded_asset)
+                task.set_editor_property('filename', fbx_path)
+                task.set_editor_property('automated', True)
+                task.set_editor_property('prompt', False)
+                task.set_editor_property('replace_identical', True)
                 
-            print(f"Exporting SkeletalMesh to: {fbx_path}")
-            task = unreal.AssetExportTask()
-            task.set_editor_property('object', loaded_asset)
-            task.set_editor_property('filename', fbx_path)
-            task.set_editor_property('automated', True)
-            task.set_editor_property('prompt', False)
-            task.set_editor_property('replace_identical', True)
-            
-            options = unreal.FbxExportOption()
-            task.set_editor_property('options', options)
-            
-            unreal.Exporter.run_asset_export_task(task)
+                options = unreal.FbxExportOption()
+                task.set_editor_property('options', options)
+                unreal.Exporter.run_asset_export_task(task)
 
         elif asset_class == "Texture2D":
             png_path = f"{working_dir}/{loaded_asset.get_name()}.png"
             
             if not overwrite and os.path.exists(png_path):
                 print(f"Skipping existing Texture: {os.path.basename(png_path)}")
-                continue
+            else:
+                print(f"Exporting Texture2D to: {png_path}")
+                task = unreal.AssetExportTask()
+                task.set_editor_property('object', loaded_asset)
+                task.set_editor_property('filename', png_path)
+                task.set_editor_property('automated', True)
+                task.set_editor_property('prompt', False)
+                task.set_editor_property('replace_identical', True)
                 
-            print(f"Exporting Texture2D to: {png_path}")
-            task = unreal.AssetExportTask()
-            task.set_editor_property('object', loaded_asset)
-            task.set_editor_property('filename', png_path)
-            task.set_editor_property('automated', True)
-            task.set_editor_property('prompt', False)
-            task.set_editor_property('replace_identical', True)
+                unreal.Exporter.run_asset_export_task(task)
+
+        elif asset_class == "MaterialInstanceConstant":
+            # --- EXTRACT MATERIAL PROPERTIES DIRECTLY FROM UNREAL ENGINE ---
+            mat_name = loaded_asset.get_name()
             
-            unreal.Exporter.run_asset_export_task(task)
+            # Extract Parent Class
+            parent_name = "MI_PalLit_CharacterBodyBase"
+            parent_mat = loaded_asset.get_editor_property('parent')
+            if parent_mat:
+                parent_name = parent_mat.get_name()
+            
+            # Extract Texture Parameters
+            params = {}
+            tex_params = loaded_asset.get_editor_property('texture_parameter_values')
+            for tex_param in tex_params:
+                param_name = str(tex_param.parameter_info.name)
+                if tex_param.parameter_value:
+                    params[param_name] = tex_param.parameter_value.get_name()
+                    
+            materials_metadata[mat_name] = {
+                "parent_class": parent_name,
+                "parameters": params
+            }
+
+    if materials_metadata:
+        meta_path = os.path.join(working_dir, "materials_metadata.json")
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(materials_metadata, f, indent=4)
+        print(f"Exported True Material Topology Metadata to: {meta_path}")
 
 run_export()

@@ -61,22 +61,14 @@ def find_best_texture_match(slot_name, textures, suffix):
             
     return best_match if best_score > 0 else None
 
-def build_materials(ue_path, textures, target_asset_path):
+def build_materials_heuristically(ue_path, textures, material_slots):
+    """Fallback heuristic binder when no metadata is available."""
+    print("No Material Metadata found. Running fallback heuristic suffix binder...")
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
     mi_assets = []
-    material_slots = []
     
-    if target_asset_path:
-        mesh = unreal.EditorAssetLibrary.load_asset(target_asset_path)
-        if mesh:
-            for mat in mesh.materials:
-                material_slots.append(str(mat.material_slot_name))
-
-    print("Running dynamic slot-and-suffix material binder...")
     for slot_name in material_slots:
         mi_path = f"{ue_path}/{slot_name}"
-        
-        # FIXED: If the asset already exists, load it. Otherwise, create it cleanly [33].
         if unreal.EditorAssetLibrary.does_asset_exist(mi_path):
             print(f"Loading existing material instance: {slot_name}")
             mi_asset = unreal.EditorAssetLibrary.load_asset(mi_path)
@@ -86,7 +78,6 @@ def build_materials(ue_path, textures, target_asset_path):
             mi_asset = asset_tools.create_asset(slot_name, ue_path, unreal.MaterialInstanceConstant.static_class(), factory)
             
         if not mi_asset:
-            print(f"ERROR: Could not load or create material instance for slot: {slot_name}")
             continue
             
         lower_name = slot_name.lower()
@@ -101,7 +92,6 @@ def build_materials(ue_path, textures, target_asset_path):
         if parent_mat:
             unreal.MaterialEditingLibrary.set_material_instance_parent(mi_asset, parent_mat)
             
-        # Set accurate Palworld parameter names
         tex_b = find_best_texture_match(slot_name, textures, "B")
         if tex_b:
             loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_b))[0]}")
@@ -125,8 +115,71 @@ def build_materials(ue_path, textures, target_asset_path):
                 
         unreal.EditorAssetLibrary.save_loaded_asset(mi_asset)
         mi_assets.append((slot_name.lower(), mi_asset))
-
+        
     return mi_assets
+
+def build_materials(ue_path, json_path, textures, target_asset_path):
+    """Orchestrator to evaluate whether to run the Topological or Heuristic binder."""
+    material_slots = []
+    if target_asset_path:
+        mesh = unreal.EditorAssetLibrary.load_asset(target_asset_path)
+        if mesh:
+            for mat in mesh.materials:
+                material_slots.append(str(mat.material_slot_name))
+
+    # Try to load topological data from bone_data.json
+    materials_metadata = {}
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            materials_metadata = data.get("materials", {})
+        except Exception as e:
+            print(f"Warning: Failed to parse {json_path}: {e}")
+
+    if materials_metadata:
+        print("Running Topological Material Binder...")
+        asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+        mi_assets = []
+        
+        for mat_name, data in materials_metadata.items():
+            mi_path = f"{ue_path}/{mat_name}"
+            
+            if unreal.EditorAssetLibrary.does_asset_exist(mi_path):
+                print(f"Loading existing material instance: {mat_name}")
+                mi_asset = unreal.EditorAssetLibrary.load_asset(mi_path)
+            else:
+                print(f"Creating new material instance: {mat_name}")
+                factory = unreal.MaterialInstanceConstantFactoryNew()
+                mi_asset = asset_tools.create_asset(mat_name, ue_path, unreal.MaterialInstanceConstant.static_class(), factory)
+                
+            if not mi_asset:
+                continue
+                
+            parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterBodyBase"
+            parent_class_lower = data.get("parent_class", "").lower()
+            if "eye" in parent_class_lower or "mouth" in parent_class_lower:
+                parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterEyeBase"
+            elif "hair" in parent_class_lower:
+                parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterHairBase"
+                
+            parent_mat = unreal.EditorAssetLibrary.load_asset(parent_path)
+            if parent_mat:
+                unreal.MaterialEditingLibrary.set_material_instance_parent(mi_asset, parent_mat)
+                
+            for param_name, tex_name in data.get("textures", {}).items():
+                loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{tex_name}")
+                if loaded_tex:
+                    unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, param_name, loaded_tex)
+                    print(f"  Bound {param_name}: {tex_name}")
+                    
+            unreal.EditorAssetLibrary.save_loaded_asset(mi_asset)
+            mi_assets.append((mat_name.lower(), mi_asset))
+            
+        return mi_assets
+    else:
+        # Fallback to suffix matching
+        return build_materials_heuristically(ue_path, textures, material_slots)
 
 def bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets):
     if not target_asset_path:
@@ -144,22 +197,16 @@ def bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets):
         except Exception:
             pass
     
-    # Access the SkeletalMaterial structs array directly as properties
     skel_materials = mesh.materials
     print(f"Skeletal mesh has {len(skel_materials)} material slots.")
     
     new_materials = []
     for skel_mat in skel_materials:
-        # Read struct attributes directly
         slot_name = str(skel_mat.material_slot_name).lower()
         print(f"Processing slot: {slot_name}")
         
-        matched_mi = None
-        for mi_name, mi_asset in mi_assets:
-            if mi_name == slot_name:
-                matched_mi = mi_asset
-                break
-                
+        matched_mi = next((mi_asset for mi_name, mi_asset in mi_assets if mi_name == slot_name), None)
+            
         if not matched_mi:
             for mi_name, mi_asset in mi_assets:
                 if ("body" in mi_name and "body" in slot_name) or \
@@ -170,12 +217,9 @@ def bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets):
                     break
                     
         if matched_mi:
-            # Assign struct attributes directly
             skel_mat.material_interface = matched_mi
             print(f"  Linked slot {slot_name} -> {matched_mi.get_name()}")
         else:
-            # Safeguard: Bind the master parent directly to prevent unassigned
-            # "DefaultMaterial" checkerboard glitches from showing in-game.
             if "eye" in slot_name or "mouth" in slot_name:
                 fallback_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterEyeBase"
             elif "hair" in slot_name:
@@ -190,6 +234,5 @@ def bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets):
                 
         new_materials.append(skel_mat)
     
-    # Write struct array directly
     mesh.materials = new_materials
     unreal.EditorAssetLibrary.save_loaded_asset(mesh)
