@@ -1,3 +1,4 @@
+# unreal_scripts/importer.py
 import unreal
 import os
 
@@ -6,6 +7,7 @@ def clear_cache(ue_path, fbx_file, folder_name):
         fbx_base_name = os.path.splitext(os.path.basename(fbx_file))[0]
         paths_to_delete = [
             f"{ue_path}/SK_{fbx_base_name}",
+            f"{ue_path}/SK_{fbx_base_name}_Skeleton",  # Clean up any orphaned intermediate skeletons
             f"{ue_path}/PA_{folder_name}_PhysicsAsset",
             f"/Game/Pal/Model/Character/Skeleton/{folder_name}/SK_{folder_name}_Skeleton",
             f"/Game/Pal/Model/Character/Skeleton/{folder_name}/{folder_name}_BP"
@@ -56,6 +58,9 @@ def import_assets(ue_path, textures, fbx_file, folder_name):
         options.set_editor_property('import_textures', False)
         options.set_editor_property('create_physics_asset', True)
         
+        # FIX: Force strict skeletal import execution (Disables automatic similar skeleton sharing)
+        options.set_editor_property('automated_import_should_detect_type', False)
+        
         skel_data = unreal.FbxSkeletalMeshImportData()
         skel_data.set_editor_property('import_content_type', unreal.FBXImportContentType.FBXICT_ALL)
         skel_data.set_editor_property('normal_import_method', unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
@@ -69,10 +74,26 @@ def import_assets(ue_path, textures, fbx_file, folder_name):
         fbx_tasks.append(fbx_task)
         asset_tools.import_asset_tasks(fbx_tasks)
 
-        auto_skeleton_path = f"{ue_path}/{fbx_import_name}_Skeleton"
-        target_skeleton_path = f"/Game/Pal/Model/Character/Skeleton/{folder_name}/SK_{folder_name}_Skeleton"
+        # FIX: Find the generated skeleton via Asset Registry scan (resilient against suffix naming variations)
+        target_skeleton_dir = f"/Game/Pal/Model/Character/Skeleton/{folder_name}"
+        target_skeleton_path = f"{target_skeleton_dir}/SK_{folder_name}_Skeleton"
+        
+        ar = unreal.AssetRegistryHelpers.get_asset_registry()
+        ar.scan_paths_synchronous([ue_path])
+        assets = ar.get_assets_by_path(ue_path)
+        
+        auto_skeleton_path = ""
+        for asset in assets:
+            if str(asset.asset_class_path.asset_name) == "Skeleton":
+                auto_skeleton_path = str(asset.package_name)
+                break
+                
+        # Heuristic fallback if asset registry scan was deferred
+        if not auto_skeleton_path:
+            auto_skeleton_path = f"{ue_path}/{fbx_import_name}_Skeleton"
+
         if unreal.EditorAssetLibrary.does_asset_exist(auto_skeleton_path):
-            unreal.EditorAssetLibrary.make_directory(f"/Game/Pal/Model/Character/Skeleton/{folder_name}")
+            unreal.EditorAssetLibrary.make_directory(target_skeleton_dir)
             if unreal.EditorAssetLibrary.does_asset_exist(target_skeleton_path):
                 unreal.EditorAssetLibrary.delete_asset(target_skeleton_path)
             unreal.EditorAssetLibrary.rename_asset(auto_skeleton_path, target_skeleton_path)

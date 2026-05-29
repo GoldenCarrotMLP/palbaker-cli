@@ -1,3 +1,4 @@
+# components/mod_item.py
 import flet as ft
 import os
 import sys
@@ -16,6 +17,23 @@ def open_folder(path: str):
             subprocess.Popen(['open', path])
         else:
             subprocess.Popen(['xdg-open', path])
+
+def open_file_in_explorer(file_path: str):
+    """Opens the directory containing the file and highlights/selects the file if supported."""
+    if not file_path:
+        return
+    if os.path.exists(file_path):
+        if os.name == 'nt':
+            # On Windows, explorer.exe /select,path highlights the file
+            subprocess.run(['explorer.exe', f'/select,{os.path.normpath(file_path)}'])
+        elif sys.platform == 'darwin':
+            # macOS select-and-reveal Finder flag
+            subprocess.Popen(['open', '-R', file_path])
+        else:
+            # Linux fallback
+            parent_dir = os.path.dirname(file_path)
+            if os.path.exists(parent_dir):
+                subprocess.Popen(['xdg-open', parent_dir])
 
 def safe_update(control):
     """Safely updates a Flet control, bypassing the RuntimeError if it is not mounted yet."""
@@ -124,9 +142,20 @@ class ModItem: # Decoupled plain Python class to bypass Flet subclassing bugs
             content=self.container,
             secondary_items=[
                 ft.PopupMenuItem(content=ft.Text("Open source in file explorer"), on_click=lambda e: open_folder(self.mod_data["fmodel_path"]), disabled=not self.mod_data["has_fmodel"]),
-                ft.PopupMenuItem(content=ft.Text("Open unreal assets in file explorer"), on_click=lambda e: open_folder(self.mod_data["ue_path"]), disabled=not self.mod_data["has_ue"])
+                ft.PopupMenuItem(content=ft.Text("Open unreal assets in file explorer"), on_click=lambda e: open_folder(self.mod_data["ue_path"]), disabled=not self.mod_data["has_ue"]),
+                ft.PopupMenuItem(
+                    content=ft.Text("Open PAK in file explorer"), 
+                    on_click=lambda e: open_file_in_explorer(self.mod_data.get("pak_path", "")), 
+                    disabled=self.mod_data.get("pak_status") != "Packed"
+                ),
+                ft.PopupMenuItem(
+                    content=ft.Text("Show in Unreal Content Browser"),
+                    on_click=lambda e: on_action_click(self.mod_data, "browse_unreal"),
+                    disabled=not self.mod_data["has_ue"]  # Disabled unless UE ASSETS is active
+                )
             ]
         ) # type: ignore
+
 
     def handle_button_click(self, e):
         """Intelligently routes the button click based on current state."""

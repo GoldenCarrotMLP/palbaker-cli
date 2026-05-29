@@ -2,6 +2,91 @@ import sys
 import os
 import time
 
+# utils/builder/unreal_helper.py (Add to the end of the file)
+
+def run_remote_command(ue_root: str, project_name: str, cmd: str) -> tuple[bool, str]:
+    """
+    Establishes a remote execution connection with the running Unreal Editor 
+    and executes a raw python code string.
+    """
+    ue_python_dir = os.path.join(ue_root, "Engine", "Plugins", "Experimental", "PythonScriptPlugin", "Content", "Python")
+    sys.path.append(ue_python_dir)
+    
+    try:
+        import remote_execution  # type: ignore
+    except ImportError:
+        return False, "Could not find remote_execution.py in Unreal installation directory."
+
+    remote_exec = remote_execution.RemoteExecution()
+    remote_exec.start()
+    time.sleep(1.0)
+    
+    node = next((n for n in remote_exec.remote_nodes if n.get('project_name', '').lower() == project_name.lower()), None)
+    if not node:
+        remote_exec.stop()
+        return False, "Unreal Editor is not running. Please open your project first."
+        
+    remote_exec.open_command_connection(node.get('node_id'))
+    
+    print("Sending navigation command to Unreal Editor...", flush=True)
+    response = remote_exec.run_command(cmd)
+    remote_exec.stop()
+
+    logs = []
+    if response is not None:
+        if response.get('output'):
+            for log_entry in response['output']:
+                log_text = log_entry.get('output', '') if isinstance(log_entry, dict) else str(log_entry)
+                if log_text.strip():
+                    logs.append(log_text.rstrip())
+                    
+        success = response.get('success', False)
+        result_msg = "\n".join(logs)
+        if not success:
+            result_msg += f"\nError Details: {response.get('result')}"
+        return success, result_msg
+    else:
+        return False, "No response received from Unreal remote execution."
+def focus_unreal_window(project_name: str):
+    """
+    Finds the active Unreal Editor window matching the target project name 
+    and brings it to the front/foreground (Windows only).
+    """
+    if os.name != 'nt':
+        return
+        
+    import ctypes
+    user32 = ctypes.windll.user32
+    
+    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_void_p)
+    hwnds = []
+    
+    def foreach_window(hwnd, lParam):
+        if user32.IsWindowVisible(hwnd):
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length > 0:
+                buff = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buff, length + 1)
+                title = buff.value
+                # Match both the specific project name and Unreal Editor signature
+                if "unreal editor" in title.lower() and project_name.lower() in title.lower():
+                    hwnds.append(hwnd)
+        return True
+        
+    try:
+        user32.EnumWindows(EnumWindowsProc(foreach_window), 0)
+    except Exception as e:
+        print(f"Warning: Failed to enumerate OS windows: {e}")
+        return
+
+    for hwnd in hwnds:
+        # Restore window if minimized (SW_RESTORE = 9)
+        user32.ShowWindow(hwnd, 9)
+        # Set foreground focus
+        user32.SetForegroundWindow(hwnd)
+        break
+
+
 def run_remote_import(ue_root: str, project_name: str, fmodel_dir: str, ue_script_path: str) -> tuple[bool, str]:
     """Establishes a remote execution socket connection with the Unreal Editor and runs the importer."""
     ue_python_dir = os.path.join(ue_root, "Engine", "Plugins", "Experimental", "PythonScriptPlugin", "Content", "Python")

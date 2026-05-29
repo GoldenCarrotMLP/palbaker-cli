@@ -7,6 +7,7 @@ from utils.builder.config_helper import inject_packaging_settings
 from utils.builder.blender_helper import run_headless_blender
 from utils.builder.unreal_helper import run_remote_import
 from utils.builder.cooker_helper import run_and_stream, pack_cooked_assets
+from utils.state import save_push_state  # ADDED: Fix save_push_state NameError
 
 # Force standard output stream to use UTF-8. 
 # This completely prevents "UnicodeEncodeError: 'charmap' codec can't encode characters" crashes in Windows terminals.
@@ -176,10 +177,23 @@ def main():
         if os.path.exists(cooked_dir): shutil.rmtree(cooked_dir, ignore_errors=True)
         if os.path.exists(cooked_skel_dir): shutil.rmtree(cooked_skel_dir, ignore_errors=True)
         if os.path.exists(cooked_anims_dir): shutil.rmtree(cooked_anims_dir, ignore_errors=True)
+        custom_shader_raw = os.path.join(project_dir, "Content", "CartoonCelShader", "Materials", "CelShader")
+        has_custom_shader = os.path.exists(custom_shader_raw)
+        extra_cook_paths = []
+        if has_custom_shader:
+            extra_cook_paths.append("/Game/CartoonCelShader/Materials/CelShader")
 
         if os.path.exists(ini_path): 
             shutil.copy2(ini_path, ini_backup)
-            inject_packaging_settings(ini_path, has_anims)
+            inject_packaging_settings(
+                ini_path, 
+                UE_VIRTUAL_PATH, 
+                SKELETON_VIRTUAL_PATH, 
+                ANIMS_VIRTUAL_PATH, 
+                has_anims,
+                extra_paths=extra_cook_paths  # Pass detected shader dependencies
+
+            )
 
         try:
             print("Cooking Target Folders...", flush=True)
@@ -199,10 +213,15 @@ def main():
             else:
                 print("  -> No custom animations: Shipping BP assets, but stripping Skeleton asset to prevent ragdoll glitches.", flush=True)
 
+            # Check and append the cooked CelShader folder to the final package queue
+            if has_custom_shader:
+                custom_shader_cooked = os.path.join(project_dir, "Saved", "Cooked", "Windows", target_project_name, "Content", "CartoonCelShader", "Materials", "CelShader")
+                folders_to_pack.append((custom_shader_cooked, "CartoonCelShader/Materials/CelShader"))
+                print("  -> Custom Cartoon Cel Shader detected: Packing shader dependencies.", flush=True)
+
             print(f"Building final PAK...", flush=True)
-            # FIXED: Call the modularized packaging engine
             files_found = pack_cooked_assets(UNREALPAK_PATH, response_file, output_pak, folders_to_pack, has_anims)
-            
+
             if files_found == 0:
                 print("ERROR: No files found to pack. Cook process might have failed.", flush=True)
                 sys.exit(1)

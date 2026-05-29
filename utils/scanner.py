@@ -93,9 +93,12 @@ def get_mod_info(settings: dict):
                 pak_status = "Packed"
                 pak_color = ft.Colors.GREEN_400
 
+# utils/scanner.py (Near the bottom of the iteration block)
+
         data["badges"] = badges
         data["pak_status"] = pak_status
         data["pak_color"] = pak_color
+        data["pak_path"] = pak_path  # ADDED: Expose path to the context menu
         data["ue_modified"] = ue_modified
         data["ue_modified_files"] = ue_modified_files
         data["source_modified"] = source_modified
