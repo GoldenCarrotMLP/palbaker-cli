@@ -1,8 +1,10 @@
+# utils/blender_extractor.py
 import bpy
 import json
 import sys
 import os
 import math
+import re  # ADDED: Regular expressions import
 from mathutils import Matrix
 
 current_dir = os.path.dirname(__file__)
@@ -10,6 +12,43 @@ if current_dir not in sys.path:
     sys.path.append(current_dir)
 
 import image_combiner
+
+# Define physics presets for arbitrary bone suffixes.
+PHYSICS_BONE_PRESETS = {
+    # --- EXAMPLE PRESET WITH ALL PROPERTIES COMMENTED ---
+    "_example": {
+        "spring_stiffness": 300.0,      
+        "spring_damping": 8.0,          
+        "max_displacement": 20.0,       
+        "error_reset_thresh": 1000.0,   
+        "limit_displacement": True,     
+        "translate_x": True,            
+        "translate_y": True,            
+        "translate_z": True,            
+        "rotate_x": True,               
+        "rotate_y": True,               
+        "rotate_z": True,               
+        "alpha": 1.0                    
+    },
+    "_jiggle": {
+        "spring_stiffness": 300.0, "spring_damping": 8.0, "max_displacement": 20.0, 
+        "error_reset_thresh": 1000.0, "limit_displacement": True,
+        "translate_x": True, "translate_y": True, "translate_z": True,
+        "rotate_x": True, "rotate_y": True, "rotate_z": True, "alpha": 1.0
+    },
+    "_phy": {
+        "spring_stiffness": 300.0, "spring_damping": 8.0, "max_displacement": 20.0, 
+        "error_reset_thresh": 1000.0, "limit_displacement": True,
+        "translate_x": True, "translate_y": True, "translate_z": True,
+        "rotate_x": True, "rotate_y": True, "rotate_z": True, "alpha": 1.0
+    },
+    "_hair": {
+        "spring_stiffness": 300.0, "spring_damping": 20.0, "max_displacement": 20.0, 
+        "error_reset_thresh": 1000.0, "limit_displacement": True,
+        "translate_x": True, "translate_y": True, "translate_z": True,
+        "rotate_x": True, "rotate_y": True, "rotate_z": True, "alpha": 0.5
+    }
+}
 
 def parse_args():
     args = []
@@ -43,15 +82,28 @@ def extract_metadata(output_path: str):
     
     for p_bone in armature_obj.pose.bones:
         raw_name = p_bone.name
+        # Keep the physical name modification intact so the hierarchy matches the FBX
         ue_bone_name = raw_name.replace('.', '_')
+        raw_name_lower = raw_name.lower()
         
-        if raw_name.endswith("_jiggle") or "_phy" in raw_name.lower():
-            jiggle_bones.append({
-                "bone_name": ue_bone_name, "spring_stiffness": 300.0, "spring_damping": 8.0,
-                "max_displacement": 20.0, "error_reset_thresh": 1000.0, "limit_displacement": True,
-                "translate_x": True, "translate_y": True, "translate_z": True,
-                "rotate_x": True, "rotate_y": True, "rotate_z": True
-            })
+        # Strip trailing dot-digit duplicates (e.g. '.001', '.002') for suffix comparison
+        match_name = re.sub(r'\.\d+$', '', raw_name_lower)
+        
+        # Route physics configuration from preset dictionary
+        is_physics_bone = False
+        for suffix, preset in PHYSICS_BONE_PRESETS.items():
+            if match_name.endswith(suffix) and suffix != "_example":
+                bone_config = {"bone_name": ue_bone_name}
+                bone_config.update(preset)
+                jiggle_bones.append(bone_config)
+                is_physics_bone = True
+                break
+                
+        # Preserve legacy behavior for "_phy" anywhere in the name
+        if not is_physics_bone and "_phy" in match_name:
+            bone_config = {"bone_name": ue_bone_name}
+            bone_config.update(PHYSICS_BONE_PRESETS["_phy"])
+            jiggle_bones.append(bone_config)
             
         loc, rot, scale = p_bone.matrix_basis.decompose()
         has_transform = (loc.length > 0.0001 or any(abs(v) > 0.0001 for v in rot.to_euler()) or any(abs(v - 1.0) > 0.0001 for v in scale))
@@ -75,7 +127,8 @@ def extract_metadata(output_path: str):
                 "bone_name": ue_bone_name, "translation": ue_translation, "rotation": ue_rotation, "scale": ue_scale
             })
 
-    # TOPOLOGY COMPILER (Replaces JSON heuristics)
+
+    # TOPOLOGY COMPILER
     materials_compile = {}
     folder_name = os.path.basename(working_dir)
 
@@ -90,7 +143,6 @@ def extract_metadata(output_path: str):
         parent_class = "MI_PalLit_CharacterBodyBase"
         tex_base = tex_normal = tex_mrao = tex_sss = None
         
-        # 1. Base Color
         base_link = bsdf.inputs['Base Color'].links
         if base_link:
             base_node = base_link[0].from_node
@@ -101,17 +153,14 @@ def extract_metadata(output_path: str):
                 parent_class = "MI_PalLit_CharacterEyeBase"
                 tex_base = base_node.image.name.split(".")[0] if base_node.image else None
                 
-        # 2. Normal Map
         norm_link = bsdf.inputs['Normal'].links
         if norm_link and norm_link[0].from_node.type == 'NORMAL_MAP':
             tex_normal = get_node_image_name(norm_link[0].from_node.inputs['Color'].links)
 
-        # 3. Subsurface
         sss_link = bsdf.inputs.get('Subsurface Radius')
         if sss_link and sss_link.links:
             tex_sss = get_node_image_name(sss_link.links)
 
-        # 4. MRAO (Trigger Bake if required)
         met_link = bsdf.inputs['Metallic'].links
         if met_link and met_link[0].from_node.type == 'SEPARATE_COLOR':
             color_link = met_link[0].from_node.inputs['Color'].links
@@ -133,7 +182,6 @@ def extract_metadata(output_path: str):
         if tex_mrao: materials_compile[mat.name]["textures"]["MetallicRoughnessOcclusionSpecularTexture"] = tex_mrao
         if tex_sss: materials_compile[mat.name]["textures"]["Subsurface Texture"] = tex_sss
 
-    # Write unified JSON
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump({"jiggle_bones": jiggle_bones, "offset_bones": offset_bones, "materials": materials_compile}, f, indent=4)
 

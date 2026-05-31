@@ -1,3 +1,4 @@
+# unreal_scripts/materials.py
 import unreal
 import json
 import os
@@ -95,21 +96,21 @@ def build_materials_heuristically(ue_path, textures, material_slots):
         tex_b = find_best_texture_match(slot_name, textures, "B")
         if tex_b:
             loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_b))[0]}")
-            if loaded_tex:
+            if loaded_tex and isinstance(loaded_tex, unreal.Texture):
                 unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, "Base Texture", loaded_tex)
                 print(f"  Bound BaseColor: {os.path.basename(tex_b)}")
                 
         tex_n = find_best_texture_match(slot_name, textures, "N")
         if tex_n:
             loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_n))[0]}")
-            if loaded_tex:
+            if loaded_tex and isinstance(loaded_tex, unreal.Texture):
                 unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, "Normal Map", loaded_tex)
                 print(f"  Bound Normal: {os.path.basename(tex_n)}")
                 
         tex_m = find_best_texture_match(slot_name, textures, "M")
         if tex_m:
             loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_m))[0]}")
-            if loaded_tex:
+            if loaded_tex and isinstance(loaded_tex, unreal.Texture):
                 unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, "MetallicRoughnessOcclusionSpecularTexture", loaded_tex)
                 print(f"  Bound ParameterMap: {os.path.basename(tex_m)}")
                 
@@ -160,7 +161,7 @@ def build_materials(ue_path, json_path, textures, target_asset_path):
             parent_class_lower = data.get("parent_class", "").lower()
             mat_name_lower = mat_name.lower()
             
-            # SAFE ROUTING: Evaluate both parent class and slot name
+            # Safe Routing checks
             if "eye" in parent_class_lower or "mouth" in parent_class_lower or "eye" in mat_name_lower or "mouth" in mat_name_lower:
                 parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterEyeBase"
             elif "hair" in parent_class_lower or "hair" in mat_name_lower:
@@ -173,8 +174,12 @@ def build_materials(ue_path, json_path, textures, target_asset_path):
             for param_name, tex_name in data.get("textures", {}).items():
                 loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{tex_name}")
                 if loaded_tex:
-                    unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, param_name, loaded_tex)
-                    print(f"  Bound {param_name}: {tex_name}")
+                    # FIX: Enforce type checking. Bypass bind if asset loads as a non-Texture type (Material Namespace Collision)
+                    if isinstance(loaded_tex, unreal.Texture):
+                        unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, param_name, loaded_tex)
+                        print(f"  Bound {param_name}: {tex_name}")
+                    else:
+                        print(f"  ⚠️ Warning: Skipping collision binding: '{tex_name}' loaded as {type(loaded_tex).__name__} (expected Texture)")
                     
             unreal.EditorAssetLibrary.save_loaded_asset(mi_asset)
             mi_assets.append((mat_name.lower(), mi_asset))
@@ -183,7 +188,6 @@ def build_materials(ue_path, json_path, textures, target_asset_path):
     else:
         # Fallback to suffix matching
         return build_materials_heuristically(ue_path, textures, material_slots)
-
 
 def bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets):
     if not target_asset_path:

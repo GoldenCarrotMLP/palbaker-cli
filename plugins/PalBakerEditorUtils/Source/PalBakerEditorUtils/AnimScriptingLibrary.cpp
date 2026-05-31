@@ -167,10 +167,22 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
             SpringBone->Node.bRotateY = BoneObj->GetBoolField(TEXT("rotate_y"));
             SpringBone->Node.bRotateZ = BoneObj->GetBoolField(TEXT("rotate_z"));
 
+            // Parse and apply the Alpha field to both the property and the exposed Pin
+            if (BoneObj->HasField(TEXT("alpha"))) {
+                float AlphaVal = BoneObj->GetNumberField(TEXT("alpha"));
+                SpringBone->Node.Alpha = AlphaVal;
+                
+                UEdGraphPin* AlphaPin = SpringBone->FindPin(TEXT("Alpha"));
+                if (AlphaPin) {
+                    AlphaPin->DefaultValue = FString::Printf(TEXT("%f"), AlphaVal);
+                }
+            }
+
             SpringBone->FindPin(TEXT("ComponentPose"))->MakeLinkTo(CurrentOutputPin);
             CurrentOutputPin = SpringBone->FindPin(TEXT("Pose"));
         }
     }
+
 
     // --- Create Component to Local Space ---
     UAnimGraphNode_ComponentToLocalSpace* C2L = NewObject<UAnimGraphNode_ComponentToLocalSpace>(AnimGraph);
