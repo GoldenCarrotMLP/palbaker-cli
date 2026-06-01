@@ -15,7 +15,7 @@ def load_settings():
         "fmodel_output": "", 
         "ue_root": "", 
         "uproject": "", 
-        "blender": "blender",
+        "blender": "",
         "palworld_exe": "",
         "show_mapped": False
     }
