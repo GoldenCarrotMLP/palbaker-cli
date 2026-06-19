@@ -39,6 +39,7 @@ TEST_PIPELINE_FILES = [
     "test_06_unreal_import.py",
     "test_07_unreal_decompile.py",
     "test_08_altermatic.py",
+    "test_09_cook_and_pack.py",    
     "test_10_altermatic_compile.py",
     "test_11_material_preservation.py" # <-- ADDED!
 ]

@@ -200,6 +200,10 @@ def main():
             log("Skipping Profile 3 run: Required paths are not configured in settings.", "WARNING")
             return
 
+        # Self-Healing: Ensure Unreal Editor is running and fully booted
+        from test_helper import ensure_unreal_opened
+        ensure_unreal_opened(settings, CLI_ENTRY_POINT)
+
         project_name = os.path.splitext(os.path.basename(uproject_path))[0]
         unrealpak_exe = os.path.normpath(os.path.join(ue_root, "Engine", "Binaries", "Win64", "UnrealPak.exe"))
         
@@ -259,6 +263,18 @@ def main():
         
         expected_skeleton_path = f"/Game/Pal/Model/Character/Skeleton/{TARGET_PAL}/SK_{TARGET_PAL}_Skeleton"
         expected_animbp_class = f"{FULL_VARIANT_LABEL}_BP_C" # Post-process generated C++ class
+
+        # Self-Healing: If running individually, import base mesh to vanilla path first if missing
+        success, report = query_unreal_editor_skeletons(ue_root, project_name, [base_mesh_virtual_path])
+        if not success or report.get(base_mesh_virtual_path, {}).get("status") != "exists":
+            log("Prerequisite Missing: Nyafia base mesh is not imported under /Game/Pal/. Executing self-healing push...")
+            run_cli_command(["altermatic", "toggle", TARGET_PAL, "off"], CLI_ENTRY_POINT)
+            exit_code, stdout, stderr = run_cli_command(["mod", "push", TARGET_PAL], CLI_ENTRY_POINT)
+            if exit_code != 0:
+                raise RuntimeError(f"Self-healing base push failed. STDOUT: {stdout}\nSTDERR: {stderr}")
+            run_cli_command(["altermatic", "toggle", TARGET_PAL, "on"], CLI_ENTRY_POINT)
+            # Re-push variant meshes to align configurations
+            exit_code, stdout, stderr = run_cli_command(["mod", "push", TARGET_PAL], CLI_ENTRY_POINT)
 
         success, report = query_unreal_editor_skeletons(ue_root, project_name, [base_mesh_virtual_path, variant_mesh_virtual_path])
         if not success:
