@@ -1,66 +1,56 @@
-# ============================================================
-# Monorepo root
-# ============================================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-# pnpm / npm / yarn
-node_modules/
-.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-pnpm-debug.log*
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Virtual environments
+venv/
+.env/
+.venv/
+env/
 
-# ============================================================
-# Next.js (palbaker-ui)
-# ============================================================
-palbaker-ui/.next/
-palbaker-ui/out/
-palbaker-ui/build/
-palbaker-ui/coverage/
-palbaker-ui/*.tsbuildinfo
-palbaker-ui/next-env.d.ts
-palbaker-ui/.env*
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
 
-# ============================================================
-# Tauri / Rust (palbaker-ui/src-tauri)
-# ============================================================
-palbaker-ui/src-tauri/target/
-palbaker-ui/src-tauri/gen/
+# PyInstaller
 
-# ============================================================
-# Python (pythoncli)
-# ============================================================
-pythoncli/__pycache__/
-pythoncli/**/__pycache__/
-pythoncli/*.py[cod]
-pythoncli/**/*.py[cod]
-pythoncli/.venv/
-pythoncli/venv/
-pythoncli/*.egg-info/
-pythoncli/dist/
-pythoncli/.pytest_cache/
+# Unit test / coverage
+htmlcov/
+.coverage
+.coverage.*
+.cache
+pytest_cache/
 
-# ============================================================
-# OS / editor
-# ============================================================
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDEs
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS junk
 .DS_Store
 Thumbs.db
-*.pem
-.idea/
-.vscode/
-*.suo
-*.user
-dump.txt
 
-# Release Artifacts
-/release/
-/palbaker-ui/src-tauri/resources/
-/pythoncli/build/
-/pythoncli/dist/
-.env
+node_modules
+package-lock.json
+package.json
+dump.mjs
+dump.txt
+manager_settings.json
+deps/active_skills_cache.json
+deps/coop_passives_cache.json
+pal_names_map.json
+deps/monster_parameter_cache.json
+deps/passive_skills_cache.json
+deps/waza_master_level_cache.json
+deps/partner_skills_cache.json
+deps/monster_spawners_cache.json
+deps/monster_spawners_default_map.json
+pal_names_map.json
