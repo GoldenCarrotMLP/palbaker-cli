@@ -4,7 +4,7 @@ import json
 import re
 import subprocess
 from .sidecar_helper import load_sidecar, update_sidecar_fields, save_sidecar
-# Optimized Python command injected into headless Blender to extract material slots and shape keys
+
 BLENDER_EXTRACTOR_SCRIPT = (
     "import bpy, json; "
     "mesh_objs = [obj for obj in bpy.data.objects if obj.type == 'MESH']; "
@@ -22,21 +22,22 @@ def get_virtual_path_for_file(absolute_path: str) -> str:
         return f"/Game/{folder_part}"
     return ""
 
-def get_blend_files_for_context(fmodel_altermatic_dir: str | None, fmodel_dir: str | None = "") -> list[str]:
+def get_blend_files_for_context(fmodel_dir: str | None, unused: None = None) -> list[str]:
+    """Recursively walks through base and child folders to discover all available skeletal meshes."""
     blend_files = []
-    if fmodel_dir and os.path.exists(fmodel_dir):
-        for f in os.listdir(fmodel_dir):
-            if f.endswith(".blend"):
+    if not fmodel_dir or not os.path.exists(fmodel_dir):
+        return blend_files
+        
+    for root, dirs, files in os.walk(fmodel_dir):
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        for f in files:
+            if f.endswith(".blend") and not f.endswith(".blend1"):
                 blend_files.append(f)
                 
-    if fmodel_altermatic_dir and os.path.exists(fmodel_altermatic_dir):
-        for f in os.listdir(fmodel_altermatic_dir):
-            if f.endswith(".blend") and f not in blend_files:
-                blend_files.append(f)
-                
-    return blend_files
+    return sorted(list(set(blend_files)))
 
-def get_available_materials_for_context(fmodel_root: str, fmodel_altermatic_dir: str | None, character_id: str, category: str = "Monster") -> list[str]:
+def get_available_materials_for_context(fmodel_root: str, fmodel_dir: str | None, character_id: str, category: str = "Monster") -> list[str]:
+    """Recursively searches all sibling and nested folders to harvest compiled material instances."""
     materials = []
     paths_to_check = []
 
@@ -45,24 +46,22 @@ def get_available_materials_for_context(fmodel_root: str, fmodel_altermatic_dir:
         if os.path.exists(base_dir):
             paths_to_check.append(base_dir)
 
-    if fmodel_altermatic_dir and os.path.exists(fmodel_altermatic_dir):
-        paths_to_check.append(fmodel_altermatic_dir)
+    if fmodel_dir and os.path.exists(fmodel_dir):
+        paths_to_check.append(fmodel_dir)
 
     for directory in paths_to_check:
-        for f in os.listdir(directory):
-            if f.endswith("_blend.json"):
-                sidecar_path = os.path.join(directory, f)
-                try:
-                    with open(sidecar_path, "r", encoding="utf-8") as f_var:
-                        data = json.load(f_var)
-                        mats = data.get("materials", {})
-                        for mat_name in mats.keys():
-                            if mat_name and mat_name not in materials:
-                                materials.append(mat_name)
-                except json.JSONDecodeError as e:
-                    print(f"Warning: Corrupted sidecar JSON {sidecar_path}: {e}")
-                except Exception as e:
-                    print(f"Warning: Failed to read sidecar {sidecar_path}: {e}")
+        for root, _, files in os.walk(directory):
+            for f in files:
+                if f.endswith("_blend.json"):
+                    sidecar_path = os.path.join(root, f)
+                    try:
+                        with open(sidecar_path, "r", encoding="utf-8") as f_var:
+                            data = json.load(f_var)
+                            mats = data.get("materials", {})
+                            for mat_name in mats.keys():
+                                if mat_name and mat_name not in materials:
+                                    materials.append(mat_name)
+                    except Exception: pass
 
     if not materials:
         materials = [
@@ -107,18 +106,14 @@ def extract_blend_metadata(blender_path: str, blend_file_path: str) -> dict:
     return {"slots": [], "morphs": []}
 
 def delta_merge_sidecar(existing_data: dict, fresh_slots: list[str], fresh_morphs: list[str]) -> dict:
-    """Non-destructively merges freshly extracted Blender layouts with existing sidecar properties."""
-    # We load the existing dictionary as our base, so we preserve every unknown custom key automatically!
     synced = dict(existing_data)
     
-    # Update only the specific Altermatic layout keys
     synced.setdefault("Gender", "None")
     synced.setdefault("IsRarePal", False)
     synced.setdefault("SkinName", "")
     synced.setdefault("ReqTrait", [])
     synced.setdefault("PrefTrait", [])
     
-    # Re-evaluate Material Overrides slot by slot
     old_overrides = existing_data.get("MaterialOverrides", {})
     new_overrides = {}
     for slot_name in fresh_slots:
@@ -126,7 +121,6 @@ def delta_merge_sidecar(existing_data: dict, fresh_slots: list[str], fresh_morph
             new_overrides[slot_name] = old_overrides[slot_name]
     synced["MaterialOverrides"] = new_overrides
 
-    # Re-evaluate Morph Targets parameters
     old_morphs = {m["Target"]: m for m in existing_data.get("MorphTarget", []) if "Target" in m}
     new_morphs = []
     for morph_name in fresh_morphs:
@@ -140,9 +134,6 @@ def delta_merge_sidecar(existing_data: dict, fresh_slots: list[str], fresh_morph
     synced["MorphTarget"] = new_morphs
 
     return synced
-
-
-
 
 def sync_sidecar_metadata(blender_path: str, blend_file_path: str) -> dict:
     root_dir = os.path.dirname(blend_file_path)
@@ -159,8 +150,6 @@ def sync_sidecar_metadata(blender_path: str, blend_file_path: str) -> dict:
 
     save_sidecar(sidecar_path, synced_data)
     return synced_data
-
-
 
 def compile_unified_altermatic_json(monster_name: str, altermatic_staging_dir: str, swap_json_dir: str) -> tuple[bool, str]:
     manifest_name = f"{monster_name}_altermatic.json"
@@ -194,7 +183,6 @@ def compile_unified_altermatic_json(monster_name: str, altermatic_staging_dir: s
 
     swaps_array = []
 
-    # Detect if this is a custom standalone pal to prefix MOD_
     fmodel_root = ""
     if "Exports" in parts:
         exp_idx = parts.index("Exports")
@@ -204,14 +192,12 @@ def compile_unified_altermatic_json(monster_name: str, altermatic_staging_dir: s
 
     creator_json = os.path.join(fmodel_root, "Pal", "Content", "Palbaker", "Creator", f"{monster_name}_creator.json")
     is_custom_pal = os.path.exists(creator_json)
-    
     final_character_id = f"MOD_{monster_name}" if is_custom_pal else monster_name
 
-    # --- NEW: Pre-Compute True Material Virtual Locations ---
     material_to_virtual_dir = {}
     vanilla_dir = os.path.normpath(os.path.join(fmodel_root, "Pal", "Content", "Pal", "Model", "Character", category, monster_name))
-    vanilla_sidecar_path = os.path.join(vanilla_dir, f"{monster_name}_blend.json")
     
+    vanilla_sidecar_path = os.path.join(vanilla_dir, f"{monster_name}_blend.json")
     if os.path.exists(vanilla_sidecar_path):
         vanilla_vdir = get_virtual_path_for_file(vanilla_sidecar_path)
         try:
@@ -222,17 +208,17 @@ def compile_unified_altermatic_json(monster_name: str, altermatic_staging_dir: s
         except Exception: pass
         
     if os.path.exists(altermatic_staging_dir):
-        for f in os.listdir(altermatic_staging_dir):
-            if f.endswith("_blend.json"):
-                alt_sidecar_path = os.path.join(altermatic_staging_dir, f)
-                alt_vdir = get_virtual_path_for_file(alt_sidecar_path)
-                try:
-                    with open(alt_sidecar_path, "r", encoding="utf-8") as file_in:
-                        data = json.load(file_in)
-                        for mat_name in data.get("materials", {}).keys():
-                            material_to_virtual_dir[mat_name] = alt_vdir
-                except Exception: pass
-    # --------------------------------------------------------
+        for root, _, files in os.walk(altermatic_staging_dir):
+            for f in files:
+                if f.endswith("_blend.json"):
+                    alt_sidecar_path = os.path.join(root, f)
+                    alt_vdir = get_virtual_path_for_file(alt_sidecar_path)
+                    try:
+                        with open(alt_sidecar_path, "r", encoding="utf-8") as file_in:
+                            data = json.load(file_in)
+                            for mat_name in data.get("materials", {}).keys():
+                                material_to_virtual_dir[mat_name] = alt_vdir
+                    except Exception: pass
 
     for v in variants_list:
         if v.get("is_base") and not is_custom_pal:
@@ -243,42 +229,47 @@ def compile_unified_altermatic_json(monster_name: str, altermatic_staging_dir: s
             slots_order = []
             
             if v.get("is_base") and is_custom_pal:
-                # Custom standalone Pal - Base Mesh Resolution
                 cat_sanitized = category.replace(" ", "_")
                 mesh_resolved_path = f"/Game/Pal/Model/Character/{cat_sanitized}/{monster_name}/SK_{monster_name}"
                 sidecar_path = os.path.join(vanilla_dir, f"{monster_name}_blend.json")
             else:
-                # Standard Altermatic custom variant resolution (Dual-Path Checking)
                 blend_base_name = os.path.splitext(v.get("SkeletonSource", "base"))[0]
                 if blend_base_name == "base":
                     blend_base_name = monster_name
 
-                possible_alt_sidecar = os.path.join(altermatic_staging_dir, f"{blend_base_name}_blend.json")
-                possible_alt_blend = os.path.join(altermatic_staging_dir, f"{blend_base_name}.blend")
+                blend_file_path = None
+                sidecar_path = None
                 
-                possible_vanilla_sidecar = os.path.join(vanilla_dir, f"{blend_base_name}_blend.json")
-                possible_vanilla_blend = os.path.join(vanilla_dir, f"{blend_base_name}.blend")
+                for root, _, files in os.walk(altermatic_staging_dir):
+                    if f"{blend_base_name}.blend" in files:
+                        blend_file_path = os.path.join(root, f"{blend_base_name}.blend")
+                    if f"{blend_base_name}_blend.json" in files:
+                        sidecar_path = os.path.join(root, f"{blend_base_name}_blend.json")
 
-                # Properly resolve where the target Skeleton actually lives on disk
-                if os.path.exists(possible_alt_blend) or os.path.exists(possible_alt_sidecar):
-                    blend_file_path = possible_alt_blend
-                    sidecar_path = possible_alt_sidecar
-                else:
-                    blend_file_path = possible_vanilla_blend
-                    sidecar_path = possible_vanilla_sidecar
+                if not blend_file_path or not sidecar_path:
+                    for root, _, files in os.walk(vanilla_dir):
+                        if not blend_file_path and f"{blend_base_name}.blend" in files:
+                            blend_file_path = os.path.join(root, f"{blend_base_name}.blend")
+                        if not sidecar_path and f"{blend_base_name}_blend.json" in files:
+                            sidecar_path = os.path.join(root, f"{blend_base_name}_blend.json")
 
-                clean_path = blend_file_path.replace("\\", "/")
-                marker = "Pal/Content/"
-                if marker in clean_path:
-                    relative_part = clean_path.split(marker, 1)[1]
-                    sk_name = blend_base_name if blend_base_name.startswith("SK_") else f"SK_{blend_base_name}"
-                    relative_virtual_dir = "/".join(relative_part.split("/")[:-1]).replace(" ", "_")
-                    mesh_resolved_path = f"/Game/{relative_virtual_dir}/{sk_name}"
+                # FIXED: Skip file resolution and fallback to standard unmodded path if base blend is missing
+                if blend_file_path:
+                    clean_path = blend_file_path.replace("\\", "/")
+                    marker = "Pal/Content/"
+                    if marker in clean_path:
+                        relative_part = clean_path.split(marker, 1)[1]
+                        sk_name = blend_base_name if blend_base_name.startswith("SK_") else f"SK_{blend_base_name}"
+                        relative_virtual_dir = "/".join(relative_part.split("/")[:-1]).replace(" ", "_")
+                        mesh_resolved_path = f"/Game/{relative_virtual_dir}/{sk_name}"
+                    else:
+                        cat_sanitized = category.replace(" ", "_")
+                        mesh_resolved_path = f"/Game/Pal/Model/Character/{cat_sanitized}/{monster_name}/{blend_base_name}/SK_{blend_base_name}"
                 else:
                     cat_sanitized = category.replace(" ", "_")
-                    mesh_resolved_path = f"/Game/Palbaker/Model/Character/{cat_sanitized}/{monster_name}/SK_{blend_base_name}"
+                    mesh_resolved_path = f"/Game/Pal/Model/Character/{cat_sanitized}/{monster_name}/SK_{monster_name}"
 
-            if os.path.exists(sidecar_path):
+            if sidecar_path and os.path.exists(sidecar_path):
                 try:
                     with open(sidecar_path, "r", encoding="utf-8") as f_side:
                         sidecar_data = json.load(f_side)
@@ -296,11 +287,9 @@ def compile_unified_altermatic_json(monster_name: str, altermatic_staging_dir: s
                 slot_name_lower = slot_name.lower()
                 if slot_name_lower in slots_order_lower and mat_override_name:
                     idx = slots_order_lower.index(slot_name_lower)
-                    
-                    # --- NEW: Use specific material virtual directory based on where it was found ---
                     mat_resolved_dir = material_to_virtual_dir.get(mat_override_name)
-                    if not mat_resolved_dir:
-                        mat_resolved_dir = get_virtual_path_for_file(sidecar_path)
+                    if not  mat_resolved_dir:
+                        mat_resolved_dir = get_virtual_path_for_file(sidecar_path) if sidecar_path else f"/Game/Pal/Model/Character/{category.replace(' ', '_')}/{monster_name}"
                         
                     resolved_mat_path = f"{mat_resolved_dir}/{mat_override_name}"
                     mat_replace_list.append({
@@ -310,6 +299,7 @@ def compile_unified_altermatic_json(monster_name: str, altermatic_staging_dir: s
 
             compiled_swap = {
                 "CharacterID": final_character_id,
+                "SwapLabel": v.get("label", ""),
                 "SkelMeshPath": mesh_resolved_path,
                 "Gender": v.get("Gender", "None")
             }
@@ -330,14 +320,14 @@ def compile_unified_altermatic_json(monster_name: str, altermatic_staging_dir: s
                 if m.get("Type") == "Static" and "Set" in m:
                     compiled_morphs.append({"Target": m["Target"], "Set": m["Set"]})
                 elif m.get("Type") == "Random":
-                    compiled_morphs.append({"Target": m["Target"], "Min": m.get("Min", 0.0), "Max": m.get("Max", 1.0), "Type": m.get("Type", "Free")})
+                    compiled_morphs.append({"Target": m["Target"], "Min": m.get("Min", 0.0), "Max": m.get("Max", 1.0), "Type": m.get("TypeVal", "Free")})
             
             if compiled_morphs:
                 compiled_swap["MorphTarget"] = compiled_morphs
 
             swaps_array.append(compiled_swap)
         except Exception as e:
-            print(f"Altermatic Mod Builder Warning: Skipping corrupted variant compilation: {e}", flush=True)
+            print(f"Altermatic Mod Builder Warning: Skipping variant compilation: {e}", flush=True)
 
     output_structure = {
         "PackName": f"PalBaker-{monster_name} Replacer Pack",
@@ -354,21 +344,17 @@ def compile_unified_altermatic_json(monster_name: str, altermatic_staging_dir: s
     except Exception as e:
         return False, f"Failed to write deployment JSON: {e}"
 
-
 def load_traits_database() -> dict:
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     target_path = os.path.normpath(os.path.join(root_dir, "deps", "passive_skills_cache.json"))
-    
     if not os.path.exists(target_path):
         fallback_path = os.path.normpath(os.path.join(root_dir, "traits_db.json"))
         if os.path.exists(fallback_path):
             target_path = fallback_path
             
-    if not os.path.exists(target_path):
-        return {}
-    try:
-        with open(target_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Warning: Failed to load traits database: {e}")
-        return {}
+    if os.path.exists(target_path):
+        try:
+            with open(target_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception: pass
+    return {}

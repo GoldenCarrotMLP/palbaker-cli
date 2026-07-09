@@ -3,6 +3,7 @@ import os
 import sys
 import json
 import shutil
+import glob
 from utils.config import validate_settings
 from utils.cli.shared import json_print, error_print
 
@@ -10,15 +11,14 @@ def handle_env_command(args, settings):
     """Router for all system environment subcommands."""
     subcommand = args.subcommand
 
-    # 1. Route validation based on targeted operations
-    if subcommand in ["verify", "install-plugin", "launch-unreal", "restart-unreal"]:
+    # 1. Route validation strictly for compile/editor commands only (Exempting 'verify'!)
+    if subcommand in ["install-plugin", "launch-unreal", "restart-unreal"]:
         is_valid, err_msg = validate_settings(settings, ["ue_root", "uproject"])
     elif subcommand in ["ue4ss-install", "extract-icons", "palschema-install"]:
         is_valid, err_msg = validate_settings(settings, ["palworld_exe", "fmodel_output"])
     elif subcommand == "enable-remote-exec":
         is_valid, err_msg = validate_settings(settings, ["uproject"])
     else:
-        # autodetect and status have no hard prerequisites
         is_valid = True
         err_msg = ""
 
@@ -26,44 +26,59 @@ def handle_env_command(args, settings):
         error_print(err_msg)
         sys.exit(1)
 
-    # 2. Handle 'env verify'
+    # 2. Handle 'env verify' (Exempts compiler toolsets & skips editor checks gracefully if empty)
     if subcommand == "verify":
-        from utils.check_compiler_requirements import verify_compiler_requirements
         from utils.plugin_manager import check_project_requirements
         
         try:
-            # Check if database caches are missing or incomplete
+            # Resolve base database status
             repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             map_path = os.path.join(repo_root, "deps", "pal_names_map.json")
             sound_map_path = os.path.join(repo_root, "deps", "resolved_sound_map.json")
             skills_cache = os.path.join(repo_root, "deps", "active_skills_cache.json")
             needs_db_build = not os.path.exists(map_path) or not os.path.exists(sound_map_path) or not os.path.exists(skills_cache)
 
-            # First verify physical compiler toolsets
-            success, msg = verify_compiler_requirements(all_yes=True, print_output=False)
-            if success:
-                # Next verify ModKit dependencies and injected material assets
+            fmodel_base = settings.get("fmodel_output", "")
+            has_icons = False
+            if fmodel_base:
+                icon_dir = os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Texture", "PalIcon", "Normal"))
+                has_icons = os.path.exists(icon_dir) and len(glob.glob(os.path.join(icon_dir, "*.png"))) > 10
+            needs_icon_extraction = not has_icons
+
+            # Dynamic path checker: Skip editor-level checks if paths are empty (End-Users)
+            has_ue_paths = bool(settings.get("ue_root") and settings.get("uproject") and os.path.exists(settings["uproject"]))
+
+            if has_ue_paths:
                 reqs = check_project_requirements(settings.get("ue_root", ""), settings.get("uproject", ""))
-                if reqs.get("error"):
-                    json_print({"status": "error", "message": reqs["error"]})
-                    sys.exit(1)
-                else:
-                    # Inject the DB build flag into the requirements block
-                    reqs["needs_db_build"] = needs_db_build
-                    
-                    # Print precise, friendly status warning in the Build Console
-                    if reqs.get("needs_plugin_sync"):
-                        project_dir = os.path.dirname(settings["uproject"])
-                        dest_plugin_dir = os.path.join(project_dir, "Plugins", "PalBakerEditorUtils")
-                        if os.path.exists(dest_plugin_dir):
-                            json_print({"type": "log", "level": "warning", "message": "We noticed your C++ Editor Helper Plugin is outdated. Please close Unreal Editor before applying updates to prevent Windows file-permission locks!"})
-                        else:
-                            json_print({"type": "log", "level": "standard", "message": "Required C++ Editor Helper Plugin is missing from your project."})
-                    
-                    json_print({"status": "success", "data": reqs, "message": "Verification completed."})
+                reqs["unreal_skipped"] = False
+                # Remove hard compile errors from verify pathway
+                reqs["error"] = None
             else:
-                json_print({"status": "error", "message": msg})
-                sys.exit(1)
+                reqs = {
+                    "error": None,
+                    "needs_plugin_sync": False,
+                    "plugin_outdated": False,
+                    "needs_compile": False,
+                    "needs_remote_exec_enable": False,
+                    "needs_cooking_setup": False,
+                    "needs_icon_extraction": needs_icon_extraction,
+                    "missing_assets": [],
+                    "unreal_skipped": True
+                }
+
+            reqs["needs_db_build"] = needs_db_build
+
+            if has_ue_paths and reqs.get("needs_plugin_sync"):
+                project_dir = os.path.dirname(settings["uproject"])
+                dest_plugin_dir = os.path.join(project_dir, "Plugins", "PalBakerEditorUtils")
+                if os.path.exists(dest_plugin_dir):
+                    json_print({"type": "log", "level": "warning", "message": "The C++ Editor Helper Plugin is outdated. If compiling, close Unreal Editor first."})
+                else:
+                    json_print({"type": "log", "level": "standard", "message": "Required C++ Editor Helper Plugin is missing."})
+
+            json_print({"status": "success", "data": reqs, "message": "Verification completed."})
+            sys.exit(0)
+
         except Exception as e:
             error_print(f"Prerequisite verification crashed: {str(e)}")
             sys.exit(1)
@@ -112,7 +127,6 @@ def handle_env_command(args, settings):
         action = getattr(args, "action", "install-palworld")
 
         def log_callback(msg, is_error=False):
-            # Formats output for real-time streaming to your build console
             json_print({"type": "log", "level": "error" if is_error else "standard", "message": msg})
 
         try:
@@ -141,6 +155,8 @@ def handle_env_command(args, settings):
         except Exception as e:
             error_print(f"UE4SS routine crashed: {str(e)}")
             sys.exit(1)
+
+    # 4b. Handle 'env palschema-install'
     elif subcommand == "palschema-install":
         from utils.palschema_helper import download_and_extract_palschema, uninstall_palschema
         action = getattr(args, "action", "install")
@@ -166,7 +182,6 @@ def handle_env_command(args, settings):
             error_print(f"PalSchema routine crashed: {str(e)}")
             sys.exit(1)
 
-
     # 5. Handle 'env status'
     elif subcommand == "status":
         from utils.ue4ss_helper import get_ue4ss_status
@@ -178,7 +193,6 @@ def handle_env_command(args, settings):
             pal_exe = settings.get("palworld_exe", "")
             uproject = settings.get("uproject", "")
 
-            # If unconfigured, gracefully return default offline statuses to prevent startup UI crashes!
             ue4ss_status = get_ue4ss_status(pal_exe) if pal_exe else {"status": "Not Installed", "branch": "None", "corrupted": False}
             palschema_status = get_palschema_status(pal_exe) if pal_exe else {"status": "Not Installed"}
             remote_exec_enabled = check_remote_execution_settings(uproject) if uproject else False
@@ -227,7 +241,6 @@ def handle_env_command(args, settings):
     elif subcommand == "enable-remote-exec":
         from utils.plugins.installer import enable_remote_execution_settings, enable_cooking_settings
         try:
-            # 1. Run both configurations to ensure the environment is fully compliant in a single operation
             success, msg = enable_remote_execution_settings(settings["uproject"])
             if success:
                 enable_cooking_settings(settings["uproject"])

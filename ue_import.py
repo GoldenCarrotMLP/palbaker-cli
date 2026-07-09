@@ -26,6 +26,10 @@ def run_pipeline():
     ue_path = config["ue_target_path"]
     folder_name = ue_path.split("/")[-1]
     
+    base_pal = config.get("base_pal", folder_name)
+    target_mesh_name = config.get("target_mesh_name", f"SK_{folder_name}")
+    redirect_folder = config.get("redirect_folder", "")
+    
     template_id = config.get("template_id")
     is_custom_pal = config.get("is_custom_pal", False)
     preserve_materials = config.get("preserve_materials", True)
@@ -33,35 +37,47 @@ def run_pipeline():
     # Handle backward compatibility or single-mesh payloads gracefully
     models = config.get("models", [])
     if not models and config.get("fbx_file"):
-        models = [{"fbx_file": config.get("fbx_file"), "bone_data_file": config.get("bone_data_file", "bone_data.json"), "import_name": folder_name}]
+        models = [{"fbx_file": config.get("fbx_file"), "bone_data_file": config.get("bone_data_file", "bone_data.json"), "import_name": target_mesh_name}]
         
     for i, model in enumerate(models):
         fbx_file = model["fbx_file"]
         bone_data_file = model["bone_data_file"]
-        import_name = model.get("import_name", folder_name)
+        import_name = model.get("import_name", target_mesh_name)
         
         # HARVEST PHASE: Safely cache any custom shading work the user did!
         harvested_materials = {}
         if preserve_materials:
-            harvested_materials = harvest_materials(ue_path, import_name, folder_name)
+            harvested_materials = harvest_materials(ue_path, target_mesh_name)
         
-        clear_cache(ue_path, fbx_file, import_name, folder_name, is_custom_pal)
+        clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal)
         
-        # Only import textures on the first loop iteration to prevent redundant processing
-        import_tex = (i == 0)
+        # Resolve target material compilation folder
+        material_target_ue_path = ue_path
+        if redirect_folder:
+            material_target_ue_path = f"/Game/Pal/Model/Character/Monster/{base_pal}/{redirect_folder}"
+
+        # Import FBX mesh directly to base folder (SK_Alpaca)
         target_asset_path, target_phys_path = import_assets(
-            ue_path, config["textures"], fbx_file, import_name, folder_name, template_id, is_custom_pal, import_tex
+            ue_path, config["textures"], fbx_file, target_mesh_name, base_pal, template_id, is_custom_pal, import_tex=True
         )
         
-        # Build material instances dynamically (Passing preserve_materials to protect existing assets!)
+        # But compile the materials inside the variant's folder to avoid duplication!
         sidecar_json_path = os.path.join(working_dir, bone_data_file)
-        mi_assets = build_materials(ue_path, sidecar_json_path, config["textures"], target_asset_path, preserve_materials)
+        mi_assets = build_materials(material_target_ue_path, sidecar_json_path, config["textures"], target_asset_path, preserve_materials)
         
-        # Bind everything together (passing the preserved materials cache)
+        # Link materials of SK_Alpaca to point to the MI assets in Alpaca/Girafarig/
         bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets, harvested_materials)
         
-        # Generate & apply rigging per-mesh (Generating Anubis_BP and Anubis_Dark_BP independently)
-        apply_rigging(working_dir, ue_path, import_name, folder_name, target_asset_path, bone_data_file, template_id, is_custom_pal)
+        # Resolve target AnimBP compilation folder
+        rigging_target_ue_path = ue_path
+        if redirect_folder:
+            rigging_target_ue_path = f"/Game/Pal/Model/Character/Monster/{base_pal}/{redirect_folder}"
+            # Re-map import name so rigging.py searches for Girafarig_BP instead of SK_Alpaca_BP
+            import_name = redirect_folder
+        else:
+            import_name = folder_name
+
+        apply_rigging(working_dir, rigging_target_ue_path, import_name, base_pal, target_asset_path, bone_data_file, template_id, is_custom_pal)
 
     # Process Icon once after all meshes
     icon_file = config.get("icon_file")

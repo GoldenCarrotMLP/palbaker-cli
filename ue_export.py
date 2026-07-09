@@ -2,25 +2,32 @@
 import unreal  # type: ignore
 import os
 import json
+import tempfile
 
 def run_export():
-    working_dir = globals().get('TARGET_FOLDER', os.getcwd())
-    ue_path = globals().get('UE_PATH', '')
-    overwrite = globals().get('OVERWRITE_ALL', False)
+    # 1. Load configuration from the shared system temporary folder
+    temp_dir = tempfile.gettempdir()
+    config_path = os.path.join(temp_dir, "palbaker_export_config.json")
     
-    if not ue_path:
-        print("ERROR: UE_PATH not provided.")
+    if not os.path.exists(config_path):
+        print("ERROR: export_config.json path not provided or file missing.")
         return
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    working_dir = config["target_folder"].replace("\\", "/")
+    ue_path = config["ue_path"]
+    overwrite = config["overwrite_all"]
+    mod_name = config["mod_name"]
+    target_mesh_name = config["target_mesh_name"]
 
     ar = unreal.AssetRegistryHelpers.get_asset_registry()
     assets = ar.get_assets_by_path(ue_path, recursive=True)
 
-    working_dir = os.path.abspath(working_dir).replace("\\", "/")
     os.makedirs(working_dir, exist_ok=True)
-
     materials_metadata = {}
 
-    # FIXED: Explicit type guard to narrow 'Array | None' to 'Array' to resolve Pylance's OptionalIterable warning
     if assets is not None:
         for asset in assets:
             asset_class = str(asset.asset_class_path.asset_name)
@@ -38,7 +45,14 @@ def run_export():
                 continue
 
             if asset_class == "SkeletalMesh":
-                base_name = loaded_asset.get_name().replace("SK_", "")
+                asset_name = loaded_asset.get_name()
+                
+                # COLLISION LOCK: If a target mesh name is passed, ignore other meshes inside the base directory
+                if target_mesh_name and asset_name != target_mesh_name:
+                    print(f"Skipping mismatched mesh: {asset_name}")
+                    continue
+                
+                base_name = mod_name if mod_name else asset_name.replace("SK_", "")
                 fbx_path = f"{working_dir}/{base_name}.fbx"
                 
                 if not overwrite and os.path.exists(fbx_path):
@@ -73,16 +87,13 @@ def run_export():
                     unreal.Exporter.run_asset_export_task(task)
 
             elif asset_class == "MaterialInstanceConstant":
-                # --- EXTRACT MATERIAL PROPERTIES DIRECTLY FROM UNREAL ENGINE ---
                 mat_name = loaded_asset.get_name()
                 
-                # Extract Parent Class
                 parent_name = "MI_PalLit_CharacterBodyBase"
                 parent_mat = loaded_asset.get_editor_property('parent')
                 if parent_mat:
                     parent_name = parent_mat.get_name()
                 
-                # Extract Texture Parameters
                 params = {}
                 tex_params = loaded_asset.get_editor_property('texture_parameter_values')
                 for tex_param in tex_params:
