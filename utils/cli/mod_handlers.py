@@ -196,9 +196,11 @@ def handle_mod_command(args, settings):
 
     if action == "extract":
         from utils.extractor import extract_pal_assets
-        success, msg = extract_pal_assets(settings, base_pal, mod_name, "Monster")
+        category = mod_data.get("category", "Monster") if mod_data else "Monster"
+        success, msg = extract_pal_assets(settings, mod_name, category)
         json_print({"status": "success" if success else "error", "message": msg})
         if not success: sys.exit(1)
+
 
     elif action == "decompile":
         from utils.plugins.decompiler import run_decompile_pipeline
@@ -366,18 +368,61 @@ def handle_audio_command(args, settings):
 
     elif subcommand == "play":
         fmodel_path = mod_data.get("fmodel_path")
-        audio_dir = os.path.join(fmodel_path, ".palbaker_audio", "sources")
-        for ext in [".wav", ".mp3", ".ogg"]:
-            test_file = os.path.join(audio_dir, f"{cry_name}{ext}")
-            if os.path.exists(test_file):
-                json_print({"status": "success", "message": "Playing custom preview.", "path": test_file})
-                sys.exit(0)
-                
+        audio_dir = os.path.join(fmodel_path, ".palbaker_audio", "sources") if fmodel_path else ""
+        if audio_dir:
+            for ext in [".wav", ".mp3", ".ogg"]:
+                test_file = os.path.join(audio_dir, f"{cry_name}{ext}")
+                if os.path.exists(test_file):
+                    json_print({"status": "success", "message": "Playing custom preview.", "path": test_file})
+                    sys.exit(0)
+                    
         wem_rel = mod_data.get("sound_metadata", {}).get(cry_name, {}).get("wem_relative_path")
         if wem_rel:
             fmodel_root = settings.get("fmodel_output", "")
             wem_abs = os.path.normpath(os.path.join(fmodel_root, "Exports", wem_rel))
-            json_print({"status": "success", "message": "Playing vanilla preview.", "path": wem_abs})
+            
+            repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            vgmstream_cli = os.path.join(repo_root, "deps", "vgmstream", "vgmstream-cli.exe")
+            if not os.path.exists(vgmstream_cli):
+                vgmstream_cli = os.path.join(repo_root, "deps", "vgmstream-cli.exe")
+                
+            if not os.path.exists(vgmstream_cli):
+                error_print("Could not locate vgmstream-cli.exe to decode vanilla audio.")
+                sys.exit(1)
+
+            from utils.extractor.core import extract_single_file
+            if not os.path.exists(wem_abs):
+                export_root = os.path.join(fmodel_root, "Exports")
+                success = extract_single_file(settings, wem_rel, export_root)
+                if not success or not os.path.exists(wem_abs):
+                    error_print(f"Failed to extract {wem_rel} from paks.")
+                    sys.exit(1)
+
+            if audio_dir:
+                os.makedirs(audio_dir, exist_ok=True)
+                temp_wav = os.path.join(audio_dir, f".temp_{cry_name}_preview.wav")
+            else:
+                import tempfile
+                temp_wav = os.path.join(tempfile.gettempdir(), f"palbaker_{cry_name}_preview.wav")
+
+            if os.path.exists(temp_wav):
+                try: os.remove(temp_wav)
+                except OSError: pass
+
+            cmd_decode = [vgmstream_cli, "-o", temp_wav, wem_abs]
+            creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            try:
+                subprocess.run(cmd_decode, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creation_flags)
+            except Exception as e:
+                error_print(f"vgmstream failed to decode {wem_rel}: {e}")
+                sys.exit(1)
+            
+            if os.path.exists(temp_wav):
+                json_print({"status": "success", "message": "Playing vanilla preview.", "path": temp_wav})
+                sys.exit(0)
+            else:
+                error_print("vgmstream executed but failed to save temporary preview wav.")
+                sys.exit(1)
         else:
             error_print("No playable audio found.")
             sys.exit(1)

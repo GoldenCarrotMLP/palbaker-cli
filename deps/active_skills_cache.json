@@ -1,0 +1,2306 @@
+{
+    "TidalWave": {
+        "id": "TidalWave",
+        "element": "Water",
+        "category": "Shot",
+        "power": 1
+    },
+    "WaterWave": {
+        "id": "WaterWave",
+        "element": "Water",
+        "category": "Shot",
+        "power": 1
+    },
+    "AquaJet": {
+        "id": "AquaJet",
+        "element": "Water",
+        "category": "Shot",
+        "power": 40
+    },
+    "WaterGun": {
+        "id": "WaterGun",
+        "element": "Water",
+        "category": "Shot",
+        "power": 50
+    },
+    "BubbleShot": {
+        "id": "BubbleShot",
+        "element": "Water",
+        "category": "Shot",
+        "power": 80
+    },
+    "AcidRain": {
+        "id": "AcidRain",
+        "element": "Water",
+        "category": "Shot",
+        "power": 120
+    },
+    "WaterBall": {
+        "id": "WaterBall",
+        "element": "Water",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_BluePlatypus_Toboggan": {
+        "id": "Unique_BluePlatypus_Toboggan",
+        "element": "Water",
+        "category": "Melee",
+        "power": 100
+    },
+    "HydroPump": {
+        "id": "HydroPump",
+        "element": "Water",
+        "category": "Shot",
+        "power": 450
+    },
+    "Intimidate": {
+        "id": "Intimidate",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 1
+    },
+    "Human_Punch": {
+        "id": "Human_Punch",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 12
+    },
+    "AirCanon": {
+        "id": "AirCanon",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 40
+    },
+    "Unique_ChickenPal_ChickenPeck": {
+        "id": "Unique_ChickenPal_ChickenPeck",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 30
+    },
+    "PowerShot": {
+        "id": "PowerShot",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 80
+    },
+    "Unique_SheepBall_Roll": {
+        "id": "Unique_SheepBall_Roll",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_PinkCat_CatPunch": {
+        "id": "Unique_PinkCat_CatPunch",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_Alpaca_Tackle": {
+        "id": "Unique_Alpaca_Tackle",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_Garm_Bite": {
+        "id": "Unique_Garm_Bite",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_Deer_PushupHorn": {
+        "id": "Unique_Deer_PushupHorn",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 90
+    },
+    "Unique_Boar_Tackle": {
+        "id": "Unique_Boar_Tackle",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 60
+    },
+    "Unique_Eagle_GlidingNail": {
+        "id": "Unique_Eagle_GlidingNail",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 80
+    },
+    "Unique_NaughtyCat_CatPress": {
+        "id": "Unique_NaughtyCat_CatPress",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 120
+    },
+    "Throw": {
+        "id": "Throw",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 60
+    },
+    "Unique_HawkBird_Storm": {
+        "id": "Unique_HawkBird_Storm",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 80
+    },
+    "PowerBall": {
+        "id": "PowerBall",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 120
+    },
+    "Unique_SakuraSaurus_SideTackle": {
+        "id": "Unique_SakuraSaurus_SideTackle",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 120
+    },
+    "Unique_Gorilla_GroundPunch": {
+        "id": "Unique_Gorilla_GroundPunch",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 120
+    },
+    "Unique_FengyunDeeper_CloudTempest": {
+        "id": "Unique_FengyunDeeper_CloudTempest",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 120
+    },
+    "Scratch": {
+        "id": "Scratch",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 100
+    },
+    "WorkAttack": {
+        "id": "WorkAttack",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 100
+    },
+    "Unique_KingAlpaca_BodyPress": {
+        "id": "Unique_KingAlpaca_BodyPress",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 200
+    },
+    "Unique_SaintCentaur_OneSpearRushes": {
+        "id": "Unique_SaintCentaur_OneSpearRushes",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 700
+    },
+    "HyperBeam": {
+        "id": "HyperBeam",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 450
+    },
+    "SelfDestruct": {
+        "id": "SelfDestruct",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 300
+    },
+    "SelfDestruct_Bee": {
+        "id": "SelfDestruct_Bee",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 300
+    },
+    "SelfExplosion": {
+        "id": "SelfExplosion",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 1200
+    },
+    "WindCutter": {
+        "id": "WindCutter",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 40
+    },
+    "SeedMachinegun": {
+        "id": "SeedMachinegun",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 80
+    },
+    "Unique_FlowerDinosaur_Whip": {
+        "id": "Unique_FlowerDinosaur_Whip",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 80
+    },
+    "SpecialCutter": {
+        "id": "SpecialCutter",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 160
+    },
+    "SeedMine": {
+        "id": "SeedMine",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 120
+    },
+    "Unique_RobinHood_BowSnipe": {
+        "id": "Unique_RobinHood_BowSnipe",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 120
+    },
+    "Unique_QueenBee_SpinLance": {
+        "id": "Unique_QueenBee_SpinLance",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 160
+    },
+    "GrassTornado": {
+        "id": "GrassTornado",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_GrassPanda_MusclePunch": {
+        "id": "Unique_GrassPanda_MusclePunch",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 120
+    },
+    "RootAttack": {
+        "id": "RootAttack",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 250
+    },
+    "SolarBeam": {
+        "id": "SolarBeam",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 450
+    },
+    "SnowStorm": {
+        "id": "SnowStorm",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 1
+    },
+    "EnergyShot": {
+        "id": "EnergyShot",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 1
+    },
+    "IceMissile": {
+        "id": "IceMissile",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 40
+    },
+    "IceBlade": {
+        "id": "IceBlade",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 80
+    },
+    "Unique_IceDeer_IceHorn": {
+        "id": "Unique_IceDeer_IceHorn",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 120
+    },
+    "BlizzardLance": {
+        "id": "BlizzardLance",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 120
+    },
+    "Unique_CaptainPenguin_BodySlide": {
+        "id": "Unique_CaptainPenguin_BodySlide",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 140
+    },
+    "FrostBreath": {
+        "id": "FrostBreath",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 160
+    },
+    "Unique_VolcanicMonster_Ice_IceAttack": {
+        "id": "Unique_VolcanicMonster_Ice_IceAttack",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 400
+    },
+    "Unique_IceHorse_IceBladeAttack": {
+        "id": "Unique_IceHorse_IceBladeAttack",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 700
+    },
+    "IcicleThrow": {
+        "id": "IcicleThrow",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 450
+    },
+    "FireBlast": {
+        "id": "FireBlast",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 40
+    },
+    "FireSeed": {
+        "id": "FireSeed",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 80
+    },
+    "Unique_FlameBuffalo_FlameHorn": {
+        "id": "Unique_FlameBuffalo_FlameHorn",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 80
+    },
+    "FlareArrow": {
+        "id": "FlareArrow",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 120
+    },
+    "Unique_Ronin_Iai": {
+        "id": "Unique_Ronin_Iai",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 160
+    },
+    "Flamethrower": {
+        "id": "Flamethrower",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 160
+    },
+    "Unique_Baphomet_SwallowKite": {
+        "id": "Unique_Baphomet_SwallowKite",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 200
+    },
+    "Unique_AmaterasuWolf_FireCharge": {
+        "id": "Unique_AmaterasuWolf_FireCharge",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 200
+    },
+    "FlareTornado": {
+        "id": "FlareTornado",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_FireKirin_Tackle": {
+        "id": "Unique_FireKirin_Tackle",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_VolcanicMonster_MagmaAttack": {
+        "id": "Unique_VolcanicMonster_MagmaAttack",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 300
+    },
+    "Inferno": {
+        "id": "Inferno",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 500
+    },
+    "Unique_Horus_FlareBird": {
+        "id": "Unique_Horus_FlareBird",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 320
+    },
+    "FireBall": {
+        "id": "FireBall",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 600
+    },
+    "CrossThunder": {
+        "id": "CrossThunder",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 1
+    },
+    "ThunderRain": {
+        "id": "ThunderRain",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 400
+    },
+    "SpreadPulse": {
+        "id": "SpreadPulse",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 50
+    },
+    "Funnel_RaijinDaughter": {
+        "id": "Funnel_RaijinDaughter",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 30
+    },
+    "ElecWave": {
+        "id": "ElecWave",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 80
+    },
+    "ThunderBall": {
+        "id": "ThunderBall",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 100
+    },
+    "ThunderFunnel": {
+        "id": "ThunderFunnel",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 120
+    },
+    "LockonLaser": {
+        "id": "LockonLaser",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 140
+    },
+    "Unique_ElecPanda_ElecScratch": {
+        "id": "Unique_ElecPanda_ElecScratch",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 150
+    },
+    "LineThunder": {
+        "id": "LineThunder",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 160
+    },
+    "Unique_GrassPanda_Electric_ElectricPunch": {
+        "id": "Unique_GrassPanda_Electric_ElectricPunch",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 180
+    },
+    "ThreeThunder": {
+        "id": "ThreeThunder",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_Kirin_LightningTackle": {
+        "id": "Unique_Kirin_LightningTackle",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 120
+    },
+    "Unique_ThunderDragonMan_ThunderSwordAttack": {
+        "id": "Unique_ThunderDragonMan_ThunderSwordAttack",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 250
+    },
+    "LightningStrike": {
+        "id": "LightningStrike",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 300
+    },
+    "Thunderbolt": {
+        "id": "Thunderbolt",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 450
+    },
+    "MudShot": {
+        "id": "MudShot",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 40
+    },
+    "StoneShotgun": {
+        "id": "StoneShotgun",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 80
+    },
+    "Unique_DrillGame_ShellAttack": {
+        "id": "Unique_DrillGame_ShellAttack",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 120
+    },
+    "ThrowRock": {
+        "id": "ThrowRock",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 120
+    },
+    "Unique_HerculesBeetle_BeetleTackle": {
+        "id": "Unique_HerculesBeetle_BeetleTackle",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 250
+    },
+    "SandTornado": {
+        "id": "SandTornado",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_Anubis_LowRoundKick": {
+        "id": "Unique_Anubis_LowRoundKick",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_Grassmammoth_Earthquake": {
+        "id": "Unique_Grassmammoth_Earthquake",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 300
+    },
+    "Unique_Anubis_Tackle": {
+        "id": "Unique_Anubis_Tackle",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 400
+    },
+    "Unique_Anubis_GroundPunch": {
+        "id": "Unique_Anubis_GroundPunch",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 500
+    },
+    "RockLance": {
+        "id": "RockLance",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 400
+    },
+    "DragonCanon": {
+        "id": "DragonCanon",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 40
+    },
+    "DragonWave": {
+        "id": "DragonWave",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 80
+    },
+    "DragonBreath": {
+        "id": "DragonBreath",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 160
+    },
+    "Unique_FairyDragon_FairyTornado": {
+        "id": "Unique_FairyDragon_FairyTornado",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 150
+    },
+    "Unique_JetDragon_JumpBeam": {
+        "id": "Unique_JetDragon_JumpBeam",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 700
+    },
+    "DragonMeteor": {
+        "id": "DragonMeteor",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 600
+    },
+    "PoisonFog": {
+        "id": "PoisonFog",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 0
+    },
+    "Funnel_DreamDemon": {
+        "id": "Funnel_DreamDemon",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 20
+    },
+    "PoisonShot": {
+        "id": "PoisonShot",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 30
+    },
+    "DarkBall": {
+        "id": "DarkBall",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 50
+    },
+    "DarkWave": {
+        "id": "DarkWave",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 80
+    },
+    "Unique_DarkCrow_TelePoke": {
+        "id": "Unique_DarkCrow_TelePoke",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 70
+    },
+    "Unique_Werewolf_Scratch": {
+        "id": "Unique_Werewolf_Scratch",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 80
+    },
+    "GhostFlame": {
+        "id": "GhostFlame",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_FireKirin_Dark_DarkTossin": {
+        "id": "Unique_FireKirin_Dark_DarkTossin",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 300
+    },
+    "ShadowBall": {
+        "id": "ShadowBall",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 300
+    },
+    "Psychokinesis": {
+        "id": "Psychokinesis",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_BlackCentaur_TwoSpearRushes": {
+        "id": "Unique_BlackCentaur_TwoSpearRushes",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 700
+    },
+    "DarkLaser": {
+        "id": "DarkLaser",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 450
+    },
+    "Unique_BlackGriffon_TackleLaser": {
+        "id": "Unique_BlackGriffon_TackleLaser",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 400
+    },
+    "DarkLegion": {
+        "id": "DarkLegion",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_WeaselDragon_FlyingTackle": {
+        "id": "Unique_WeaselDragon_FlyingTackle",
+        "element": "Dragon",
+        "category": "Melee",
+        "power": 80
+    },
+    "Tremor": {
+        "id": "Tremor",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 300
+    },
+    "DiamondFall": {
+        "id": "DiamondFall",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 600
+    },
+    "BeamSlicer": {
+        "id": "BeamSlicer",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 350
+    },
+    "Unique_NightLady_WarpBeam": {
+        "id": "Unique_NightLady_WarpBeam",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_NightLady_FlameNightmare": {
+        "id": "Unique_NightLady_FlameNightmare",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 450
+    },
+    "Commet": {
+        "id": "Commet",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 180
+    },
+    "DarkPulse": {
+        "id": "DarkPulse",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 60
+    },
+    "DarkCanon": {
+        "id": "DarkCanon",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 70
+    },
+    "DarkArrow": {
+        "id": "DarkArrow",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 120
+    },
+    "Apocalypse": {
+        "id": "Apocalypse",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 400
+    },
+    "Unique_NightLady_WarpBeam_Straight": {
+        "id": "Unique_NightLady_WarpBeam_Straight",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_DarkScorpion_Pierce": {
+        "id": "Unique_DarkScorpion_Pierce",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 350
+    },
+    "StarMine": {
+        "id": "StarMine",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 400
+    },
+    "Unique_FeatherOstrich_Tossin": {
+        "id": "Unique_FeatherOstrich_Tossin",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 250
+    },
+    "RootLance": {
+        "id": "RootLance",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 300
+    },
+    "Unique_ThunderDragonMan_NumerousSwordAttack": {
+        "id": "Unique_ThunderDragonMan_NumerousSwordAttack",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_KingBahamut_AirCrash": {
+        "id": "Unique_KingBahamut_AirCrash",
+        "element": "Dragon",
+        "category": "Melee",
+        "power": 700
+    },
+    "LineGeyser": {
+        "id": "LineGeyser",
+        "element": "Water",
+        "category": "Shot",
+        "power": 160
+    },
+    "ChargeCanon": {
+        "id": "ChargeCanon",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 400
+    },
+    "Unique_KingBahamut_ArmSmash": {
+        "id": "Unique_KingBahamut_ArmSmash",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 600
+    },
+    "Unique_WingGolem_RoundCutter": {
+        "id": "Unique_WingGolem_RoundCutter",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 450
+    },
+    "BlastCanon": {
+        "id": "BlastCanon",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 200
+    },
+    "ThreeCommet": {
+        "id": "ThreeCommet",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 450
+    },
+    "CommetRain": {
+        "id": "CommetRain",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 700
+    },
+    "Eruption": {
+        "id": "Eruption",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 450
+    },
+    "Unique_ElecPanda_GatlingAttack": {
+        "id": "Unique_ElecPanda_GatlingAttack",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 550
+    },
+    "Unique_LilyQueen_LilyHealing": {
+        "id": "Unique_LilyQueen_LilyHealing",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 0
+    },
+    "HolyBlast": {
+        "id": "HolyBlast",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_DarkAlien_JumpScractch": {
+        "id": "Unique_DarkAlien_JumpScractch",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 350
+    },
+    "Unique_MoonQueen_MoonBeam": {
+        "id": "Unique_MoonQueen_MoonBeam",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 600
+    },
+    "FlameWall": {
+        "id": "FlameWall",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 250
+    },
+    "AirBlade": {
+        "id": "AirBlade",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 160
+    },
+    "Unique_MoonQueen_MoonBlade": {
+        "id": "Unique_MoonQueen_MoonBlade",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 350
+    },
+    "Unique_SifuDog_Counter": {
+        "id": "Unique_SifuDog_Counter",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 450
+    },
+    "WallSplash": {
+        "id": "WallSplash",
+        "element": "Water",
+        "category": "Shot",
+        "power": 300
+    },
+    "TriSpark": {
+        "id": "TriSpark",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 250
+    },
+    "ThunderStorm": {
+        "id": "ThunderStorm",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_ScorpionMan_Uppercut": {
+        "id": "Unique_ScorpionMan_Uppercut",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 350
+    },
+    "FlameFunnel": {
+        "id": "FlameFunnel",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 300
+    },
+    "SandTwister": {
+        "id": "SandTwister",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 500
+    },
+    "RangeThunder": {
+        "id": "RangeThunder",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 500
+    },
+    "Railbolt": {
+        "id": "Railbolt",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 600
+    },
+    "ShokeiLaser": {
+        "id": "ShokeiLaser",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 600
+    },
+    "BubbleShower": {
+        "id": "BubbleShower",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 160
+    },
+    "WaterBalloon": {
+        "id": "WaterBalloon",
+        "element": "Water",
+        "category": "Shot",
+        "power": 90
+    },
+    "IciclePierce": {
+        "id": "IciclePierce",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 250
+    },
+    "DoubleIcicleThrow": {
+        "id": "DoubleIcicleThrow",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 700
+    },
+    "IceAge": {
+        "id": "IceAge",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 700
+    },
+    "RaidCutter": {
+        "id": "RaidCutter",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 400
+    },
+    "WindEdge": {
+        "id": "WindEdge",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 200
+    },
+    "FlareTwister": {
+        "id": "FlareTwister",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 130
+    },
+    "Unique_Horus_PerfectStorm": {
+        "id": "Unique_Horus_PerfectStorm",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 650
+    },
+    "Unique_BlackGriffon_TackleLaser2": {
+        "id": "Unique_BlackGriffon_TackleLaser2",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_MoonQueen_IceMoonBlade": {
+        "id": "Unique_MoonQueen_IceMoonBlade",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 700
+    },
+    "IcicleLine": {
+        "id": "IcicleLine",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 300
+    },
+    "Unique_Manticore_InfernoStrike": {
+        "id": "Unique_Manticore_InfernoStrike",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 400
+    },
+    "Unique_ThunderBird_ThunderStorm": {
+        "id": "Unique_ThunderBird_ThunderStorm",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 180
+    },
+    "Unique_LilyQueen_WindBarrier": {
+        "id": "Unique_LilyQueen_WindBarrier",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 60
+    },
+    "Unique_BlackMetalDragon_FirePunch": {
+        "id": "Unique_BlackMetalDragon_FirePunch",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 450
+    },
+    "Unique_GrassRabbitMan_GrassRoundKick": {
+        "id": "Unique_GrassRabbitMan_GrassRoundKick",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 250
+    },
+    "Unique_Yeti_SnowBall": {
+        "id": "Unique_Yeti_SnowBall",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 400
+    },
+    "Unique_Umihebi_WindingTackle": {
+        "id": "Unique_Umihebi_WindingTackle",
+        "element": "Water",
+        "category": "Melee",
+        "power": 400
+    },
+    "Unique_SoldierBee_NeedleLance": {
+        "id": "Unique_SoldierBee_NeedleLance",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 120
+    },
+    "Unique_RedArmorBird_TriplePeck": {
+        "id": "Unique_RedArmorBird_TriplePeck",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 200
+    },
+    "Unique_ThunderDog_InazumaShorai": {
+        "id": "Unique_ThunderDog_InazumaShorai",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 100
+    },
+    "Unique_GhostBeast_Tossin": {
+        "id": "Unique_GhostBeast_Tossin",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_BirdDragon_FireBreath": {
+        "id": "Unique_BirdDragon_FireBreath",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_WhiteTiger_IceScratch": {
+        "id": "Unique_WhiteTiger_IceScratch",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_DarkMechaDragon_SetFunnel": {
+        "id": "Unique_DarkMechaDragon_SetFunnel",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 400
+    },
+    "Unique_DarkMechaDragon_FunnelLaser": {
+        "id": "Unique_DarkMechaDragon_FunnelLaser",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_DarkMechaDragon_ConvergentBeam": {
+        "id": "Unique_DarkMechaDragon_ConvergentBeam",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 500
+    },
+    "Unique_DarkMechaDragon_BeamSlash": {
+        "id": "Unique_DarkMechaDragon_BeamSlash",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 450
+    },
+    "Unique_DarkMechaDragon_WarpComet": {
+        "id": "Unique_DarkMechaDragon_WarpComet",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_BirdDragon_Ice_IceBreath": {
+        "id": "Unique_BirdDragon_Ice_IceBreath",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_Umihebi_Fire_FireWindingTackle": {
+        "id": "Unique_Umihebi_Fire_FireWindingTackle",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 400
+    },
+    "PredatorWave": {
+        "id": "PredatorWave",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 200
+    },
+    "PredatorBeam": {
+        "id": "PredatorBeam",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 600
+    },
+    "PredatorLockon": {
+        "id": "PredatorLockon",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 400
+    },
+    "Unique_WhiteTiger_Ground_IronScratch": {
+        "id": "Unique_WhiteTiger_Ground_IronScratch",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_FengyunDeeper_Electric_ThunderTempest": {
+        "id": "Unique_FengyunDeeper_Electric_ThunderTempest",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_Werewolf_Ice_SnowScratch": {
+        "id": "Unique_Werewolf_Ice_SnowScratch",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 160
+    },
+    "Unique_Horus_Water_AquaStorm": {
+        "id": "Unique_Horus_Water_AquaStorm",
+        "element": "Water",
+        "category": "Melee",
+        "power": 320
+    },
+    "Unique_AmaterasuWolf_Dark_DarkCharge": {
+        "id": "Unique_AmaterasuWolf_Dark_DarkCharge",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 250
+    },
+    "RockBeat": {
+        "id": "RockBeat",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 600
+    },
+    "Unique_Yeti_Grass_GrassBall": {
+        "id": "Unique_Yeti_Grass_GrassBall",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 400
+    },
+    "Unique_SnowTigerBeastman_SnowImpact": {
+        "id": "Unique_SnowTigerBeastman_SnowImpact",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 650
+    },
+    "Unique_PurpleSpider_SpiderRaid": {
+        "id": "Unique_PurpleSpider_SpiderRaid",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 250
+    },
+    "Unique_SnowTigerBeastman_TrampleSlash": {
+        "id": "Unique_SnowTigerBeastman_TrampleSlash",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_MysteryMask_LifeSteal": {
+        "id": "Unique_MysteryMask_LifeSteal",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 400
+    },
+    "Unique_GrimGirl_BrutalMachete": {
+        "id": "Unique_GrimGirl_BrutalMachete",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 500
+    },
+    "Unique_WhiteShieldDragon_ShieldTackle": {
+        "id": "Unique_WhiteShieldDragon_ShieldTackle",
+        "element": "Dragon",
+        "category": "Melee",
+        "power": 600
+    },
+    "Unique_BlueThunderHorse_FlashDash": {
+        "id": "Unique_BlueThunderHorse_FlashDash",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 600
+    },
+    "Unique_WhiteDeer_HolyPillar": {
+        "id": "Unique_WhiteDeer_HolyPillar",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_NightBlueHorse_DeathStep": {
+        "id": "Unique_NightBlueHorse_DeathStep",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 550
+    },
+    "Unique_GoldenHorse_StoneDash": {
+        "id": "Unique_GoldenHorse_StoneDash",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 500
+    },
+    "Funnel_RaijinDaughter_Water": {
+        "id": "Funnel_RaijinDaughter_Water",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 30
+    },
+    "BlueThunderHorse_PartnerSkill": {
+        "id": "BlueThunderHorse_PartnerSkill",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 30
+    },
+    "SeaGush": {
+        "id": "SeaGush",
+        "element": "Water",
+        "category": "Melee",
+        "power": 600
+    },
+    "RipTide": {
+        "id": "RipTide",
+        "element": "Water",
+        "category": "Shot",
+        "power": 500
+    },
+    "HydroSlicer": {
+        "id": "HydroSlicer",
+        "element": "Water",
+        "category": "Shot",
+        "power": 350
+    },
+    "DiversionLaser": {
+        "id": "DiversionLaser",
+        "element": "Water",
+        "category": "Shot",
+        "power": 250
+    },
+    "CrossWind": {
+        "id": "CrossWind",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 500
+    },
+    "IceWall": {
+        "id": "IceWall",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_OctopursGirl_InkJet": {
+        "id": "Unique_OctopursGirl_InkJet",
+        "element": "Water",
+        "category": "Shot",
+        "power": 120
+    },
+    "Unique_TentacleTurtle_HydroSpin": {
+        "id": "Unique_TentacleTurtle_HydroSpin",
+        "element": "Water",
+        "category": "Shot",
+        "power": 160
+    },
+    "Unique_LeafMomonga_SomerSault": {
+        "id": "Unique_LeafMomonga_SomerSault",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 250
+    },
+    "Unique_IceNarwhal_JumpingHorn": {
+        "id": "Unique_IceNarwhal_JumpingHorn",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_GhostAnglerfish_SweepBait": {
+        "id": "Unique_GhostAnglerfish_SweepBait",
+        "element": "Water",
+        "category": "Shot",
+        "power": 450
+    },
+    "Unique_StuffedShark_HiddenWeapon": {
+        "id": "Unique_StuffedShark_HiddenWeapon",
+        "element": "Water",
+        "category": "Shot",
+        "power": 300
+    },
+    "GravityShot": {
+        "id": "GravityShot",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 40
+    },
+    "ThunderSpear": {
+        "id": "ThunderSpear",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 40
+    },
+    "ReflectiveShuriken": {
+        "id": "ReflectiveShuriken",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 400
+    },
+    "HealingTree": {
+        "id": "HealingTree",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 1
+    },
+    "Unique_IceCrocodile_SpitAttack": {
+        "id": "Unique_IceCrocodile_SpitAttack",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 180
+    },
+    "Unique_YakushimaBoss002_PhantasmalDeathray": {
+        "id": "Unique_YakushimaBoss002_PhantasmalDeathray",
+        "element": "None",
+        "category": "Shot",
+        "power": 450
+    },
+    "Unique_YakushimaBoss002_PhantasmalEye": {
+        "id": "Unique_YakushimaBoss002_PhantasmalEye",
+        "element": "None",
+        "category": "Shot",
+        "power": 25
+    },
+    "Unique_YakushimaBoss002_PhantasmalBolt": {
+        "id": "Unique_YakushimaBoss002_PhantasmalBolt",
+        "element": "None",
+        "category": "Shot",
+        "power": 80
+    },
+    "Unique_YakushimaBoss002_PhantasmalSphere": {
+        "id": "Unique_YakushimaBoss002_PhantasmalSphere",
+        "element": "None",
+        "category": "Shot",
+        "power": 180
+    },
+    "Unique_Yakushima_EyeTossin": {
+        "id": "Unique_Yakushima_EyeTossin",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_Yakushima_SummonServant": {
+        "id": "Unique_Yakushima_SummonServant",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 300
+    },
+    "Unique_GhostAnglerfish_Fire_SweepBait_Fire": {
+        "id": "Unique_GhostAnglerfish_Fire_SweepBait_Fire",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 450
+    },
+    "Unique_CaptainPenguin_Black_BodySlide_Electric": {
+        "id": "Unique_CaptainPenguin_Black_BodySlide_Electric",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 400
+    },
+    "Unique_Plesiosaur_LongBreath": {
+        "id": "Unique_Plesiosaur_LongBreath",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 400
+    },
+    "Unique_TropicalOstrich_DashKick": {
+        "id": "Unique_TropicalOstrich_DashKick",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_Yakushima_MouthTossin": {
+        "id": "Unique_Yakushima_MouthTossin",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_YakushimaBoss001_Green_PhantasmalBolt": {
+        "id": "Unique_YakushimaBoss001_Green_PhantasmalBolt",
+        "element": "None",
+        "category": "Shot",
+        "power": 40
+    },
+    "Unique_YakushimaBoss001_Green_PhantasmalEye": {
+        "id": "Unique_YakushimaBoss001_Green_PhantasmalEye",
+        "element": "None",
+        "category": "Shot",
+        "power": 10
+    },
+    "Unique_YakushimaBoss001_Green_PhantasmalSphere": {
+        "id": "Unique_YakushimaBoss001_Green_PhantasmalSphere",
+        "element": "None",
+        "category": "Shot",
+        "power": 90
+    },
+    "Unique_YakushimaBoss001_Green_PhantasmalDeathray": {
+        "id": "Unique_YakushimaBoss001_Green_PhantasmalDeathray",
+        "element": "None",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_PoseidonOrca_TorrentLaser": {
+        "id": "Unique_PoseidonOrca_TorrentLaser",
+        "element": "Water",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_YakushimaMonster001_SlimePress_Normal": {
+        "id": "Unique_YakushimaMonster001_SlimePress_Normal",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_YakushimaMonster001_SlimePress_Leaf": {
+        "id": "Unique_YakushimaMonster001_SlimePress_Leaf",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_YakushimaMonster001_SlimePress_Water": {
+        "id": "Unique_YakushimaMonster001_SlimePress_Water",
+        "element": "Water",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_YakushimaMonster001_SlimePress_Fire": {
+        "id": "Unique_YakushimaMonster001_SlimePress_Fire",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_YakushimaMonster001_SlimePress_Dark": {
+        "id": "Unique_YakushimaMonster001_SlimePress_Dark",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_YakushimaMonster001_SlimePress_Rainbow": {
+        "id": "Unique_YakushimaMonster001_SlimePress_Rainbow",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 100
+    },
+    "Unique_YakushimaBoss001_Small_DemonEyeCharge": {
+        "id": "Unique_YakushimaBoss001_Small_DemonEyeCharge",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 60
+    },
+    "Unique_YakushimaMonster002_SwordCharge": {
+        "id": "Unique_YakushimaMonster002_SwordCharge",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 80
+    },
+    "Unique_YakushimaMonster003_BatCharge": {
+        "id": "Unique_YakushimaMonster003_BatCharge",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 70
+    },
+    "Unique_BluePlatypus_Toboggan_Fire": {
+        "id": "Unique_BluePlatypus_Toboggan_Fire",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 115
+    },
+    "PoseidonOrca_PartnerSkill": {
+        "id": "PoseidonOrca_PartnerSkill",
+        "element": "Water",
+        "category": "Melee",
+        "power": 60
+    },
+    "PoseidonOrca_PartnerSkill_SpearBullet": {
+        "id": "PoseidonOrca_PartnerSkill_SpearBullet",
+        "element": "Water",
+        "category": "Shot",
+        "power": 50
+    },
+    "Human_Rolling": {
+        "id": "Human_Rolling",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 0
+    },
+    "Weapon_Use": {
+        "id": "Weapon_Use",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 50
+    },
+    "Unique_FlowerDinosaur_Electric_ThunderWhip": {
+        "id": "Unique_FlowerDinosaur_Electric_ThunderWhip",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 300
+    },
+    "Unique_KingAlpaca_Ice_IcePress": {
+        "id": "Unique_KingAlpaca_Ice_IcePress",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 400
+    },
+    "Unique_Baphomet_Dark_DarkKite": {
+        "id": "Unique_Baphomet_Dark_DarkKite",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 400
+    },
+    "Unique_SakuraSaurus_Water_SplashTackle": {
+        "id": "Unique_SakuraSaurus_Water_SplashTackle",
+        "element": "Water",
+        "category": "Melee",
+        "power": 250
+    },
+    "Unique_Deer_Ground_DirtyHorn": {
+        "id": "Unique_Deer_Ground_DirtyHorn",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 120
+    },
+    "Unique_Gorilla_Ground_EarthPunch": {
+        "id": "Unique_Gorilla_Ground_EarthPunch",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_IceHorse_Dark_DarkBladeAttack": {
+        "id": "Unique_IceHorse_Dark_DarkBladeAttack",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 700
+    },
+    "Unique_YakushimaBoss002_2_PhantasmalDeathray": {
+        "id": "Unique_YakushimaBoss002_2_PhantasmalDeathray",
+        "element": "None",
+        "category": "Shot",
+        "power": 450
+    },
+    "Unique_YakushimaBoss002_2_PhantasmalEye": {
+        "id": "Unique_YakushimaBoss002_2_PhantasmalEye",
+        "element": "None",
+        "category": "Shot",
+        "power": 25
+    },
+    "Unique_YakushimaBoss002_2_PhantasmalBolt": {
+        "id": "Unique_YakushimaBoss002_2_PhantasmalBolt",
+        "element": "None",
+        "category": "Shot",
+        "power": 80
+    },
+    "Unique_YakushimaBoss002_2_PhantasmalSphere": {
+        "id": "Unique_YakushimaBoss002_2_PhantasmalSphere",
+        "element": "None",
+        "category": "Shot",
+        "power": 180
+    },
+    "Unique_YakushimaBoss001_Green_2_PhantasmalBolt": {
+        "id": "Unique_YakushimaBoss001_Green_2_PhantasmalBolt",
+        "element": "None",
+        "category": "Shot",
+        "power": 40
+    },
+    "Unique_YakushimaBoss001_Green_2_PhantasmalEye": {
+        "id": "Unique_YakushimaBoss001_Green_2_PhantasmalEye",
+        "element": "None",
+        "category": "Shot",
+        "power": 10
+    },
+    "Unique_YakushimaBoss001_Green_2_PhantasmalSphere": {
+        "id": "Unique_YakushimaBoss001_Green_2_PhantasmalSphere",
+        "element": "None",
+        "category": "Shot",
+        "power": 90
+    },
+    "Unique_YakushimaBoss001_Green_2_PhantasmalDeathray": {
+        "id": "Unique_YakushimaBoss001_Green_2_PhantasmalDeathray",
+        "element": "None",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_Garm_BiteV2": {
+        "id": "Unique_Garm_BiteV2",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_ThunderDog_BiteV2": {
+        "id": "Unique_ThunderDog_BiteV2",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_ThunderDog_Bite": {
+        "id": "Unique_ThunderDog_Bite",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_GuardianDog_Bite": {
+        "id": "Unique_GuardianDog_Bite",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_GuardianDog_BiteV2": {
+        "id": "Unique_GuardianDog_BiteV2",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_GoldenHorse_Bite": {
+        "id": "Unique_GoldenHorse_Bite",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_GoldenHorse_BiteV2": {
+        "id": "Unique_GoldenHorse_BiteV2",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_AmaterasuWolf_Bite": {
+        "id": "Unique_AmaterasuWolf_Bite",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_AmaterasuWolf_BiteV2": {
+        "id": "Unique_AmaterasuWolf_BiteV2",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_AmaterasuWolf_Dark_Bite": {
+        "id": "Unique_AmaterasuWolf_Dark_Bite",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_AmaterasuWolf_Dark_BiteV2": {
+        "id": "Unique_AmaterasuWolf_Dark_BiteV2",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_BlackPuppy_Bite": {
+        "id": "Unique_BlackPuppy_Bite",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_BlackPuppy_BiteV2": {
+        "id": "Unique_BlackPuppy_BiteV2",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_VolcanoDragon_VolcanicLaser": {
+        "id": "Unique_VolcanoDragon_VolcanicLaser",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_VolcanoDragon_MagmaSpit": {
+        "id": "Unique_VolcanoDragon_MagmaSpit",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_Sekhmet_SomersaultScratch": {
+        "id": "Unique_Sekhmet_SomersaultScratch",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_Sekhmet_RollingScratch": {
+        "id": "Unique_Sekhmet_RollingScratch",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 400
+    },
+    "Unique_NightBlueHorse_Tossin": {
+        "id": "Unique_NightBlueHorse_Tossin",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 450
+    },
+    "Unique_BlueThunderHorse_Tossin": {
+        "id": "Unique_BlueThunderHorse_Tossin",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 500
+    },
+    "Unique_LegendDeer_WarpPillarBurst": {
+        "id": "Unique_LegendDeer_WarpPillarBurst",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 800
+    },
+    "Unique_LegendDeer_RadiantWingRush": {
+        "id": "Unique_LegendDeer_RadiantWingRush",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 700
+    },
+    "Unique_LegendDeer_BarrierRelease_Normal": {
+        "id": "Unique_LegendDeer_BarrierRelease_Normal",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_LegendDeer_BarrierRelease_Grass": {
+        "id": "Unique_LegendDeer_BarrierRelease_Grass",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 220
+    },
+    "Unique_LegendDeer_BarrierRelease_Water": {
+        "id": "Unique_LegendDeer_BarrierRelease_Water",
+        "element": "Water",
+        "category": "Melee",
+        "power": 220
+    },
+    "Unique_LegendDeer_RadiantPurge": {
+        "id": "Unique_LegendDeer_RadiantPurge",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 1250
+    },
+    "RadiantBarrage": {
+        "id": "RadiantBarrage",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_LegendDeer_RadiantPurge_Otomo": {
+        "id": "Unique_LegendDeer_RadiantPurge_Otomo",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 250
+    },
+    "Unique_MonochromeQueen_BalletJump": {
+        "id": "Unique_MonochromeQueen_BalletJump",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 500
+    },
+    "Unique_GrassGolem_ArmCannon": {
+        "id": "Unique_GrassGolem_ArmCannon",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_GrassGolem_RocketPunch": {
+        "id": "Unique_GrassGolem_RocketPunch",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_KingWhale_Maelstrom": {
+        "id": "Unique_KingWhale_Maelstrom",
+        "element": "Water",
+        "category": "Shot",
+        "power": 500
+    },
+    "Unique_KingWhale_HomingBubble": {
+        "id": "Unique_KingWhale_HomingBubble",
+        "element": "Water",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_KingWhale_AquaTornado": {
+        "id": "Unique_KingWhale_AquaTornado",
+        "element": "Water",
+        "category": "Shot",
+        "power": 800
+    },
+    "Unique_KingWhale_TidalBore": {
+        "id": "Unique_KingWhale_TidalBore",
+        "element": "Water",
+        "category": "Shot",
+        "power": 1000
+    },
+    "Unique_Ronin_Iai_PartnerSkill": {
+        "id": "Unique_Ronin_Iai_PartnerSkill",
+        "element": "Fire",
+        "category": "Melee",
+        "power": 160
+    },
+    "Unique_KingWhale_WaveTackle": {
+        "id": "Unique_KingWhale_WaveTackle",
+        "element": "Water",
+        "category": "Melee",
+        "power": 400
+    },
+    "Unique_KingWhale_Breaching": {
+        "id": "Unique_KingWhale_Breaching",
+        "element": "Water",
+        "category": "Melee",
+        "power": 700
+    },
+    "Unique_KingWhale_AquaBlade": {
+        "id": "Unique_KingWhale_AquaBlade",
+        "element": "Water",
+        "category": "Shot",
+        "power": 300
+    },
+    "Unique_ScorpionMan_Erectric_UpperThunder": {
+        "id": "Unique_ScorpionMan_Erectric_UpperThunder",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 600
+    },
+    "Unique_NightBlueHorse_Neutral_AirStep": {
+        "id": "Unique_NightBlueHorse_Neutral_AirStep",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 800
+    },
+    "Unique_NightBlueHorse_Neutral_Tossin": {
+        "id": "Unique_NightBlueHorse_Neutral_Tossin",
+        "element": "Normal",
+        "category": "Melee",
+        "power": 700
+    },
+    "Unique_SamuraiDog_Bite": {
+        "id": "Unique_SamuraiDog_Bite",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_SamuraiDog_BiteV2": {
+        "id": "Unique_SamuraiDog_BiteV2",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_ThunderDog_Ice_KoriShorai": {
+        "id": "Unique_ThunderDog_Ice_KoriShorai",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 300
+    },
+    "Unique_Kirin_Ice_IceTackle": {
+        "id": "Unique_Kirin_Ice_IceTackle",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 600
+    },
+    "CreepingBubble": {
+        "id": "CreepingBubble",
+        "element": "Water",
+        "category": "Shot",
+        "power": 200
+    },
+    "Unique_ThunderDog_Ice_BiteV2": {
+        "id": "Unique_ThunderDog_Ice_BiteV2",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_ThunderDog_Ice_Bite": {
+        "id": "Unique_ThunderDog_Ice_Bite",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 50
+    },
+    "WindBurst": {
+        "id": "WindBurst",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_CuteMole_DiggingAttack": {
+        "id": "Unique_CuteMole_DiggingAttack",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 60
+    },
+    "Unique_SamuraiDog_DashSlash": {
+        "id": "Unique_SamuraiDog_DashSlash",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 90
+    },
+    "Unique_SnakeGirl_SnakeShot": {
+        "id": "Unique_SnakeGirl_SnakeShot",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_MummyPal_MummyAttack": {
+        "id": "Unique_MummyPal_MummyAttack",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 500
+    },
+    "Unique_ClownRabbit_TrickShow": {
+        "id": "Unique_ClownRabbit_TrickShow",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_ThunderDragonMan_GYM_Act": {
+        "id": "Unique_ThunderDragonMan_GYM_Act",
+        "element": "Electricity",
+        "category": "Shot",
+        "power": 1
+    },
+    "Unique_CubeTurtle_CubePress": {
+        "id": "Unique_CubeTurtle_CubePress",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_KingWhale_SuperTidalBore": {
+        "id": "Unique_KingWhale_SuperTidalBore",
+        "element": "Water",
+        "category": "Shot",
+        "power": 1000
+    },
+    "GrassGolem_PartnerSkill": {
+        "id": "GrassGolem_PartnerSkill",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_SumoDog_SumoStomp": {
+        "id": "Unique_SumoDog_SumoStomp",
+        "element": "Earth",
+        "category": "Melee",
+        "power": 550
+    },
+    "Unique_RockBeast_RockHorn": {
+        "id": "Unique_RockBeast_RockHorn",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_RockBeast_Ice_IceHorn": {
+        "id": "Unique_RockBeast_Ice_IceHorn",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_ElecPomeranian_Bite": {
+        "id": "Unique_ElecPomeranian_Bite",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 50
+    },
+    "Unique_ElecPomeranian_BiteV2": {
+        "id": "Unique_ElecPomeranian_BiteV2",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 40
+    },
+    "Unique_LanternButler_LanternFlame": {
+        "id": "Unique_LanternButler_LanternFlame",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 650
+    },
+    "Unique_BlueSkyDragon_Tossin": {
+        "id": "Unique_BlueSkyDragon_Tossin",
+        "element": "Water",
+        "category": "Melee",
+        "power": 500
+    },
+    "Unique_BlueSkyDragon_SweepBreath": {
+        "id": "Unique_BlueSkyDragon_SweepBreath",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_BlueSkyDragon_DrainStorm": {
+        "id": "Unique_BlueSkyDragon_DrainStorm",
+        "element": "Water",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_BlueSkyDragon_GYM_Act": {
+        "id": "Unique_BlueSkyDragon_GYM_Act",
+        "element": "Water",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_LilyQueen_GYM_Act": {
+        "id": "Unique_LilyQueen_GYM_Act",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 1
+    },
+    "Unique_MoonQueen_GYM_Act": {
+        "id": "Unique_MoonQueen_GYM_Act",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 1
+    },
+    "Unique_RedFlowerBird_JumpKick": {
+        "id": "Unique_RedFlowerBird_JumpKick",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 550
+    },
+    "Unique_WingGolem_Fire_FlameCutter": {
+        "id": "Unique_WingGolem_Fire_FlameCutter",
+        "element": "Fire",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_VolcanoDragon_Ice_IceLaser": {
+        "id": "Unique_VolcanoDragon_Ice_IceLaser",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_VolcanoDragon_Ice_IcicleSpit": {
+        "id": "Unique_VolcanoDragon_Ice_IcicleSpit",
+        "element": "Ice",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_CubeTurtle_Neutral_HolyPress": {
+        "id": "Unique_CubeTurtle_Neutral_HolyPress",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_GrassGolem_Dark_DarkArmCannon": {
+        "id": "Unique_GrassGolem_Dark_DarkArmCannon",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_WorldTreeDragon_PaldiumShot": {
+        "id": "Unique_WorldTreeDragon_PaldiumShot",
+        "element": "None",
+        "category": "Shot",
+        "power": 400
+    },
+    "Unique_WorldTreeDragon_PaldiumCannon": {
+        "id": "Unique_WorldTreeDragon_PaldiumCannon",
+        "element": "None",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_WorldTreeDragon_Supernova": {
+        "id": "Unique_WorldTreeDragon_Supernova",
+        "element": "None",
+        "category": "Shot",
+        "power": 1000
+    },
+    "Unique_WorldTreeDragon_HaloBeam": {
+        "id": "Unique_WorldTreeDragon_HaloBeam",
+        "element": "None",
+        "category": "Shot",
+        "power": 750
+    },
+    "Unique_WorldTreeDragon_PaldiumRain": {
+        "id": "Unique_WorldTreeDragon_PaldiumRain",
+        "element": "None",
+        "category": "Shot",
+        "power": 500
+    },
+    "Unique_WorldTreeDragon_LaserGliding": {
+        "id": "Unique_WorldTreeDragon_LaserGliding",
+        "element": "None",
+        "category": "Shot",
+        "power": 550
+    },
+    "Unique_WorldTreeDragon_HaloCutter": {
+        "id": "Unique_WorldTreeDragon_HaloCutter",
+        "element": "None",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_WorldTreeDragon_PaldiumExplosion": {
+        "id": "Unique_WorldTreeDragon_PaldiumExplosion",
+        "element": "None",
+        "category": "Shot",
+        "power": 800
+    },
+    "GrassGolem_Dark_PartnerSkill": {
+        "id": "GrassGolem_Dark_PartnerSkill",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 600
+    },
+    "Unique_LilyQueen_LilyHealing_Boss": {
+        "id": "Unique_LilyQueen_LilyHealing_Boss",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 0
+    },
+    "Unique_ThunderBird_Ice_SnowStrom": {
+        "id": "Unique_ThunderBird_Ice_SnowStrom",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 600
+    },
+    "Unique_WhiteDeer_Dark_DarkPillar": {
+        "id": "Unique_WhiteDeer_Dark_DarkPillar",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_Mothman_GiantSpore": {
+        "id": "Unique_Mothman_GiantSpore",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_Mothman_SporeScatter": {
+        "id": "Unique_Mothman_SporeScatter",
+        "element": "Leaf",
+        "category": "Shot",
+        "power": 800
+    },
+    "Unique_MoonQueen_GYM_Hard_Act": {
+        "id": "Unique_MoonQueen_GYM_Hard_Act",
+        "element": "Normal",
+        "category": "Shot",
+        "power": 1
+    },
+    "Unique_FlowerPrince_PoisonGasTackle": {
+        "id": "Unique_FlowerPrince_PoisonGasTackle",
+        "element": "Dark",
+        "category": "Melee",
+        "power": 700
+    },
+    "Unique_FlowerPrince_PoisonGasDance": {
+        "id": "Unique_FlowerPrince_PoisonGasDance",
+        "element": "Dark",
+        "category": "Shot",
+        "power": 800
+    },
+    "Unique_GrassMinotaur_BullRush": {
+        "id": "Unique_GrassMinotaur_BullRush",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 650
+    },
+    "Unique_GrassMinotaur_Ice_BullRush": {
+        "id": "Unique_GrassMinotaur_Ice_BullRush",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 650
+    },
+    "Unique_LotusDragon_LotusBloom": {
+        "id": "Unique_LotusDragon_LotusBloom",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 700
+    },
+    "Unique_GhostDragon_TailSlash": {
+        "id": "Unique_GhostDragon_TailSlash",
+        "element": "Dragon",
+        "category": "Melee",
+        "power": 550
+    },
+    "Unique_GhostDragon_PhosphorousBeam": {
+        "id": "Unique_GhostDragon_PhosphorousBeam",
+        "element": "Dragon",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_GrassMinotaur_BullRush_Lower": {
+        "id": "Unique_GrassMinotaur_BullRush_Lower",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 250
+    },
+    "Unique_GrassMinotaur_Ice_BullRush_Lower": {
+        "id": "Unique_GrassMinotaur_Ice_BullRush_Lower",
+        "element": "Ice",
+        "category": "Melee",
+        "power": 250
+    },
+    "Unique_WorldTreeDragon_BigBang": {
+        "id": "Unique_WorldTreeDragon_BigBang",
+        "element": "None",
+        "category": "Shot",
+        "power": 900
+    },
+    "Unique_DomeArmorDragon_ExplosiveMissile": {
+        "id": "Unique_DomeArmorDragon_ExplosiveMissile",
+        "element": "Earth",
+        "category": "Shot",
+        "power": 700
+    },
+    "Unique_PandaGirl_RapidKick": {
+        "id": "Unique_PandaGirl_RapidKick",
+        "element": "Leaf",
+        "category": "Melee",
+        "power": 250
+    },
+    "Unique_ElecSnail_ShellCharge": {
+        "id": "Unique_ElecSnail_ShellCharge",
+        "element": "Electricity",
+        "category": "Melee",
+        "power": 500
+    }
+}
