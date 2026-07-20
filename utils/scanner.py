@@ -289,8 +289,22 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
         if is_variant:
             badges.append(["VARIANT", "#9333EA"])
 
-        icon_path = os.path.join(fmodel_path, f"T_{mod_name}_icon_normal.png") if fmodel_path else ""
-        has_icon = os.path.exists(icon_path)
+        custom_icon_path = os.path.join(fmodel_path, f"T_{mod_name}_icon_normal.png") if fmodel_path else ""
+        
+        icon_path = ""
+        has_icon = False
+
+        if custom_icon_path and os.path.exists(custom_icon_path):
+            icon_path = custom_icon_path
+            has_icon = True
+        elif not is_variant:
+            # Only fall back to extracted vanilla icons if this is the base Pal
+            icon_dir = os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Texture", "PalIcon", "Normal")) if fmodel_base else ""
+            shared_icon_path = os.path.join(icon_dir, f"T_{mod_name}_icon_normal.png") if icon_dir else ""
+            if shared_icon_path and os.path.exists(shared_icon_path):
+                icon_path = shared_icon_path
+                has_icon = True
+
 
         sound_meta = get_pal_sound_metadata(base_pal)
         audio_overrides = {}
