@@ -9,17 +9,17 @@ import re
 # =============================================================
 # CUSTOM CONFIGURATION
 # =============================================================
-TARGET_PAL = "GuardianDog"
+TARGET_PAL = "DarkScorpion"
 TARGET_OVERRIDE_FOLDER = f"{TARGET_PAL}_Override"
 
-NEW_ANIM_FOLDER = "Pal/Content/Mods/T-Box/Yakumo/Female/Animation"
+NEW_ANIM_FOLDER = "Pal/Content/Pal/Animation/Character/Monster/SexyDarkScorpion"
 
 # The original vanilla skeleton and your new custom skeleton
-OLD_SKELETON_PATH = "Pal/Content/Pal/Model/Character/Skeleton/GuardianDog/SK_GuardianDog_Skeleton"
-NEW_SKELETON_PATH = "Pal/Content/Mods/T-Box/Yakumo/Female/Skeleton/SK_GuardianDog_Female_Skeleton"
+OLD_SKELETON_PATH = "Pal/Content/Pal/Model/Character/Skeleton/DarkScorpion/SK_DarkScorpion_Skeleton"
+NEW_SKELETON_PATH = "Pal/Content/Pal/Model/Character/Skeleton/SexyDarkScorpion/SK_DarkScorpion_Skeleton"
 
 # The custom Skeletal Mesh
-NEW_MESH_PATH = "Pal/Content/Mods/T-Box/Yakumo/Female/Model/SK_GuardianDog_Female_NSFW_Nude"
+NEW_MESH_PATH = "Pal/Content/Pal/Model/Character/Monster/SexyDarkScorpion/SK_DarkScorpion"
 
 # =============================================================
 # EXPLICIT GUID OVERRIDES (Fallback if JSON parser fails)
