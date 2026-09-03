@@ -3,7 +3,6 @@ import sys
 import json
 import shutil
 import subprocess
-import glob
 import re
 
 # =============================================================
@@ -66,7 +65,6 @@ def run_extraction(cue4parse_exe, paks_dir, usmap_path, temp_dir, relative_paths
                     pass
 
     active_input_dir = isolated_dir if files_linked > 0 else paks_dir
-    log(f"Linked {files_linked} game and mod archive pak files for processing.")
     
     cmd_extract = [
         cue4parse_exe,
@@ -104,7 +102,7 @@ def find_skeleton_guid_in_json(json_path: str) -> str:
         return None
     return search(data)
 
-def mutate_uasset_json(json_path: str, target_pal: str, override_folder: str, new_anim_folder: str, old_skel_path: str, new_skel_path: str, new_mesh_path: str, old_guid: str, new_guid: str):
+def mutate_uasset_json(json_path: str, target_pal: str, override_folder: str, new_anim_folder: str, old_skel_path: str, new_skel_path: str, new_mesh_path: str, old_guid: str, new_guid: str, action_data: list):
     with open(json_path, "r", encoding="utf-8") as f:
         json_str = f.read()
 
@@ -147,22 +145,35 @@ def mutate_uasset_json(json_path: str, target_pal: str, override_folder: str, ne
         f'"SK_{clean_target}"': f'"{new_mesh_name}"'
     }
 
+    # Inject dynamic Action BP overrides
+    for action in action_data:
+        old_name = action["old_name"]
+        new_name = action["new_name"]
+        old_path_core = action["old_path_core"]
+        new_path_core = action["new_path_core"]
+        
+        replacements[f"/Game/{old_path_core}.{old_name}_C"] = f"/Game/{new_path_core}.{new_name}_C"
+        replacements[f"/Game/{old_path_core}"] = f"/Game/{new_path_core}"
+        replacements[f"Pal/Content/{old_path_core}"] = f"Pal/Content/{new_path_core}"
+        replacements[old_path_core] = new_path_core
+        
+        # Safely replace the class name everywhere it occurs exactly
+        json_str = re.sub(rf"(?<![A-Za-z0-9_]){old_name}(?![A-Za-z0-9_])", new_name, json_str)
+
     if old_guid and new_guid and old_guid != new_guid:
         replacements[old_guid] = new_guid
 
     log(f"Patching file: {os.path.basename(json_path)}", "PATCH")
     for old, new in replacements.items():
         if old in json_str:
-            log(f"  [RAW REPLACE] {old}  ->  {new}", "PATCH")
             json_str = json_str.replace(old, new)
 
     old_bp = f"BP_{clean_target}"
     new_bp = f"BP_{clean_override}"
 
-    # Only mutate the Actor Blueprint Class itself! Let ABP and BS retain their names.
+    # Only mutate the Actor Blueprint Class itself!
     if old_bp in json_str:
         json_str = re.sub(rf"(?<!A){old_bp}", new_bp, json_str)
-        log(f"  [REGEX] (?<!A){old_bp}  ->  {new_bp}", "PATCH")
 
     try:
         data = json.loads(json_str)
@@ -179,7 +190,6 @@ def mutate_uasset_json(json_path: str, target_pal: str, override_folder: str, ne
                 imp["ObjectName"] = override_folder
                 modified_structs += 1
         
-        # RESTORED: This is critical for the ABP to correctly cast to your new modded BP class
         if imp.get("ObjectName") == f"BP_{clean_target}":
             imp["ObjectName"] = f"BP_{clean_override}"
             modified_structs += 1
@@ -201,7 +211,7 @@ def mutate_uasset_json(json_path: str, target_pal: str, override_folder: str, ne
         json.dump(data, f, indent=4)
 
 def main():
-    log("=== Standalone Deep Animation & BlendSpace Redirector ===")
+    log("=== Deep Animation & Action Redirector ===")
     settings = load_settings()
 
     palworld_exe = settings.get("palworld_exe", "")
@@ -222,22 +232,13 @@ def main():
     cue4parse_exe = os.path.normpath(os.path.join(REPO_ROOT, "deps", "cue4parse.exe"))
     usmap_path = os.path.normpath(os.path.join(REPO_ROOT, "deps", "Mappings.usmap"))
 
-    for tool, name in [
-        (unrealpak_exe, "UnrealPak.exe"),
-        (uasset_gui_exe, "UAssetGUI.exe"),
-        (cue4parse_exe, "cue4parse.exe"),
-        (usmap_path, "Mappings.usmap")
-    ]:
-        if not os.path.exists(tool):
-            log(f"Fatal: Required dependency '{name}' is missing at: {tool}", "ERROR")
-            sys.exit(1)
-
     temp_dir = os.path.join(REPO_ROOT, "temp_anim_patch")
     shutil.rmtree(temp_dir, ignore_errors=True)
     os.makedirs(temp_dir, exist_ok=True)
     
     creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 
+    # Pass 1: Extract Main BP
     log(f"Extracting base {TARGET_PAL} Actor Blueprint and AnimBlueprints...")
     bp_path_rel = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{TARGET_PAL}/BP_{TARGET_PAL}.uasset"
     bp_exp_path_rel = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{TARGET_PAL}/BP_{TARGET_PAL}.uexp"
@@ -250,96 +251,123 @@ def main():
         log("Extraction failed. BP uasset not found on disk.", "ERROR")
         sys.exit(1)
 
-    log("Decompiling Actor Blueprint to search for BlendSpaces & Montages...")
+    log("Decompiling Actor Blueprint to search for Linked Actions...")
     temp_json = os.path.join(temp_dir, "blueprint.json")
-    cmd_to_json = [uasset_gui_exe, "tojson", extracted_bp, temp_json, "VER_UE5_1"]
-    subprocess.run(cmd_to_json, check=True, creationflags=creation_flags)
+    subprocess.run([uasset_gui_exe, "tojson", extracted_bp, temp_json, "VER_UE5_1"], check=True, creationflags=creation_flags)
 
     with open(temp_json, "r", encoding="utf-8") as f:
         bp_content = f.read()
 
-    # 1. Harvest BlendSpaces
+    # Phase 2: Harvest Unique Actions
+    # Look for any reference to a BP_Action that belongs to the Target Pal's folder or name
+    action_pattern = re.compile(rf'(Pal/Blueprint/Action/[\w/]*{TARGET_PAL}[\w/]*/(BP_Action_[a-zA-Z0-9_]+))', re.IGNORECASE)
+    discovered_actions = sorted(list(set(action_pattern.findall(bp_content))))
+    
+    action_json_data = []
+    action_extraction_queue = []
+    
+    for path_core, name in discovered_actions:
+        action_extraction_queue.append(f"Pal/Content/{path_core}.uasset")
+        action_extraction_queue.append(f"Pal/Content/{path_core}.uexp")
+        
+    if action_extraction_queue:
+        log(f"Discovered {len(discovered_actions)} Unique Actions: {[n for _, n in discovered_actions]}")
+        run_extraction(cue4parse_exe, paks_dir, usmap_path, temp_dir, action_extraction_queue)
+        
+        # Decompile Actions
+        for path_core, name in discovered_actions:
+            action_uasset = os.path.join(temp_dir, f"Pal/Content/{path_core}.uasset")
+            if os.path.exists(action_uasset):
+                action_json = action_uasset.replace(".uasset", ".json")
+                subprocess.run([uasset_gui_exe, "tojson", action_uasset, action_json, "VER_UE5_1"], check=True, creationflags=creation_flags)
+                
+                new_path_core = path_core.replace(TARGET_PAL, TARGET_OVERRIDE_FOLDER)
+                new_name = name.replace(TARGET_PAL, TARGET_OVERRIDE_FOLDER)
+                new_json_path = os.path.join(os.path.dirname(action_json), f"{new_name}.json")
+                os.rename(action_json, new_json_path)
+                
+                action_json_data.append({
+                    "json_path": new_json_path,
+                    "old_path_core": path_core,
+                    "new_path_core": new_path_core,
+                    "old_name": name,
+                    "new_name": new_name,
+                    "new_rel_dir": os.path.dirname(new_path_core) # Correctly strips Pal/Content/
+                })
+                os.remove(action_uasset)
+                try: os.remove(action_uasset.replace(".uasset", ".uexp"))
+                except: pass
+            else:
+                log(f"Warning: Extracted action {name} not found at {action_uasset}", "WARNING")
+
+    # Phase 3: Harvest Montages & BlendSpaces
+    combined_content = bp_content
+    for action in action_json_data:
+        with open(action["json_path"], "r", encoding="utf-8") as f:
+            combined_content += "\n" + f.read()
+
     blendspace_pattern = re.compile(rf'PalActorBP/{TARGET_PAL}/(BS_[a-zA-Z0-9_]+)', re.IGNORECASE)
-    discovered_blendspaces = sorted(list(set(blendspace_pattern.findall(bp_content))))
+    discovered_blendspaces = sorted(list(set(blendspace_pattern.findall(combined_content))))
 
-    # 2. Harvest AnimMontages (AM_)
     montage_pattern = re.compile(rf'Animation/Character/Monster/{TARGET_PAL}/(AM_[a-zA-Z0-9_]+)', re.IGNORECASE)
-    discovered_montages = sorted(list(set(montage_pattern.findall(bp_content))))
+    discovered_montages = sorted(list(set(montage_pattern.findall(combined_content))))
 
-    log(f"Discovered {len(discovered_blendspaces)} BlendSpaces inside the Blueprint: {discovered_blendspaces}")
-    log(f"Discovered {len(discovered_montages)} AnimMontages inside the Blueprint: {discovered_montages}")
+    log(f"Discovered {len(discovered_blendspaces)} BlendSpaces.")
+    log(f"Discovered {len(discovered_montages)} AnimMontages.")
 
     extraction_queue = []
-    # Queue BlendSpaces
     for bs in discovered_blendspaces:
         extraction_queue.append(f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{TARGET_PAL}/{bs}.uasset")
         extraction_queue.append(f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{TARGET_PAL}/{bs}.uexp")
 
-    # Queue AnimMontages
     for am in discovered_montages:
         extraction_queue.append(f"Pal/Content/Pal/Animation/Character/Monster/{TARGET_PAL}/{am}.uasset")
         extraction_queue.append(f"Pal/Content/Pal/Animation/Character/Monster/{TARGET_PAL}/{am}.uexp")
 
-    # Queue Skeletons
     custom_skel_rel = NEW_SKELETON_PATH + ".uasset"
-    custom_skel_exp_rel = NEW_SKELETON_PATH + ".uexp"
     vanilla_skel_rel = OLD_SKELETON_PATH + ".uasset"
-    vanilla_skel_exp_rel = OLD_SKELETON_PATH + ".uexp"
-    extraction_queue.extend([custom_skel_rel, custom_skel_exp_rel, vanilla_skel_rel, vanilla_skel_exp_rel])
+    extraction_queue.extend([custom_skel_rel, NEW_SKELETON_PATH + ".uexp", vanilla_skel_rel, OLD_SKELETON_PATH + ".uexp"])
 
     if extraction_queue:
-        log("Extracting discovered assets from game and mod Paks...")
+        log("Extracting discovered assets and Skeletons...")
         run_extraction(cue4parse_exe, paks_dir, usmap_path, temp_dir, extraction_queue)
 
-    extracted_uassets = []
-    for root, _, files in os.walk(temp_dir):
-        for file in files:
-            if file.endswith(".uasset"):
-                extracted_uassets.append(os.path.join(root, file))
-
     json_targets = []
+    for action in action_json_data:
+        json_targets.append(action["json_path"])
+
     custom_skel_json_path = None
     vanilla_skel_json_path = None
 
-    for uasset in extracted_uassets:
-        json_path = uasset.replace(".uasset", ".json")
-        cmd_decompile = [uasset_gui_exe, "tojson", uasset, json_path, "VER_UE5_1"]
-        subprocess.run(cmd_decompile, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creation_flags)
-        
-        # Route skeleton files specifically to harvest their GUIDs
-        base_asset_name = os.path.basename(uasset)
-        if base_asset_name == os.path.basename(custom_skel_rel):
-            custom_skel_json_path = json_path
-        elif base_asset_name == os.path.basename(vanilla_skel_rel):
-            vanilla_skel_json_path = json_path
-        else:
-            json_targets.append(json_path)
+    for root, _, files in os.walk(temp_dir):
+        for file in files:
+            if file.endswith(".uasset"):
+                uasset = os.path.join(root, file)
+                base_asset_name = os.path.basename(uasset)
+                
+                json_path = uasset.replace(".uasset", ".json")
+                subprocess.run([uasset_gui_exe, "tojson", uasset, json_path, "VER_UE5_1"], check=True, creationflags=creation_flags)
+                
+                if base_asset_name == os.path.basename(custom_skel_rel):
+                    custom_skel_json_path = json_path
+                elif base_asset_name == os.path.basename(vanilla_skel_rel):
+                    vanilla_skel_json_path = json_path
+                else:
+                    json_targets.append(json_path)
 
-        os.remove(uasset)
-        try: os.remove(uasset.replace(".uasset", ".uexp"))
-        except OSError: pass
+                os.remove(uasset)
+                try: os.remove(uasset.replace(".uasset", ".uexp"))
+                except: pass
 
     if os.path.exists(temp_json):
         os.remove(temp_json)
 
-    # Harvest GUIDs from the parsed skeleton files, fallback to hardcoded overrides if missing
     old_skeleton_guid = find_skeleton_guid_in_json(vanilla_skel_json_path) or OLD_SKELETON_GUID
     new_skeleton_guid = find_skeleton_guid_in_json(custom_skel_json_path) or NEW_SKELETON_GUID
-
-    if not old_skeleton_guid:
-        log("Warning: Failed to parse original skeleton GUID.", "WARNING")
-    else:
-        log(f"Old Skeleton Guid validated: {old_skeleton_guid}")
-
-    if not new_skeleton_guid:
-        log("Warning: Failed to parse custom skeleton GUID. Skip GUID override fallback.", "WARNING")
-    else:
-        log(f"New Skeleton Guid validated: {new_skeleton_guid}")
     
     if custom_skel_json_path and os.path.exists(custom_skel_json_path): os.remove(custom_skel_json_path)
     if vanilla_skel_json_path and os.path.exists(vanilla_skel_json_path): os.remove(vanilla_skel_json_path)
 
-    # Rename ONLY the main Blueprint JSON file on disk before running modifications
     for json_path in list(json_targets):
         base_name = os.path.basename(json_path)
         if base_name == f"BP_{TARGET_PAL}.json":
@@ -348,9 +376,9 @@ def main():
             json_targets.remove(json_path)
             json_targets.append(new_json_path)
 
-    log("Redirecting animation, skeleton, mesh folder paths, and class references...")
+    log("Redirecting animation, skeleton, mesh paths, and action blueprint references...")
     for json_path in json_targets:
-        mutate_uasset_json(json_path, TARGET_PAL, TARGET_OVERRIDE_FOLDER, NEW_ANIM_FOLDER, OLD_SKELETON_PATH, NEW_SKELETON_PATH, NEW_MESH_PATH, old_skeleton_guid, new_skeleton_guid)
+        mutate_uasset_json(json_path, TARGET_PAL, TARGET_OVERRIDE_FOLDER, NEW_ANIM_FOLDER, OLD_SKELETON_PATH, NEW_SKELETON_PATH, NEW_MESH_PATH, old_skeleton_guid, new_skeleton_guid, action_json_data)
 
     log("Re-assembling and compiling patched JSON files...")
     cooked_root = os.path.join(temp_dir, "Cooked")
@@ -358,8 +386,12 @@ def main():
     for json_path in json_targets:
         filename = os.path.basename(json_path).replace(".json", ".uasset")
         
-        # Route compiled assets directly to their final cooked destinations
-        if filename.startswith("BP_"):
+        action_match = next((x for x in action_json_data if x["new_name"] in filename), None)
+        
+        if action_match:
+            cooked_dest_dir = os.path.join(cooked_root, action_match["new_rel_dir"])
+            target_name = filename
+        elif filename.startswith("BP_"):
             target_name = f"BP_{TARGET_OVERRIDE_FOLDER}.uasset"
             cooked_dest_dir = os.path.join(cooked_root, "Pal", "Blueprint", "Character", "Monster", "PalActorBP", TARGET_OVERRIDE_FOLDER)
         elif filename.startswith("ABP_") or filename.startswith("BS_"):
@@ -367,7 +399,6 @@ def main():
             cooked_dest_dir = os.path.join(cooked_root, "Pal", "Blueprint", "Character", "Monster", "PalActorBP", TARGET_OVERRIDE_FOLDER)
         elif filename.startswith("AM_"):
             target_name = filename
-            # Route custom montages into the exact target mods anim folder
             rel_anim_path = NEW_ANIM_FOLDER.replace("Pal/Content/", "").replace("Pal/Content", "").strip("/")
             cooked_dest_dir = os.path.join(cooked_root, rel_anim_path)
         else:
