@@ -170,8 +170,10 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
                 has_ue = True
 
         has_blend = False
+        has_psk = False
         if has_fmodel:
             has_blend = any(f.endswith(".blend") for f in os.listdir(fmodel_path))
+            has_psk = any(f.endswith(".psk") for f in os.listdir(fmodel_path))
 
         # Check Altermatic status (Only matters for Base Pals, variants don't use the manifest natively)
         is_altermatic_active = False
@@ -329,9 +331,10 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
             "pak_status": pak_status,
             "pak_path": active_pak_path,
             "modified": "Unknown",
-            "source_ext": ".blend" if has_blend else ".psk",
+            "source_ext": ".blend" if has_blend else (".psk" if has_psk else ""),
             "has_fmodel": has_fmodel,
             "has_blend": has_blend,
+            "has_psk": has_psk,
             "has_ue": has_ue,
             "source_modified": source_modified,
             "ue_modified": ue_modified,
