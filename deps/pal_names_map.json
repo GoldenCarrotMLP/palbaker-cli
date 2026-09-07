@@ -578,10 +578,10 @@
         },
         "ForestBoss": {
             "TextData": {
-                "Namespace": "DT_PalNameText_Common",
+                "Namespace": "Aliases",
                 "Key": "ForestBoss",
-                "SourceString": "Lily & Lyleen",
-                "LocalizedString": "Lily & Lyleen"
+                "SourceString": "Lily & Lyleen (Forest Boss)",
+                "LocalizedString": "Lily & Lyleen (Forest Boss)"
             }
         },
         "FoxMage": {
@@ -682,10 +682,10 @@
         },
         "GrassBoss": {
             "TextData": {
-                "Namespace": "DT_PalNameText_Common",
+                "Namespace": "Aliases",
                 "Key": "GrassBoss",
-                "SourceString": "Zoe & Grizzbolt",
-                "LocalizedString": "Zoe & Grizzbolt"
+                "SourceString": "Verdash (Grass Boss)",
+                "LocalizedString": "Verdash (Grass Boss)"
             }
         },
         "GrassDragon": {
@@ -1458,10 +1458,10 @@
         },
         "SakurajimaBoss": {
             "TextData": {
-                "Namespace": "DT_PalNameText_Common",
+                "Namespace": "Aliases",
                 "Key": "SakurajimaBoss",
-                "SourceString": "Saya & Selyne",
-                "LocalizedString": "Saya & Selyne"
+                "SourceString": "Saya & Selyne (Sakurajima Boss)",
+                "LocalizedString": "Saya & Selyne (Sakurajima Boss)"
             }
         },
         "SakuraSaurus": {
@@ -1570,10 +1570,10 @@
         },
         "SnowBoss": {
             "TextData": {
-                "Namespace": "DT_PalNameText_Common",
+                "Namespace": "Aliases",
                 "Key": "SnowBoss",
-                "SourceString": "Victor & Shadowbeak",
-                "LocalizedString": "Victor & Shadowbeak"
+                "SourceString": "Victor & Shadowbeak (Snow Boss)",
+                "LocalizedString": "Victor & Shadowbeak (Snow Boss)"
             }
         },
         "SnowPeafowl": {
@@ -1722,10 +1722,10 @@
         },
         "VikingBoss": {
             "TextData": {
-                "Namespace": "DT_PalNameText_Common",
+                "Namespace": "Aliases",
                 "Key": "VikingBoss",
-                "SourceString": "Bjorn & Bastigor",
-                "LocalizedString": "Bjorn & Bastigor"
+                "SourceString": "Viking Boss",
+                "LocalizedString": "Viking Boss"
             }
         },
         "VioletFairy": {
@@ -2116,8 +2116,8 @@
             "TextData": {
                 "Namespace": "DT_PalNameText_Common",
                 "Key": "CubeTurtle",
-                "SourceString": "Tetroise ",
-                "LocalizedString": "Tetroise "
+                "SourceString": "Tetroise",
+                "LocalizedString": "Tetroise"
             }
         },
         "SamuraiDog": {
@@ -2172,8 +2172,8 @@
             "TextData": {
                 "Namespace": "DT_PalNameText_Common",
                 "Key": "ElecSnail_Ground",
-                "SourceString": "Snock Lux",
-                "LocalizedString": "Snock Lux"
+                "SourceString": "Snock Terra",
+                "LocalizedString": "Snock Terra"
             }
         },
         "SumoDog": {
@@ -2554,10 +2554,10 @@
         },
         "SorajimaBoss": {
             "TextData": {
-                "Namespace": "DT_PalNameText_Common",
+                "Namespace": "Aliases",
                 "Key": "SorajimaBoss",
-                "SourceString": "Auri & Shaolong",
-                "LocalizedString": "Auri & Shaolong"
+                "SourceString": "Sorajima Boss",
+                "LocalizedString": "Sorajima Boss"
             }
         },
         "LastBoss": {
@@ -2574,6 +2574,2214 @@
                 "Key": "POLICE_PalRide",
                 "SourceString": "PIDF Rider",
                 "LocalizedString": "PIDF Rider"
+            }
+        },
+        "CITIZEN": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "CITIZEN",
+                "SourceString": "Islander",
+                "LocalizedString": "Islander"
+            }
+        },
+        "VILLAGER": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "VILLAGER",
+                "SourceString": "Villager",
+                "LocalizedString": "Villager"
+            }
+        },
+        "QUESTMAN": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "QUESTMAN",
+                "SourceString": "Quest Client",
+                "LocalizedString": "Quest Client"
+            }
+        },
+        "SELESPERSON": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "SELESPERSON",
+                "SourceString": "Wandering Merchant",
+                "LocalizedString": "Wandering Merchant"
+            }
+        },
+        "VISITING": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "VISITING",
+                "SourceString": "Visitor",
+                "LocalizedString": "Visitor"
+            }
+        },
+        "WEAPON_DEALER": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "WEAPON_DEALER",
+                "SourceString": "Weapons Dealer",
+                "LocalizedString": "Weapons Dealer"
+            }
+        },
+        "PAL_DEALER": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "PAL_DEALER",
+                "SourceString": "Pal Merchant",
+                "LocalizedString": "Pal Merchant"
+            }
+        },
+        "GUARD": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "GUARD",
+                "SourceString": "Guard",
+                "LocalizedString": "Guard"
+            }
+        },
+        "SecurityDrone": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "SecurityDrone",
+                "SourceString": "Attack Chopper",
+                "LocalizedString": "Attack Chopper"
+            }
+        },
+        "Believer": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Believer",
+                "SourceString": "Free Pal Alliance Believer",
+                "LocalizedString": "Free Pal Alliance Believer"
+            }
+        },
+        "FireCult": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "FireCult",
+                "SourceString": "Brothers of the Eternal Pyre Martyr",
+                "LocalizedString": "Brothers of the Eternal Pyre Martyr"
+            }
+        },
+        "Labmen": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Labmen",
+                "SourceString": "PAL Genetic Research Unit Executioner",
+                "LocalizedString": "PAL Genetic Research Unit Executioner"
+            }
+        },
+        "POLICE": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "POLICE",
+                "SourceString": "PIDF Guard",
+                "LocalizedString": "PIDF Guard"
+            }
+        },
+        "POLICE_1": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "POLICE_1",
+                "SourceString": "PIDF Patrol",
+                "LocalizedString": "PIDF Patrol"
+            }
+        },
+        "POLICE_2": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "POLICE_2",
+                "SourceString": "PIDF Rifleman",
+                "LocalizedString": "PIDF Rifleman"
+            }
+        },
+        "POLICE_3": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "POLICE_3",
+                "SourceString": "PIDF Elite",
+                "LocalizedString": "PIDF Elite"
+            }
+        },
+        "HUNTER": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER",
+                "SourceString": "Syndicate Thug",
+                "LocalizedString": "Syndicate Thug"
+            }
+        },
+        "HUNTER_2": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER_2",
+                "SourceString": "Syndicate Gunner",
+                "LocalizedString": "Syndicate Gunner"
+            }
+        },
+        "HUNTER_3": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER_3",
+                "SourceString": "Syndicate Hunter",
+                "LocalizedString": "Syndicate Hunter"
+            }
+        },
+        "HUNTER_4": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER_4",
+                "SourceString": "Syndicate Grenadier",
+                "LocalizedString": "Syndicate Grenadier"
+            }
+        },
+        "HUNTER_5": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER_5",
+                "SourceString": "Syndicate Cleaner",
+                "LocalizedString": "Syndicate Cleaner"
+            }
+        },
+        "HUNTER_6": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER_6",
+                "SourceString": "Syndicate Elite",
+                "LocalizedString": "Syndicate Elite"
+            }
+        },
+        "HUNTER_BOSS": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER_BOSS",
+                "SourceString": "Syndicate Crusher",
+                "LocalizedString": "Syndicate Crusher"
+            }
+        },
+        "DarkTrader": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "DarkTrader",
+                "SourceString": "Black Marketeer",
+                "LocalizedString": "Black Marketeer"
+            }
+        },
+        "HUNTER_7": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER_7",
+                "SourceString": "Syndicate Veteran",
+                "LocalizedString": "Syndicate Veteran"
+            }
+        },
+        "HUNTER_8": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER_8",
+                "SourceString": "Syndicate Interceptor",
+                "LocalizedString": "Syndicate Interceptor"
+            }
+        },
+        "Ninja": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Ninja",
+                "SourceString": "Moonflower Genin",
+                "LocalizedString": "Moonflower Genin"
+            }
+        },
+        "Ninja_2": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Ninja_2",
+                "SourceString": "Moonflower Jonin",
+                "LocalizedString": "Moonflower Jonin"
+            }
+        },
+        "MedalTrader": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "MedalTrader",
+                "SourceString": "Medal Merchant",
+                "LocalizedString": "Medal Merchant"
+            }
+        },
+        "BOSS_Hunter_Rifle": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Hunter_Rifle",
+                "SourceString": "Hawk",
+                "LocalizedString": "Hawk"
+            }
+        },
+        "BOSS_Hunter_Fat_GatlingGun": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Hunter_Fat_GatlingGun",
+                "SourceString": "Grill",
+                "LocalizedString": "Grill"
+            }
+        },
+        "BOSS_Believer_CrossBow": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Believer_CrossBow",
+                "SourceString": "Ego",
+                "LocalizedString": "Ego"
+            }
+        },
+        "BOSS_Believer_Fat_GiantClub": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Believer_Fat_GiantClub",
+                "SourceString": "Brick",
+                "LocalizedString": "Brick"
+            }
+        },
+        "BOSS_Police_Rifle": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Police_Rifle",
+                "SourceString": "Whip",
+                "LocalizedString": "Whip"
+            }
+        },
+        "BOSS_FireCult_FlameThrower": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_FireCult_FlameThrower",
+                "SourceString": "Shadow",
+                "LocalizedString": "Shadow"
+            }
+        },
+        "BOSS_Scientist_LaserRifle": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Scientist_LaserRifle",
+                "SourceString": "Whisk",
+                "LocalizedString": "Whisk"
+            }
+        },
+        "BOSS_Ninja": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Ninja",
+                "SourceString": "Fumble",
+                "LocalizedString": "Fumble"
+            }
+        },
+        "BOSS_Male_NinjaElite": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_NinjaElite",
+                "SourceString": "Urchin",
+                "LocalizedString": "Urchin"
+            }
+        },
+        "BOSS_Female_Soldier": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Female_Soldier",
+                "SourceString": "Jade",
+                "LocalizedString": "Jade"
+            }
+        },
+        "BOSS_Female_Soldier02": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Female_Soldier02",
+                "SourceString": "Dazzle",
+                "LocalizedString": "Dazzle"
+            }
+        },
+        "BOSS_Female_Soldier03": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Female_Soldier03",
+                "SourceString": "Aloha",
+                "LocalizedString": "Aloha"
+            }
+        },
+        "BOSS_Female_Soldier04": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Female_Soldier04",
+                "SourceString": "Nimble",
+                "LocalizedString": "Nimble"
+            }
+        },
+        "BOSS_Male_Soldier": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_Soldier",
+                "SourceString": "Crash",
+                "LocalizedString": "Crash"
+            }
+        },
+        "BOSS_Male_Soldier02": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_Soldier02",
+                "SourceString": "Dart",
+                "LocalizedString": "Dart"
+            }
+        },
+        "BOSS_Male_Soldier03": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_Soldier03",
+                "SourceString": "Clint",
+                "LocalizedString": "Clint"
+            }
+        },
+        "BOSS_Male_Soldier04": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_Soldier04",
+                "SourceString": "Lasso",
+                "LocalizedString": "Lasso"
+            }
+        },
+        "BOSS_Female_People": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Female_People",
+                "SourceString": "Flare",
+                "LocalizedString": "Flare"
+            }
+        },
+        "BOSS_Female_People02": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Female_People02",
+                "SourceString": "Siren",
+                "LocalizedString": "Siren"
+            }
+        },
+        "BOSS_Female_People03": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Female_People03",
+                "SourceString": "Turncoat",
+                "LocalizedString": "Turncoat"
+            }
+        },
+        "BOSS_Male_People": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_People",
+                "SourceString": "Dyna",
+                "LocalizedString": "Dyna"
+            }
+        },
+        "BOSS_Male_People2": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_People2",
+                "SourceString": "Mite",
+                "LocalizedString": "Mite"
+            }
+        },
+        "BOSS_Male_People02": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_People02",
+                "SourceString": "Quill",
+                "LocalizedString": "Quill"
+            }
+        },
+        "BOSS_Male_People03": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_People03",
+                "SourceString": "Scoot",
+                "LocalizedString": "Scoot"
+            }
+        },
+        "BOSS_Male_DesertPeople": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_DesertPeople",
+                "SourceString": "Phantom",
+                "LocalizedString": "Phantom"
+            }
+        },
+        "BOSS_Female_DesertPeople": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Female_DesertPeople",
+                "SourceString": "Whisper",
+                "LocalizedString": "Whisper"
+            }
+        },
+        "BOSS_Viking": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Viking",
+                "SourceString": "Gnaw",
+                "LocalizedString": "Gnaw"
+            }
+        },
+        "BOSS_VikingElite": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_VikingElite",
+                "SourceString": "Cache",
+                "LocalizedString": "Cache"
+            }
+        },
+        "BOSS_Police_Old": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Police_Old",
+                "SourceString": "Pinch",
+                "LocalizedString": "Pinch"
+            }
+        },
+        "BOSS_DarkTrader": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_DarkTrader",
+                "SourceString": "Ram",
+                "LocalizedString": "Ram"
+            }
+        },
+        "BOSS_Male_Trader01": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_Trader01",
+                "SourceString": "Skim",
+                "LocalizedString": "Skim"
+            }
+        },
+        "BOSS_Male_Trader02": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_Trader02",
+                "SourceString": "Mimic",
+                "LocalizedString": "Mimic"
+            }
+        },
+        "BOSS_Male_Trader03": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Male_Trader03",
+                "SourceString": "Billy",
+                "LocalizedString": "Billy"
+            }
+        },
+        "BOSS_Hunter_Fat_GatlingGun_Quest_StrongOldMan": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "BOSS_Hunter_Fat_GatlingGun_Quest_StrongOldMan",
+                "SourceString": "Elder",
+                "LocalizedString": "Elder"
+            }
+        },
+        "Solider": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Solider",
+                "SourceString": "Sturdy Mercenary",
+                "LocalizedString": "Sturdy Mercenary"
+            }
+        },
+        "Recruiter": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Recruiter",
+                "SourceString": "Pal Recruiter",
+                "LocalizedString": "Pal Recruiter"
+            }
+        },
+        "CaravanLeader01": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "CaravanLeader01",
+                "SourceString": "Caravan Leader",
+                "LocalizedString": "Caravan Leader"
+            }
+        },
+        "Viking": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Viking",
+                "SourceString": "Feybreak Warrior",
+                "LocalizedString": "Feybreak Warrior"
+            }
+        },
+        "Viking_Elite": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Viking_Elite",
+                "SourceString": "Feybreak Berserker",
+                "LocalizedString": "Feybreak Berserker"
+            }
+        },
+        "Ambassador01": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Ambassador01",
+                "SourceString": "Desert Town Ambassador ",
+                "LocalizedString": "Desert Town Ambassador "
+            }
+        },
+        "Blacksmith01": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Blacksmith01",
+                "SourceString": "Blacksmith in Training",
+                "LocalizedString": "Blacksmith in Training"
+            }
+        },
+        "Epicure01": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Epicure01",
+                "SourceString": "Gourmet Hunter",
+                "LocalizedString": "Gourmet Hunter"
+            }
+        },
+        "Escort_Warrior01": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Escort_Warrior01",
+                "SourceString": "Mercenary Bodyguard",
+                "LocalizedString": "Mercenary Bodyguard"
+            }
+        },
+        "Escort_PalTamer01": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Escort_PalTamer01",
+                "SourceString": "Pal Tamer Bodyguard",
+                "LocalizedString": "Pal Tamer Bodyguard"
+            }
+        },
+        "HUNTER_9": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER_9",
+                "SourceString": "Syndicate Laser Rifleman",
+                "LocalizedString": "Syndicate Laser Rifleman"
+            }
+        },
+        "HUNTER_10": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER_10",
+                "SourceString": "Syndicate Crossbowman",
+                "LocalizedString": "Syndicate Crossbowman"
+            }
+        },
+        "HUNTER_11": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "HUNTER_11",
+                "SourceString": "Syndicate Swordsman",
+                "LocalizedString": "Syndicate Swordsman"
+            }
+        },
+        "Believer_BOSS": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Believer_BOSS",
+                "SourceString": "Free Pal Alliance Judicator",
+                "LocalizedString": "Free Pal Alliance Judicator"
+            }
+        },
+        "Male_Soldier02_Invader": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Male_Soldier02_Invader",
+                "SourceString": "Fiery Pal Tamer",
+                "LocalizedString": "Fiery Pal Tamer"
+            }
+        },
+        "Female_Soldier03_Invader": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Female_Soldier03_Invader",
+                "SourceString": "Gemini Tamers",
+                "LocalizedString": "Gemini Tamers"
+            }
+        },
+        "BattlePaltamer001": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BattlePaltamer001",
+                "SourceString": "Newbie Pal Tamer",
+                "LocalizedString": "Newbie Pal Tamer"
+            }
+        },
+        "BattlePaltamer002": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BattlePaltamer002",
+                "SourceString": "Up-and-Coming Pal Tamer",
+                "LocalizedString": "Up-and-Coming Pal Tamer"
+            }
+        },
+        "BattlePaltamer003": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BattlePaltamer003",
+                "SourceString": "Cruel Pal Tamer",
+                "LocalizedString": "Cruel Pal Tamer"
+            }
+        },
+        "BattlePaltamer004": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BattlePaltamer004",
+                "SourceString": "Veteran Pal Tamer",
+                "LocalizedString": "Veteran Pal Tamer"
+            }
+        },
+        "BattlePaltamer005": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BattlePaltamer005",
+                "SourceString": "Vigorous Pal Tamer",
+                "LocalizedString": "Vigorous Pal Tamer"
+            }
+        },
+        "BattlePaltamer006": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BattlePaltamer006",
+                "SourceString": "Master Pal Tamer",
+                "LocalizedString": "Master Pal Tamer"
+            }
+        },
+        "Female_Presenter01": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Female_Presenter01",
+                "SourceString": "Friendly Pal Tamer",
+                "LocalizedString": "Friendly Pal Tamer"
+            }
+        },
+        "Police_Chief": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Police_Chief",
+                "SourceString": "Slacker Chief",
+                "LocalizedString": "Slacker Chief"
+            }
+        },
+        "Police_old_Prisoner": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Police_old_Prisoner",
+                "SourceString": "Jailed Ex-Chief",
+                "LocalizedString": "Jailed Ex-Chief"
+            }
+        },
+        "Police001": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Police001",
+                "SourceString": "Reincarnated Guy",
+                "LocalizedString": "Reincarnated Guy"
+            }
+        },
+        "Reward_Emote": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Reward_Emote",
+                "SourceString": "Messenger of Love",
+                "LocalizedString": "Messenger of Love"
+            }
+        },
+        "PalPassive_Doctor": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "PalPassive_Doctor",
+                "SourceString": "Dr. Brawn",
+                "LocalizedString": "Dr. Brawn"
+            }
+        },
+        "QUEST_SCHOLAR01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_SCHOLAR01",
+                "SourceString": "Legend-Loving Researcher",
+                "LocalizedString": "Legend-Loving Researcher"
+            }
+        },
+        "Reward_Paldex": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Reward_Paldex",
+                "SourceString": "Pal Ecological Researcher",
+                "LocalizedString": "Pal Ecological Researcher"
+            }
+        },
+        "Reward_BossDefeat": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Reward_BossDefeat",
+                "SourceString": "Veteran Hunter",
+                "LocalizedString": "Veteran Hunter"
+            }
+        },
+        "QUEST_RANGER04": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_RANGER04",
+                "SourceString": "Sweet-Smelling Hunter",
+                "LocalizedString": "Sweet-Smelling Hunter"
+            }
+        },
+        "SurveyGirl": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "SurveyGirl",
+                "SourceString": "Fia",
+                "LocalizedString": "Fia"
+            }
+        },
+        "SurveyWoman": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "SurveyWoman",
+                "SourceString": "Carla",
+                "LocalizedString": "Carla"
+            }
+        },
+        "SurveyMan": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "SurveyMan",
+                "SourceString": "Gadel",
+                "LocalizedString": "Gadel"
+            }
+        },
+        "StrongOldMan": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "StrongOldMan",
+                "SourceString": "Harold",
+                "LocalizedString": "Harold"
+            }
+        },
+        "WildlifeSanctuaryDrone": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "WildlifeSanctuaryDrone",
+                "SourceString": "Patrol Drone",
+                "LocalizedString": "Patrol Drone"
+            }
+        },
+        "Police_Invader_Katana": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Police_Invader_Katana",
+                "SourceString": "PIDF Blader",
+                "LocalizedString": "PIDF Blader"
+            }
+        },
+        "Police_Invader_CrossBow": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Police_Invader_CrossBow",
+                "SourceString": "PIDF Rioter",
+                "LocalizedString": "PIDF Rioter"
+            }
+        },
+        "Police_Invader_LaserRifle": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Police_Invader_LaserRifle",
+                "SourceString": "PIDF Technophile",
+                "LocalizedString": "PIDF Technophile"
+            }
+        },
+        "Police_Invader_GrenadeLauncher": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Police_Invader_GrenadeLauncher",
+                "SourceString": "PIDF Veteran",
+                "LocalizedString": "PIDF Veteran"
+            }
+        },
+        "Police_Invader_FlameThrower": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Police_Invader_FlameThrower",
+                "SourceString": "PIDF Cleaner",
+                "LocalizedString": "PIDF Cleaner"
+            }
+        },
+        "Police_Invader_RocketLauncher": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Police_Invader_RocketLauncher",
+                "SourceString": "PIDF Rocketeer",
+                "LocalizedString": "PIDF Rocketeer"
+            }
+        },
+        "Police_Invader_MissileLauncher": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Police_Invader_MissileLauncher",
+                "SourceString": "PIDF Interceptor",
+                "LocalizedString": "PIDF Interceptor"
+            }
+        },
+        "Sorajima_Enemy": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Sorajima_Enemy",
+                "SourceString": "Azure Covenant Enforcer",
+                "LocalizedString": "Azure Covenant Enforcer"
+            }
+        },
+        "Caravan04": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan04",
+                "SourceString": "Butcher in Training",
+                "LocalizedString": "Butcher in Training"
+            }
+        },
+        "Caravan05": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan05",
+                "SourceString": "Surf & Turf Master",
+                "LocalizedString": "Surf & Turf Master"
+            }
+        },
+        "Caravan06": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan06",
+                "SourceString": "Expert Hunter",
+                "LocalizedString": "Expert Hunter"
+            }
+        },
+        "Caravan07": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan07",
+                "SourceString": "Legendary Game Hunter",
+                "LocalizedString": "Legendary Game Hunter"
+            }
+        },
+        "Caravan08": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan08",
+                "SourceString": "Smugglers' Lackey",
+                "LocalizedString": "Smugglers' Lackey"
+            }
+        },
+        "Caravan09": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan09",
+                "SourceString": "Mercenary Supplier",
+                "LocalizedString": "Mercenary Supplier"
+            }
+        },
+        "Caravan10": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan10",
+                "SourceString": "Heavy Arms Merchant",
+                "LocalizedString": "Heavy Arms Merchant"
+            }
+        },
+        "Caravan11": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan11",
+                "SourceString": "Legendary Ammo Merchant",
+                "LocalizedString": "Legendary Ammo Merchant"
+            }
+        },
+        "Caravan12": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan12",
+                "SourceString": "Village Grocer",
+                "LocalizedString": "Village Grocer"
+            }
+        },
+        "Caravan13": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan13",
+                "SourceString": "Farm Peddler",
+                "LocalizedString": "Farm Peddler"
+            }
+        },
+        "Caravan14": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan14",
+                "SourceString": "Legendary Grocer",
+                "LocalizedString": "Legendary Grocer"
+            }
+        },
+        "Caravan15": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan15",
+                "SourceString": "Shady Pharmacist",
+                "LocalizedString": "Shady Pharmacist"
+            }
+        },
+        "Caravan16": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan16",
+                "SourceString": "Authorized Pharmacist",
+                "LocalizedString": "Authorized Pharmacist"
+            }
+        },
+        "Caravan17": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan17",
+                "SourceString": "Legendary Pharmacist",
+                "LocalizedString": "Legendary Pharmacist"
+            }
+        },
+        "Caravan18": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan18",
+                "SourceString": "Bakery Stand Baker",
+                "LocalizedString": "Bakery Stand Baker"
+            }
+        },
+        "Caravan19": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan19",
+                "SourceString": "Local Restaurateur",
+                "LocalizedString": "Local Restaurateur"
+            }
+        },
+        "Caravan20": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan20",
+                "SourceString": "Novice Gourmet",
+                "LocalizedString": "Novice Gourmet"
+            }
+        },
+        "Caravan21": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan21",
+                "SourceString": "Legendary Gourmet",
+                "LocalizedString": "Legendary Gourmet"
+            }
+        },
+        "Caravan22": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan22",
+                "SourceString": "Foraging Merchant",
+                "LocalizedString": "Foraging Merchant"
+            }
+        },
+        "Caravan23": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan23",
+                "SourceString": "Authorized Materials Merchant",
+                "LocalizedString": "Authorized Materials Merchant"
+            }
+        },
+        "Caravan24": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan24",
+                "SourceString": "Element Merchant",
+                "LocalizedString": "Element Merchant"
+            }
+        },
+        "Caravan25": {
+            "TextData": {
+                "Namespace": "dt_humannametext_common.json",
+                "Key": "Caravan25",
+                "SourceString": "Legendary Materials Merchant",
+                "LocalizedString": "Legendary Materials Merchant"
+            }
+        },
+        "JOHNSON": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "JOHNSON",
+                "SourceString": "Johnson",
+                "LocalizedString": "Johnson"
+            }
+        },
+        "BOBBY": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOBBY",
+                "SourceString": "Bobby",
+                "LocalizedString": "Bobby"
+            }
+        },
+        "UNIQUE002": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "UNIQUE002",
+                "SourceString": "Unique002",
+                "LocalizedString": "Unique002"
+            }
+        },
+        "NOVICEPALTIMER": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "NOVICEPALTIMER",
+                "SourceString": "Scouting Party Survivor",
+                "LocalizedString": "Scouting Party Survivor"
+            }
+        },
+        "Vigilante_lackey": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Vigilante_lackey",
+                "SourceString": "Junior Patrol Member",
+                "LocalizedString": "Junior Patrol Member"
+            }
+        },
+        "Head_of_Village": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Head_of_Village",
+                "SourceString": "Village Chief",
+                "LocalizedString": "Village Chief"
+            }
+        },
+        "Police_dependable": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Police_dependable",
+                "SourceString": "Reliable PIDF Officer",
+                "LocalizedString": "Reliable PIDF Officer"
+            }
+        },
+        "InnkeeperA": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "InnkeeperA",
+                "SourceString": "Innkeeper",
+                "LocalizedString": "Innkeeper"
+            }
+        },
+        "Rumor-loving_villagers": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Rumor-loving_villagers",
+                "SourceString": "Gossiping Villager",
+                "LocalizedString": "Gossiping Villager"
+            }
+        },
+        "Research-oriented_scholar": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Research-oriented_scholar",
+                "SourceString": "Enthusiastic Amateur Researcher",
+                "LocalizedString": "Enthusiastic Amateur Researcher"
+            }
+        },
+        "People_cant_leave": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "People_cant_leave",
+                "SourceString": "Displaced Islander",
+                "LocalizedString": "Displaced Islander"
+            }
+        },
+        "Sweaty_paltimer": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Sweaty_paltimer",
+                "SourceString": "Sweaty Part-timer",
+                "LocalizedString": "Sweaty Part-timer"
+            }
+        },
+        "Shabby_looking_merchant": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Shabby_looking_merchant",
+                "SourceString": "Traveling Merchant",
+                "LocalizedString": "Traveling Merchant"
+            }
+        },
+        "SKILLED_PALTAMIER": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "SKILLED_PALTAMIER",
+                "SourceString": "Skilled Islander",
+                "LocalizedString": "Skilled Islander"
+            }
+        },
+        "BOSSDEMO_PLAIN_LEADER": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_PLAIN_LEADER",
+                "SourceString": "ZOE",
+                "LocalizedString": "ZOE"
+            }
+        },
+        "BOSSDEMO_PLAIN_LEADER_PAL": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_PLAIN_LEADER_PAL",
+                "SourceString": "GRIZZBOLT",
+                "LocalizedString": "GRIZZBOLT"
+            }
+        },
+        "BOSSDEMO_VOLCANO_LEADER": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_VOLCANO_LEADER",
+                "SourceString": "AXEL",
+                "LocalizedString": "AXEL"
+            }
+        },
+        "BOSSDEMO_VOLCANO_LEADER_PAL": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_VOLCANO_LEADER_PAL",
+                "SourceString": "ORSERK",
+                "LocalizedString": "ORSERK"
+            }
+        },
+        "BOSSDEMO_FOREST_LEADER": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_FOREST_LEADER",
+                "SourceString": "LILY",
+                "LocalizedString": "LILY"
+            }
+        },
+        "BOSSDEMO_FOREST_LEADER_PAL": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_FOREST_LEADER_PAL",
+                "SourceString": "LYLEEN",
+                "LocalizedString": "LYLEEN"
+            }
+        },
+        "BOSSDEMO_DESERT_LEADER": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_DESERT_LEADER",
+                "SourceString": "MARCUS",
+                "LocalizedString": "MARCUS"
+            }
+        },
+        "BOSSDEMO_DESERT_LEADER_PAL": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_DESERT_LEADER_PAL",
+                "SourceString": "FALERIS",
+                "LocalizedString": "FALERIS"
+            }
+        },
+        "BOSSDEMO_SNOWYMOUNTAIN_LEADER": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_SNOWYMOUNTAIN_LEADER",
+                "SourceString": "VICTOR",
+                "LocalizedString": "VICTOR"
+            }
+        },
+        "BOSSDEMO_SNOWYMOUNTAIN_LEADER_PAL": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_SNOWYMOUNTAIN_LEADER_PAL",
+                "SourceString": "SHADOWBEAK",
+                "LocalizedString": "SHADOWBEAK"
+            }
+        },
+        "DesertVillage001": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "DesertVillage001",
+                "SourceString": "Chilly Desert Inhabitant",
+                "LocalizedString": "Chilly Desert Inhabitant"
+            }
+        },
+        "DesertVillage002": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "DesertVillage002",
+                "SourceString": "Kind Desert Inhabitant",
+                "LocalizedString": "Kind Desert Inhabitant"
+            }
+        },
+        "DesertVillage003": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "DesertVillage003",
+                "SourceString": "Timid Desert Inhabitant",
+                "LocalizedString": "Timid Desert Inhabitant"
+            }
+        },
+        "DesertPolice001": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "DesertPolice001",
+                "SourceString": "PIDF Grunt",
+                "LocalizedString": "PIDF Grunt"
+            }
+        },
+        "DesertPolice002": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "DesertPolice002",
+                "SourceString": "PIDF Goody Two-Shoes",
+                "LocalizedString": "PIDF Goody Two-Shoes"
+            }
+        },
+        "DesertPolice003": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "DesertPolice003",
+                "SourceString": "PIDF Bonfire-Lover",
+                "LocalizedString": "PIDF Bonfire-Lover"
+            }
+        },
+        "VolcanoVillage001": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "VolcanoVillage001",
+                "SourceString": "Fish-Loving Villager",
+                "LocalizedString": "Fish-Loving Villager"
+            }
+        },
+        "VolcanoVillage002": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "VolcanoVillage002",
+                "SourceString": "Over-Caring Villager",
+                "LocalizedString": "Over-Caring Villager"
+            }
+        },
+        "VolcanoVillage003": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "VolcanoVillage003",
+                "SourceString": "Star-Loving Villager",
+                "LocalizedString": "Star-Loving Villager"
+            }
+        },
+        "VolcanoVillage004": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "VolcanoVillage004",
+                "SourceString": "Flame-Worshipping Villager",
+                "LocalizedString": "Flame-Worshipping Villager"
+            }
+        },
+        "VolcanoPolice001": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "VolcanoPolice001",
+                "SourceString": "PIDF Slacker",
+                "LocalizedString": "PIDF Slacker"
+            }
+        },
+        "VolcanoPolice002": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "VolcanoPolice002",
+                "SourceString": "Sensitive-Nosed PIDF Officer",
+                "LocalizedString": "Sensitive-Nosed PIDF Officer"
+            }
+        },
+        "RandomBattle_PalTamer": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "RandomBattle_PalTamer",
+                "SourceString": "Burly Merc",
+                "LocalizedString": "Burly Merc"
+            }
+        },
+        "RandomBattle_Police": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "RandomBattle_Police",
+                "SourceString": "Burly PIDF Officer",
+                "LocalizedString": "Burly PIDF Officer"
+            }
+        },
+        "PvPVillage001": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "PvPVillage001",
+                "SourceString": "Desert Runaway",
+                "LocalizedString": "Desert Runaway"
+            }
+        },
+        "PvPVillage002": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "PvPVillage002",
+                "SourceString": "Vagrant Challenger",
+                "LocalizedString": "Vagrant Challenger"
+            }
+        },
+        "PvPVillage003": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "PvPVillage003",
+                "SourceString": "Mercenary With a Wounded Knee",
+                "LocalizedString": "Mercenary With a Wounded Knee"
+            }
+        },
+        "PvPVillage004": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "PvPVillage004",
+                "SourceString": "Cowardly Victim",
+                "LocalizedString": "Cowardly Victim"
+            }
+        },
+        "PvPVillage005": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "PvPVillage005",
+                "SourceString": "Cowardly Islander",
+                "LocalizedString": "Cowardly Islander"
+            }
+        },
+        "PvPVillage006": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "PvPVillage006",
+                "SourceString": "Resigned Islander",
+                "LocalizedString": "Resigned Islander"
+            }
+        },
+        "MerchantwithPAL": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "MerchantwithPAL",
+                "SourceString": "Shady Pal Merchant",
+                "LocalizedString": "Shady Pal Merchant"
+            }
+        },
+        "Assassin001": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Assassin001",
+                "SourceString": "Always-Smiling Merchant",
+                "LocalizedString": "Always-Smiling Merchant"
+            }
+        },
+        "Assassin002": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Assassin002",
+                "SourceString": "Honest-looking Merchant",
+                "LocalizedString": "Honest-looking Merchant"
+            }
+        },
+        "Assassin003": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Assassin003",
+                "SourceString": "Discerning Merchant",
+                "LocalizedString": "Discerning Merchant"
+            }
+        },
+        "BOSSDEMO_SAKURAJIMA_LEADER": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_SAKURAJIMA_LEADER",
+                "SourceString": "SAYA",
+                "LocalizedString": "SAYA"
+            }
+        },
+        "BOSSDEMO_SAKURAJIMA_LEADER_PAL": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_SAKURAJIMA_LEADER_PAL",
+                "SourceString": "SELYNE",
+                "LocalizedString": "SELYNE"
+            }
+        },
+        "Police_WarningOilrig": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Police_WarningOilrig",
+                "SourceString": "Cautious PIDF Officer",
+                "LocalizedString": "Cautious PIDF Officer"
+            }
+        },
+        "BOSSDEMO_VIKING_LEADER": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_VIKING_LEADER",
+                "SourceString": "BJORN",
+                "LocalizedString": "BJORN"
+            }
+        },
+        "BOSSDEMO_VIKING_LEADER_PAL": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_VIKING_LEADER_PAL",
+                "SourceString": "BASTIGOR",
+                "LocalizedString": "BASTIGOR"
+            }
+        },
+        "BountyNavigator": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BountyNavigator",
+                "SourceString": "Bounty Intel Dealer",
+                "LocalizedString": "Bounty Intel Dealer"
+            }
+        },
+        "Presenter001": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Presenter001",
+                "SourceString": "Friendly Pal Tamer",
+                "LocalizedString": "Friendly Pal Tamer"
+            }
+        },
+        "BountyTrader": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BountyTrader",
+                "SourceString": "PIDF Bounty Officer",
+                "LocalizedString": "PIDF Bounty Officer"
+            }
+        },
+        "Yamishima_guide1": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Yamishima_guide1",
+                "SourceString": "Wise Geologist",
+                "LocalizedString": "Wise Geologist"
+            }
+        },
+        "Yamishima_guide2": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Yamishima_guide2",
+                "SourceString": "Elated Pal Scholar",
+                "LocalizedString": "Elated Pal Scholar"
+            }
+        },
+        "Yamishima_guide3": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Yamishima_guide3",
+                "SourceString": "Cheerful Ore Researcher",
+                "LocalizedString": "Cheerful Ore Researcher"
+            }
+        },
+        "Yamishima_guide4": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Yamishima_guide4",
+                "SourceString": "Hopeless Supplier",
+                "LocalizedString": "Hopeless Supplier"
+            }
+        },
+        "Yamishima_guide5": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Yamishima_guide5",
+                "SourceString": "Feybreak Deserter",
+                "LocalizedString": "Feybreak Deserter"
+            }
+        },
+        "Reward_Food": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Reward_Food",
+                "SourceString": "Arrogant Gourmet",
+                "LocalizedString": "Arrogant Gourmet"
+            }
+        },
+        "Reward_PalCaptureCount": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Reward_PalCaptureCount",
+                "SourceString": "Wise Hunter",
+                "LocalizedString": "Wise Hunter"
+            }
+        },
+        "Reward_Emote_A_01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Reward_Emote_A_01",
+                "SourceString": "Messenger of Love",
+                "LocalizedString": "Messenger of Love"
+            }
+        },
+        "Reward_PalDisplay": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Reward_PalDisplay",
+                "SourceString": "Arrogant Pal Critic",
+                "LocalizedString": "Arrogant Pal Critic"
+            }
+        },
+        "ArenaShop": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaShop",
+                "SourceString": "Arena Merchant",
+                "LocalizedString": "Arena Merchant"
+            }
+        },
+        "QUEST_FARMER01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_FARMER01",
+                "SourceString": "Desperate Farmer",
+                "LocalizedString": "Desperate Farmer"
+            }
+        },
+        "QUEST_FARMER02": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_FARMER02",
+                "SourceString": "Foodie Farmer",
+                "LocalizedString": "Foodie Farmer"
+            }
+        },
+        "QUEST_FARMER03": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_FARMER03",
+                "SourceString": "Worrywart Farmer",
+                "LocalizedString": "Worrywart Farmer"
+            }
+        },
+        "QUEST_FARMER04": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_FARMER04",
+                "SourceString": "Pal-Loving Farmer",
+                "LocalizedString": "Pal-Loving Farmer"
+            }
+        },
+        "QUEST_SCHOLAR02": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_SCHOLAR02",
+                "SourceString": "Archaeological Society Researcher",
+                "LocalizedString": "Archaeological Society Researcher"
+            }
+        },
+        "QUEST_SCHOLAR03": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_SCHOLAR03",
+                "SourceString": "Fuack Fanatic Researcher",
+                "LocalizedString": "Fuack Fanatic Researcher"
+            }
+        },
+        "QUEST_SCHOLAR04": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_SCHOLAR04",
+                "SourceString": "Rock-Obsessed Researcher",
+                "LocalizedString": "Rock-Obsessed Researcher"
+            }
+        },
+        "QUEST_BREEDER01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_BREEDER01",
+                "SourceString": "Rookie Pal Breeder",
+                "LocalizedString": "Rookie Pal Breeder"
+            }
+        },
+        "QUEST_BREEDER02": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_BREEDER02",
+                "SourceString": "Loyal-Hearted Breeder",
+                "LocalizedString": "Loyal-Hearted Breeder"
+            }
+        },
+        "QUEST_BREEDER03": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_BREEDER03",
+                "SourceString": "Vertigo-Stricken Breeder",
+                "LocalizedString": "Vertigo-Stricken Breeder"
+            }
+        },
+        "QUEST_BREEDER04": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_BREEDER04",
+                "SourceString": "Passionate Pal Breeder",
+                "LocalizedString": "Passionate Pal Breeder"
+            }
+        },
+        "QUEST_RANGER01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_RANGER01",
+                "SourceString": "Ever-Eager Hunter",
+                "LocalizedString": "Ever-Eager Hunter"
+            }
+        },
+        "QUEST_RANGER02": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_RANGER02",
+                "SourceString": "Righteous Hunter",
+                "LocalizedString": "Righteous Hunter"
+            }
+        },
+        "QUEST_RANGER03": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_RANGER03",
+                "SourceString": "Big Game Hunter",
+                "LocalizedString": "Big Game Hunter"
+            }
+        },
+        "QUEST_NOMAD01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_NOMAD01",
+                "SourceString": "One-Way Wanderer",
+                "LocalizedString": "One-Way Wanderer"
+            }
+        },
+        "QUEST_NOMAD02": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_NOMAD02",
+                "SourceString": "Sparkle-Seeking Wanderer",
+                "LocalizedString": "Sparkle-Seeking Wanderer"
+            }
+        },
+        "QUEST_NOMAD03": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_NOMAD03",
+                "SourceString": "Journey-Junkie Wanderer",
+                "LocalizedString": "Journey-Junkie Wanderer"
+            }
+        },
+        "QUEST_NOMAD04": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_NOMAD04",
+                "SourceString": "Restless Wanderer",
+                "LocalizedString": "Restless Wanderer"
+            }
+        },
+        "QUEST_ANGLER01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_ANGLER01",
+                "SourceString": "Laid-Back Angler",
+                "LocalizedString": "Laid-Back Angler"
+            }
+        },
+        "CampPolice001": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice001",
+                "SourceString": "PIDF Lookout",
+                "LocalizedString": "PIDF Lookout"
+            }
+        },
+        "CampPolice002": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice002",
+                "SourceString": "Off-Duty PIDF Officer",
+                "LocalizedString": "Off-Duty PIDF Officer"
+            }
+        },
+        "CampPolice003": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice003",
+                "SourceString": "Booze-Loving PIDF Officer",
+                "LocalizedString": "Booze-Loving PIDF Officer"
+            }
+        },
+        "CampPolice004": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice004",
+                "SourceString": "Snarky PIDF Officer",
+                "LocalizedString": "Snarky PIDF Officer"
+            }
+        },
+        "CampPolice005": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice005",
+                "SourceString": "Mid-Stream PIDF Officer",
+                "LocalizedString": "Mid-Stream PIDF Officer"
+            }
+        },
+        "CampPolice006": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice006",
+                "SourceString": "Straight-Laced PIDF Officer",
+                "LocalizedString": "Straight-Laced PIDF Officer"
+            }
+        },
+        "CampPolice007": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice007",
+                "SourceString": "Slacker Chief",
+                "LocalizedString": "Slacker Chief"
+            }
+        },
+        "CampPolice008": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice008",
+                "SourceString": "Jittery PIDF Officer",
+                "LocalizedString": "Jittery PIDF Officer"
+            }
+        },
+        "CampPolice009": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice009",
+                "SourceString": "Chatty PIDF Officer",
+                "LocalizedString": "Chatty PIDF Officer"
+            }
+        },
+        "CampPolice010": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice010",
+                "SourceString": "Unshakable PIDF Officer",
+                "LocalizedString": "Unshakable PIDF Officer"
+            }
+        },
+        "CampPolice011": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice011",
+                "SourceString": "Treasure-Hoarding PIDF Officer",
+                "LocalizedString": "Treasure-Hoarding PIDF Officer"
+            }
+        },
+        "CampPolice012": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice012",
+                "SourceString": "Mid-Break PIDF Officer",
+                "LocalizedString": "Mid-Break PIDF Officer"
+            }
+        },
+        "CampPolice013": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice013",
+                "SourceString": "Lazy PIDF Officer",
+                "LocalizedString": "Lazy PIDF Officer"
+            }
+        },
+        "CampPolice014": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice014",
+                "SourceString": "Half-Asleep PIDF Officer",
+                "LocalizedString": "Half-Asleep PIDF Officer"
+            }
+        },
+        "CampPolice015": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice015",
+                "SourceString": "Plastered PIDF Officer",
+                "LocalizedString": "Plastered PIDF Officer"
+            }
+        },
+        "CampPolice016": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice016",
+                "SourceString": "Parched PIDF Officer",
+                "LocalizedString": "Parched PIDF Officer"
+            }
+        },
+        "CampPolice017": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "CampPolice017",
+                "SourceString": "Wary PIDF Officer",
+                "LocalizedString": "Wary PIDF Officer"
+            }
+        },
+        "QUEST_KIGURUMI01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "QUEST_KIGURUMI01",
+                "SourceString": "Wannabe Depresso Islander",
+                "LocalizedString": "Wannabe Depresso Islander"
+            }
+        },
+        "Male_DTairikuPeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Male_DTairikuPeople01",
+                "SourceString": "Bamboo Grove Inhabitant",
+                "LocalizedString": "Bamboo Grove Inhabitant"
+            }
+        },
+        "Female_DTairikuPeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Female_DTairikuPeople01",
+                "SourceString": "Bamboo Grove Inhabitant",
+                "LocalizedString": "Bamboo Grove Inhabitant"
+            }
+        },
+        "Male_TenrakuPeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Male_TenrakuPeople01",
+                "SourceString": "Feybreak Researcher",
+                "LocalizedString": "Feybreak Researcher"
+            }
+        },
+        "Female_TenrakuPeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Female_TenrakuPeople01",
+                "SourceString": "Feybreak Researcher",
+                "LocalizedString": "Feybreak Researcher"
+            }
+        },
+        "Male_SnowPeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Male_SnowPeople01",
+                "SourceString": "Snowbound Villager",
+                "LocalizedString": "Snowbound Villager"
+            }
+        },
+        "Female_SnowPeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Female_SnowPeople01",
+                "SourceString": "Snowbound Villager",
+                "LocalizedString": "Snowbound Villager"
+            }
+        },
+        "Male_SakurajimaPeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Male_SakurajimaPeople01",
+                "SourceString": "Sakurajima Inhabitant",
+                "LocalizedString": "Sakurajima Inhabitant"
+            }
+        },
+        "Female_SakurajimaPeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Female_SakurajimaPeople01",
+                "SourceString": "Sakurajima Inhabitant",
+                "LocalizedString": "Sakurajima Inhabitant"
+            }
+        },
+        "Negotiator": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Negotiator",
+                "SourceString": "Negotiator",
+                "LocalizedString": "Negotiator"
+            }
+        },
+        "Male_WorldTreePeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Male_WorldTreePeople01",
+                "SourceString": "World Tree Guardian",
+                "LocalizedString": "World Tree Guardian"
+            }
+        },
+        "Female_WorldTreePeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Female_WorldTreePeople01",
+                "SourceString": "World Tree Guardian",
+                "LocalizedString": "World Tree Guardian"
+            }
+        },
+        "ArenaNPC_101": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_101",
+                "SourceString": "Regiultima",
+                "LocalizedString": "Regiultima"
+            }
+        },
+        "ArenaNPC_102": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_102",
+                "SourceString": "Shell Knight",
+                "LocalizedString": "Shell Knight"
+            }
+        },
+        "ArenaNPC_103": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_103",
+                "SourceString": "Koshi Anpan",
+                "LocalizedString": "Koshi Anpan"
+            }
+        },
+        "ArenaNPC_104": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_104",
+                "SourceString": "Winget",
+                "LocalizedString": "Winget"
+            }
+        },
+        "ArenaNPC_105": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_105",
+                "SourceString": "Nabeau",
+                "LocalizedString": "Nabeau"
+            }
+        },
+        "ArenaNPC_106": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_106",
+                "SourceString": "Krissy Komiya",
+                "LocalizedString": "Krissy Komiya"
+            }
+        },
+        "ArenaNPC_107": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_107",
+                "SourceString": "Nozomiso",
+                "LocalizedString": "Nozomiso"
+            }
+        },
+        "ArenaNPC_108": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_108",
+                "SourceString": "Maximum",
+                "LocalizedString": "Maximum"
+            }
+        },
+        "ArenaNPC_109": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_109",
+                "SourceString": "The Cheat Phantom",
+                "LocalizedString": "The Cheat Phantom"
+            }
+        },
+        "ArenaNPC_110": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_110",
+                "SourceString": "Prima",
+                "LocalizedString": "Prima"
+            }
+        },
+        "ArenaNPC_111": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_111",
+                "SourceString": "Jam4u2",
+                "LocalizedString": "Jam4u2"
+            }
+        },
+        "ArenaNPC_112": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_112",
+                "SourceString": "Certified Cynic",
+                "LocalizedString": "Certified Cynic"
+            }
+        },
+        "ArenaNPC_113": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_113",
+                "SourceString": "Jeevis",
+                "LocalizedString": "Jeevis"
+            }
+        },
+        "ArenaNPC_114": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_114",
+                "SourceString": "RabbitXV",
+                "LocalizedString": "RabbitXV"
+            }
+        },
+        "ArenaNPC_115": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_115",
+                "SourceString": "Ashee",
+                "LocalizedString": "Ashee"
+            }
+        },
+        "ArenaNPC_116": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_116",
+                "SourceString": "Okaetsu",
+                "LocalizedString": "Okaetsu"
+            }
+        },
+        "ArenaNPC_117": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_117",
+                "SourceString": "RedMage",
+                "LocalizedString": "RedMage"
+            }
+        },
+        "ArenaNPC_118": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_118",
+                "SourceString": "Ent",
+                "LocalizedString": "Ent"
+            }
+        },
+        "ArenaNPC_119": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_119",
+                "SourceString": "Pylar",
+                "LocalizedString": "Pylar"
+            }
+        },
+        "ArenaNPC_120": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "ArenaNPC_120",
+                "SourceString": "iori",
+                "LocalizedString": "iori"
+            }
+        },
+        "AncientResearcher": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "AncientResearcher",
+                "SourceString": "Ancient Civilization Researcher",
+                "LocalizedString": "Ancient Civilization Researcher"
+            }
+        },
+        "Male_SorajimaPeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Male_SorajimaPeople01",
+                "SourceString": "Sunreach Citizen",
+                "LocalizedString": "Sunreach Citizen"
+            }
+        },
+        "Female_SorajimaPeople01": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Female_SorajimaPeople01",
+                "SourceString": "Sunreach Citizen",
+                "LocalizedString": "Sunreach Citizen"
+            }
+        },
+        "BOSSDEMO_SORAJIMA_LEADER": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_SORAJIMA_LEADER",
+                "SourceString": "AURI",
+                "LocalizedString": "AURI"
+            }
+        },
+        "BOSSDEMO_SORAJIMA_LEADER_PAL": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "BOSSDEMO_SORAJIMA_LEADER_PAL",
+                "SourceString": "SHAOLONG",
+                "LocalizedString": "SHAOLONG"
+            }
+        },
+        "Male_VolcanoPorter": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Male_VolcanoPorter",
+                "SourceString": "Volcano Porter",
+                "LocalizedString": "Volcano Porter"
+            }
+        },
+        "Male_DesertVillage004": {
+            "TextData": {
+                "Namespace": "dt_uniquenpctext_common.json",
+                "Key": "Male_DesertVillage004",
+                "SourceString": "Reticent Desert Inhabitant",
+                "LocalizedString": "Reticent Desert Inhabitant"
+            }
+        },
+        "DesertBoss": {
+            "TextData": {
+                "Namespace": "Aliases",
+                "Key": "DesertBoss",
+                "SourceString": "Marcus & Faleris (Desert Boss)",
+                "LocalizedString": "Marcus & Faleris (Desert Boss)"
+            }
+        },
+        "ElectricBoss": {
+            "TextData": {
+                "Namespace": "Aliases",
+                "Key": "ElectricBoss",
+                "SourceString": "Zoe & Grizzbolt (Electric Boss)",
+                "LocalizedString": "Zoe & Grizzbolt (Electric Boss)"
+            }
+        },
+        "WorldTreeBoss": {
+            "TextData": {
+                "Namespace": "Aliases",
+                "Key": "WorldTreeBoss",
+                "SourceString": "World Tree Boss",
+                "LocalizedString": "World Tree Boss"
+            }
+        },
+        "SK_Player_Female": {
+            "TextData": {
+                "Namespace": "Aliases",
+                "Key": "SK_Player_Female",
+                "SourceString": "Female Player Body",
+                "LocalizedString": "Female Player Body"
+            }
+        },
+        "SK_Player_Male": {
+            "TextData": {
+                "Namespace": "Aliases",
+                "Key": "SK_Player_Male",
+                "SourceString": "Male Player Body",
+                "LocalizedString": "Male Player Body"
             }
         }
     }

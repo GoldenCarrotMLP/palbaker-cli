@@ -1,17 +1,14 @@
-# pythoncli/unreal_scripts/materials.py
 import unreal  # type: ignore
 import json
 import os
 
 def sanitize_asset_name(name):
-    """Sanitizes asset names to comply with Unreal Engine's strict naming rules (alphanumeric and underscores only)."""
     import re
     sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
     sanitized = re.sub(r'_+', '_', sanitized)
     return sanitized.strip('_')
 
 def find_best_texture_match(slot_name, textures, suffix):
-    """Calculates the highest token intersection between slot and file to map textures dynamically."""
     clean_slot = slot_name.lower().replace("mi_", "").replace("sk_", "")
     slot_tokens = set(clean_slot.split("_"))
     
@@ -67,7 +64,6 @@ def find_best_texture_match(slot_name, textures, suffix):
     return best_match if best_score > 0 else None
 
 def build_materials_heuristically(ue_path, textures, material_slots, preserve_materials=False):
-    """Fallback heuristic binder when no metadata is available."""
     print("No Material Metadata found. Running fallback heuristic suffix binder...")
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
     mi_assets = []
@@ -80,9 +76,14 @@ def build_materials_heuristically(ue_path, textures, material_slots, preserve_ma
         if unreal.EditorAssetLibrary.does_asset_exist(mi_path):
             existing_asset = unreal.EditorAssetLibrary.load_asset(mi_path)
             
-            # SAFEGUARD: Skip modification if preserve mode is enabled
+            # SAFEGUARD: Skip shader modification, BUT re-link refreshed texture parameters!
             if preserve_materials and existing_asset:
-                print(f"  [Preserve] Skipping parameter modification for existing asset: {sanitized_slot}")
+                print(f"  [Preserve] Preserving custom shaders for existing asset: {sanitized_slot}")
+                tex_b = find_best_texture_match(sanitized_slot, textures, "B")
+                if tex_b:
+                    loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_b))[0]}")
+                    if loaded_tex and isinstance(loaded_tex, unreal.Texture):
+                        unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(existing_asset, unreal.Name("Base Texture"), loaded_tex)
                 mi_assets.append((sanitized_slot.lower(), existing_asset))
                 continue
                 
@@ -90,7 +91,7 @@ def build_materials_heuristically(ue_path, textures, material_slots, preserve_ma
                 print(f"Loading existing material instance: {sanitized_slot}")
                 mi_asset = existing_asset
             else:
-                print(f"Asset '{sanitized_slot}' already exists but is not a MaterialInstanceConstant (type: {type(existing_asset).__name__ if existing_asset else 'None'}). Deleting to recreate as MaterialInstanceConstant...", flush=True)
+                print(f"Asset '{sanitized_slot}' already exists but is not a MaterialInstanceConstant. Deleting...", flush=True)
                 unreal.EditorAssetLibrary.delete_asset(mi_path)
                 
         if not mi_asset:
@@ -101,7 +102,6 @@ def build_materials_heuristically(ue_path, textures, material_slots, preserve_ma
                 mi_asset = unreal.EditorAssetLibrary.load_asset(mi_path)
                 
         if not mi_asset or not isinstance(mi_asset, unreal.MaterialInstanceConstant):
-            print(f"[!] Warning: Failed to obtain valid MaterialInstanceConstant for '{sanitized_slot}'")
             continue
             
         lower_name = sanitized_slot.lower()
@@ -143,7 +143,6 @@ def build_materials_heuristically(ue_path, textures, material_slots, preserve_ma
     return mi_assets
 
 def build_materials(ue_path, json_path, textures, target_asset_path, preserve_materials=False):
-    """Orchestrator to evaluate whether to run the Topological or Heuristic binder."""
     material_slots = []
     if target_asset_path:
         mesh = unreal.EditorAssetLibrary.load_asset(target_asset_path)
@@ -178,9 +177,15 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
             if unreal.EditorAssetLibrary.does_asset_exist(mi_path):
                 existing_asset = unreal.EditorAssetLibrary.load_asset(mi_path)
                 
-                # SAFEGUARD: Skip modification if preserve mode is enabled
+                # SAFEGUARD: Skip shader modification, BUT re-link refreshed texture parameters!
                 if preserve_materials and existing_asset:
-                    print(f"  [Preserve] Skipping parameter modification for existing asset: {sanitized_name}")
+                    print(f"  [Preserve] Preserving custom shaders for existing asset: {sanitized_name}")
+                    textures_dict = data.get("textures", {})
+                    if textures_dict:
+                        for param_name, tex_name in textures_dict.items():
+                            loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{tex_name}")
+                            if loaded_tex and isinstance(loaded_tex, unreal.Texture):
+                                unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(existing_asset, unreal.Name(param_name), loaded_tex)
                     mi_assets.append((sanitized_name.lower(), existing_asset))
                     continue
                     
@@ -188,7 +193,7 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                     print(f"Loading existing material instance: {sanitized_name}")
                     mi_asset = existing_asset
                 else:
-                    print(f"Asset '{sanitized_name}' already exists but is not a MaterialInstanceConstant (type: {type(existing_asset).__name__ if existing_asset else 'None'}). Deleting to recreate as MaterialInstanceConstant...", flush=True)
+                    print(f"Asset '{sanitized_name}' already exists but is not a MaterialInstanceConstant. Deleting...", flush=True)
                     unreal.EditorAssetLibrary.delete_asset(mi_path)
             
             if not mi_asset:
@@ -199,7 +204,6 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                     mi_asset = unreal.EditorAssetLibrary.load_asset(mi_path)
                     
             if not mi_asset or not isinstance(mi_asset, unreal.MaterialInstanceConstant):
-                print(f"[!] Warning: Failed to obtain valid MaterialInstanceConstant for '{sanitized_name}'")
                 continue
                 
             parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterBodyBase"
@@ -223,8 +227,6 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                         if isinstance(loaded_tex, unreal.Texture):
                             unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name(param_name), loaded_tex)
                             print(f"  Bound {param_name}: {tex_name}")
-                        else:
-                            print(f"  [!] Warning: Skipping collision binding: '{tex_name}' loaded as {type(loaded_tex).__name__} (expected Texture)")
             else:
                 print(f"  [!] No mapped textures found in sidecar for {sanitized_name}. Reverting to heuristic search...", flush=True)
                 
@@ -233,21 +235,18 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                     loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_b))[0]}")
                     if loaded_tex and isinstance(loaded_tex, unreal.Texture):
                         unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name("Base Texture"), loaded_tex)
-                        print(f"    Heuristic Bound Base: {os.path.basename(tex_b)}")
                         
                 tex_n = find_best_texture_match(sanitized_name, textures, "N")
                 if tex_n:
                     loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_n))[0]}")
                     if loaded_tex and isinstance(loaded_tex, unreal.Texture):
                         unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name("Normal Map"), loaded_tex)
-                        print(f"    Heuristic Bound Normal: {os.path.basename(tex_n)}")
                         
                 tex_m = find_best_texture_match(sanitized_name, textures, "M")
                 if tex_m:
                     loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_m))[0]}")
                     if loaded_tex and isinstance(loaded_tex, unreal.Texture):
                         unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name("MetallicRoughnessOcclusionSpecularTexture"), loaded_tex)
-                        print(f"    Heuristic Bound Parameter: {os.path.basename(tex_m)}")
                     
             unreal.EditorAssetLibrary.save_loaded_asset(mi_asset)
             mi_assets.append((sanitized_name.lower(), mi_asset))
@@ -266,7 +265,6 @@ def bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets, harve
 
     asset_class = mesh.get_class().get_name()
     if asset_class != "SkeletalMesh":
-        print(f"[!] Warning: Target is a {asset_class}, not a SkeletalMesh. Skipping PhysicsAsset and material assignments.")
         return
 
     print("Linking Materials and Physics Asset...")
@@ -286,7 +284,6 @@ def bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets, harve
         slot_name = str(skel_mat.material_slot_name).lower()
         print(f"Processing slot: {slot_name}")
         
-        # 1. SAFEGUARD HARVEST OVERRIDE
         if harvested_materials:
             preserved_mat = harvested_materials.get(slot_name) or harvested_materials.get(str(i))
             if preserved_mat:
@@ -295,7 +292,6 @@ def bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets, harve
                 new_materials.append(skel_mat)
                 continue
 
-        # 2. STANDARD MATCHING
         matched_mi = next((mi_asset for mi_name, mi_asset in mi_assets if mi_name == slot_name), None)
             
         if not matched_mi:

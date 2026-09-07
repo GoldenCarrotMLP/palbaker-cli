@@ -11,13 +11,17 @@ def build_pal_names_map(settings: dict) -> tuple[bool, str]:
     target_map_path = os.path.join(repo_root, "deps", "pal_names_map.json")
     os.makedirs(os.path.join(repo_root, "deps"), exist_ok=True)
     
-    # 1. Text Localization Table
+    # 1. Extract Localization Tables (Pals, Generic Humans, and Unique NPCs)
     temp_out = os.path.join(repo_root, "temp_db_extract")
-    relative_asset_path = "Pal/Content/L10N/en/Pal/DataTable/Text/DT_PalNameText_Common.uasset"
+    localization_tables = [
+        "Pal/Content/L10N/en/Pal/DataTable/Text/DT_PalNameText_Common.uasset",
+        "Pal/Content/L10N/en/Pal/DataTable/Text/DT_HumanNameText_Common.uasset",
+        "Pal/Content/L10N/en/Pal/DataTable/Text/DT_UniqueNPCText_Common.uasset"
+    ]
     
-    success, msg = extract_game_files(settings, [relative_asset_path], temp_out, format_type="json")
+    success, msg = extract_game_files(settings, localization_tables, temp_out, format_type="json")
     if not success:
-        return False, f"Failed to extract text data table: {msg}"
+        return False, f"Failed to extract text data tables: {msg}"
         
     extracted_file_path = None
     for root, _, files in os.walk(temp_out):
@@ -53,21 +57,76 @@ def build_pal_names_map(settings: dict) -> tuple[bool, str]:
         raw_rows = data_table_obj["Rows"]
         transformed_rows = {}
         
+        # Ingest Pal names
         for k, v in raw_rows.items():
             clean_key = k
             if k.startswith("PAL_NAME_"):
                 clean_key = k[len("PAL_NAME_"):]
                 
             text_data = v.get("TextData", {})
-            transformed_text_data = {
-                "Namespace": text_data.get("Namespace", "DT_PalNameText_Common"),
-                "Key": clean_key,
-                "SourceString": text_data.get("SourceString", ""),
-                "LocalizedString": text_data.get("LocalizedString", "")
-            }
-            
             transformed_rows[clean_key] = {
-                "TextData": transformed_text_data
+                "TextData": {
+                    "Namespace": "DT_PalNameText_Common",
+                    "Key": clean_key,
+                    "SourceString": text_data.get("SourceString", ""),
+                    "LocalizedString": text_data.get("LocalizedString", "")
+                }
+            }
+
+        # Ingest Human and Unique NPC names from extracted JSON files
+        for extra_table in ["dt_humannametext_common.json", "dt_uniquenpctext_common.json"]:
+            extra_file = None
+            for root, _, files in os.walk(temp_out):
+                for f in files:
+                    if f.lower() == extra_table:
+                        extra_file = os.path.join(root, f)
+                        break
+                if extra_file: break
+
+            if extra_file and os.path.exists(extra_file):
+                try:
+                    with open(extra_file, "r", encoding="utf-8-sig") as f_extra:
+                        extra_json = json.load(f_extra)
+                    for obj in (extra_json if isinstance(extra_json, list) else [extra_json]):
+                        if obj.get("Type") == "DataTable" and "Rows" in obj:
+                            for r_k, r_v in obj["Rows"].items():
+                                clean_r_k = r_k.replace("NAME_", "")
+                                t_data = r_v.get("TextData", {})
+                                loc_str = t_data.get("LocalizedString", "")
+                                if loc_str and loc_str != "-":
+                                    transformed_rows[clean_r_k] = {
+                                        "TextData": {
+                                            "Namespace": extra_table,
+                                            "Key": clean_r_k,
+                                            "SourceString": t_data.get("SourceString", ""),
+                                            "LocalizedString": loc_str
+                                        }
+                                    }
+                except Exception:
+                    pass
+
+        # Friendly alias mappings for standard archetypes and Tower Bosses
+        npc_aliases = {
+            "DesertBoss": "Marcus & Faleris (Desert Boss)",
+            "ElectricBoss": "Zoe & Grizzbolt (Electric Boss)",
+            "ForestBoss": "Lily & Lyleen (Forest Boss)",
+            "GrassBoss": "Verdash (Grass Boss)",
+            "SakurajimaBoss": "Saya & Selyne (Sakurajima Boss)",
+            "SnowBoss": "Victor & Shadowbeak (Snow Boss)",
+            "SorajimaBoss": "Sorajima Boss",
+            "VikingBoss": "Viking Boss",
+            "WorldTreeBoss": "World Tree Boss",
+            "SK_Player_Female": "Female Player Body",
+            "SK_Player_Male": "Male Player Body"
+        }
+        for alias_k, alias_v in npc_aliases.items():
+            transformed_rows[alias_k] = {
+                "TextData": {
+                    "Namespace": "Aliases",
+                    "Key": alias_k,
+                    "SourceString": alias_v,
+                    "LocalizedString": alias_v
+                }
             }
             
         output_payload = {

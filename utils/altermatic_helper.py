@@ -178,7 +178,13 @@ def compile_unified_altermatic_json(monster_name: str, altermatic_staging_dir: s
     parts = altermatic_staging_dir.replace("\\", "/").split("/")
     if "Character" in parts:
         idx = parts.index("Character")
-        if idx + 1 < len(parts):
+        if monster_name in parts:
+            m_idx = parts.index(monster_name)
+            if m_idx > idx + 1:
+                category = "/".join(parts[idx + 1:m_idx])
+            else:
+                category = parts[idx + 1]
+        elif idx + 1 < len(parts):
             category = parts[idx + 1]
 
     swaps_array = []

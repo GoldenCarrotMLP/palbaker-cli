@@ -56,9 +56,9 @@ def run_pipeline():
         if redirect_folder:
             material_target_ue_path = f"/Game/Pal/Model/Character/Monster/{base_pal}/{redirect_folder}"
 
-        # Import FBX mesh directly to base folder (SK_Alpaca)
+        # Import FBX mesh directly to base folder using the model's specific import_name
         target_asset_path, target_phys_path = import_assets(
-            ue_path, config["textures"], fbx_file, target_mesh_name, base_pal, template_id, is_custom_pal, import_tex=True
+            ue_path, config["textures"], fbx_file, import_name, base_pal, template_id, is_custom_pal, import_tex=True
         )
         
         # But compile the materials inside the variant's folder to avoid duplication!

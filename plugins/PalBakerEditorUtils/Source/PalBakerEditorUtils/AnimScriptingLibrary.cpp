@@ -6,6 +6,10 @@
 #include "AnimGraphNode_ModifyBone.h"
 #include "AnimGraphNode_SpringBone.h"
 #include "AnimGraphNode_LinkedInputPose.h"
+#include "AnimGraphNode_ModifyCurve.h"
+#include "AnimGraphNode_CopyBone.h"
+#include "AnimNodes/AnimNode_ModifyCurve.h"
+#include "UObject/UnrealType.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/FileHelper.h"
@@ -183,6 +187,66 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
         }
     }
 
+    // --- Inject Copy Bones (CopyBone) ---
+    const TArray<TSharedPtr<FJsonValue>>* CopyBones;
+    if (JsonObj->TryGetArrayField(TEXT("copy_bones"), CopyBones))
+    {
+        for (const auto& Val : *CopyBones)
+        {
+            TSharedPtr<FJsonObject> BoneObj = Val->AsObject();
+            if (!BoneObj.IsValid()) continue;
+
+            UAnimGraphNode_CopyBone* CopyNode = NewObject<UAnimGraphNode_CopyBone>(AnimGraph);
+            AnimGraph->AddNode(CopyNode);
+            CopyNode->CreateNewGuid();
+            CopyNode->NodePosX = NodeX;
+            CopyNode->NodePosY = NodeY;
+            NodeX += 300;
+
+            const bool bCopyTrans = BoneObj->GetBoolField(TEXT("copy_translation"));
+            const bool bCopyRot   = BoneObj->GetBoolField(TEXT("copy_rotation"));
+            const bool bCopyScale = BoneObj->GetBoolField(TEXT("copy_scale"));
+
+            float AlphaVal = 1.0f;
+            if (BoneObj->HasField(TEXT("alpha")))
+            {
+                AlphaVal = BoneObj->GetNumberField(TEXT("alpha"));
+            }
+
+            // 1. Set the struct properties FIRST so pin generation inherits these values
+            CopyNode->Node.SourceBone.BoneName = FName(*BoneObj->GetStringField(TEXT("source_bone")));
+            CopyNode->Node.TargetBone.BoneName = FName(*BoneObj->GetStringField(TEXT("target_bone")));
+            CopyNode->Node.bCopyTranslation = bCopyTrans;
+            CopyNode->Node.bCopyRotation = bCopyRot;
+            CopyNode->Node.bCopyScale = bCopyScale;
+            CopyNode->Node.ControlSpace = EBoneControlSpace::BCS_ComponentSpace;
+            CopyNode->Node.Alpha = AlphaVal;
+
+            // 2. Allocate default pins
+            CopyNode->AllocateDefaultPins();
+
+            // 3. Explicitly synchronize pin default values to prevent Unreal from resetting them to False
+            if (UEdGraphPin* Pin = CopyNode->FindPin(TEXT("bCopyTranslation")))
+            {
+                Pin->DefaultValue = bCopyTrans ? TEXT("true") : TEXT("false");
+            }
+            if (UEdGraphPin* Pin = CopyNode->FindPin(TEXT("bCopyRotation")))
+            {
+                Pin->DefaultValue = bCopyRot ? TEXT("true") : TEXT("false");
+            }
+            if (UEdGraphPin* Pin = CopyNode->FindPin(TEXT("bCopyScale")))
+            {
+                Pin->DefaultValue = bCopyScale ? TEXT("true") : TEXT("false");
+            }
+            if (UEdGraphPin* AlphaPin = CopyNode->FindPin(TEXT("Alpha")))
+            {
+                AlphaPin->DefaultValue = FString::Printf(TEXT("%f"), AlphaVal);
+            }
+
+            CopyNode->FindPin(TEXT("ComponentPose"))->MakeLinkTo(CurrentOutputPin);
+            CurrentOutputPin = CopyNode->FindPin(TEXT("Pose"));
+        }
+    }
 
     // --- Create Component to Local Space ---
     UAnimGraphNode_ComponentToLocalSpace* C2L = NewObject<UAnimGraphNode_ComponentToLocalSpace>(AnimGraph);
@@ -191,9 +255,93 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
     C2L->AllocateDefaultPins();
     C2L->NodePosX = NodeX;
     C2L->NodePosY = NodeY;
+    NodeX += 300;
 
     C2L->FindPin(TEXT("ComponentPose"))->MakeLinkTo(CurrentOutputPin);
-    C2L->FindPin(TEXT("Pose"))->MakeLinkTo(RootInputPin);
+    UEdGraphPin* FinalLocalPosePin = C2L->FindPin(TEXT("Pose"));
+
+    // --- Inject Default Shape Keys (ModifyCurve Node) ---
+    const TArray<TSharedPtr<FJsonValue>>* DefaultShapekeys;
+    if (JsonObj->TryGetArrayField(TEXT("default_shapekeys"), DefaultShapekeys) && DefaultShapekeys->Num() > 0)
+    {
+        UAnimGraphNode_ModifyCurve* ModifyCurveNode = NewObject<UAnimGraphNode_ModifyCurve>(AnimGraph);
+        AnimGraph->AddNode(ModifyCurveNode);
+        ModifyCurveNode->CreateNewGuid();
+        ModifyCurveNode->AllocateDefaultPins();
+        ModifyCurveNode->NodePosX = NodeX;
+        ModifyCurveNode->NodePosY = NodeY;
+        NodeX += 300;
+
+        // Access private UPROPERTY 'Node' via Unreal reflection to bypass C2248
+        FStructProperty* NodeProp = CastField<FStructProperty>(ModifyCurveNode->GetClass()->FindPropertyByName(TEXT("Node")));
+        if (NodeProp)
+        {
+            FAnimNode_ModifyCurve* NodePtr = NodeProp->ContainerPtrToValuePtr<FAnimNode_ModifyCurve>(ModifyCurveNode);
+            if (NodePtr)
+            {
+                NodePtr->ApplyMode = EModifyCurveApplyMode::Blend;
+                NodePtr->Alpha = 1.0f;
+
+                for (const auto& Val : *DefaultShapekeys)
+                {
+                    FString CurveNameStr = Val->AsString();
+                    if (!CurveNameStr.IsEmpty())
+                    {
+                        NodePtr->AddCurve(FName(*CurveNameStr), 1.0f);
+                    }
+                }
+            }
+        }
+
+        ModifyCurveNode->ReconstructNode();
+        // Enforce default values on pins if exposed
+        for (const auto& Val : *DefaultShapekeys)
+        {
+            FString CurveNameStr = Val->AsString();
+            if (UEdGraphPin* CurvePin = ModifyCurveNode->FindPin(CurveNameStr))
+            {
+                CurvePin->DefaultValue = TEXT("1.0");
+            }
+        }
+
+        UEdGraphPin* ModifyCurveInPin = ModifyCurveNode->FindPin(TEXT("SourcePose"));
+        if (!ModifyCurveInPin)
+        {
+            for (UEdGraphPin* Pin : ModifyCurveNode->Pins)
+            {
+                if (Pin->Direction == EGPD_Input && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Struct)
+                {
+                    ModifyCurveInPin = Pin;
+                    break;
+                }
+            }
+        }
+
+        UEdGraphPin* ModifyCurveOutPin = ModifyCurveNode->FindPin(TEXT("Pose"));
+        if (!ModifyCurveOutPin)
+        {
+            for (UEdGraphPin* Pin : ModifyCurveNode->Pins)
+            {
+                if (Pin->Direction == EGPD_Output && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Struct)
+                {
+                    ModifyCurveOutPin = Pin;
+                    break;
+                }
+            }
+        }
+
+        if (ModifyCurveInPin && FinalLocalPosePin)
+        {
+            ModifyCurveInPin->MakeLinkTo(FinalLocalPosePin);
+        }
+
+        if (ModifyCurveOutPin)
+        {
+            FinalLocalPosePin = ModifyCurveOutPin;
+        }
+    }
+
+    FinalLocalPosePin->MakeLinkTo(RootInputPin);
 
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
     FKismetEditorUtilities::CompileBlueprint(AnimBP);
