@@ -23,6 +23,7 @@ def run_export():
     target_mesh_name = config["target_mesh_name"]
 
     ar = unreal.AssetRegistryHelpers.get_asset_registry()
+    ar.scan_paths_synchronous([ue_path], True)
     assets = ar.get_assets_by_path(ue_path, recursive=True)
 
     os.makedirs(working_dir, exist_ok=True)
@@ -110,8 +111,9 @@ def run_export():
                     task.set_editor_property('automated', True)
                     task.set_editor_property('prompt', False)
                     task.set_editor_property('replace_identical', True)
-                    
+                    # Textures do not use FbxExportOption
                     unreal.Exporter.run_asset_export_task(task)
+
 
             elif asset_class == "MaterialInstanceConstant":
                 mat_name = loaded_asset.get_name()

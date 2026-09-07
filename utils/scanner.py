@@ -8,9 +8,7 @@ from .sidecar_helper import load_sidecar
 
 def scan_character_folders(base_path: str, target_mod: str | None = None) -> list[dict]:
     """
-    Scans exactly two levels deep: 
-    Level 1: Category -> BasePal (Vanilla)
-    Level 2: Category -> BasePal -> ModName (Nested Mod)
+    Scans character folders across Monsters, NPCs (including Bosses), and Player components.
     Returns a list of dicts containing routing metadata.
     """
     discovered = []
@@ -23,13 +21,99 @@ def scan_character_folders(base_path: str, target_mod: str | None = None) -> lis
         cat_path = os.path.join(base_path, cat)
         if not os.path.exists(cat_path):
             continue
-            
+
+        # Special handling for Player modular assets (Player/Body/Female, Player/Hair/Hair001, etc.)
+        if cat == "Player":
+            for part_folder in os.listdir(cat_path):
+                part_path = os.path.join(cat_path, part_folder)
+                if not os.path.isdir(part_path):
+                    continue
+                for item in os.listdir(part_path):
+                    item_path = os.path.join(part_path, item)
+                    if not os.path.isdir(item_path):
+                        continue
+                    if target_mod and item.lower() != target_mod.lower():
+                        continue
+                    has_assets = any(f.endswith(('.blend', '.uasset', '.json', '.fbx', '.psk', '.png')) for f in os.listdir(item_path) if os.path.isfile(os.path.join(item_path, f)))
+                    if has_assets:
+                        discovered.append({
+                            "category": f"Player/{part_folder}",
+                            "base_pal": item,
+                            "mod_name": item,
+                            "path": os.path.abspath(item_path)
+                        })
+            continue
+
+        # Special handling for NPC Bosses (NPC/Boss/DesertBoss, etc.)
+        if cat == "NPC":
+            for item1 in os.listdir(cat_path):
+                item1_path = os.path.join(cat_path, item1)
+                if not os.path.isdir(item1_path):
+                    continue
+                if item1.lower() == "boss":
+                    for boss_item in os.listdir(item1_path):
+                        boss_path = os.path.join(item1_path, boss_item)
+                        if not os.path.isdir(boss_path):
+                            continue
+                        # Level 1: Base Boss (e.g. NPC/Boss/DesertBossold)
+                        if not target_mod or boss_item.lower() == target_mod.lower():
+                            has_assets = any(f.endswith(('.blend', '.uasset', '.json', '.fbx', '.psk', '.png')) for f in os.listdir(boss_path) if os.path.isfile(os.path.join(boss_path, f)))
+                            if has_assets:
+                                discovered.append({
+                                    "category": "NPC/Boss",
+                                    "base_pal": boss_item,
+                                    "mod_name": boss_item,
+                                    "path": os.path.abspath(boss_path)
+                                })
+                        # Level 2: Nested Boss Variants (e.g. NPC/Boss/DesertBossold/PokemonBoss)
+                        for sub in os.listdir(boss_path):
+                            sub_path = os.path.join(boss_path, sub)
+                            if not os.path.isdir(sub_path) or sub.startswith(".") or sub.lower() in ["sources", ".palbaker_audio"]:
+                                continue
+                            if target_mod and sub.lower() != target_mod.lower():
+                                continue
+                            has_sub_assets = any(f.endswith(('.blend', '.uasset', '.json', '.fbx', '.psk', '.png')) for f in os.listdir(sub_path) if os.path.isfile(os.path.join(sub_path, f)))
+                            if has_sub_assets:
+                                discovered.append({
+                                    "category": "NPC/Boss",
+                                    "base_pal": boss_item,
+                                    "mod_name": sub,
+                                    "path": os.path.abspath(sub_path)
+                                })
+                else:
+                    # Standard NPC archetype folder (e.g. SK_NPC_Female_Farmer01)
+                    if not target_mod or item1.lower() == target_mod.lower():
+                        has_assets = any(f.endswith(('.blend', '.uasset', '.json', '.fbx', '.psk', '.png')) for f in os.listdir(item1_path) if os.path.isfile(os.path.join(item1_path, f)))
+                        if has_assets:
+                            discovered.append({
+                                "category": "NPC",
+                                "base_pal": item1,
+                                "mod_name": item1,
+                                "path": os.path.abspath(item1_path)
+                            })
+                    # Standard NPC nested variants
+                    for sub in os.listdir(item1_path):
+                        sub_path = os.path.join(item1_path, sub)
+                        if not os.path.isdir(sub_path) or sub.startswith(".") or sub.lower() in ["sources", ".palbaker_audio"]:
+                            continue
+                        if target_mod and sub.lower() != target_mod.lower():
+                            continue
+                        has_sub_assets = any(f.endswith(('.blend', '.uasset', '.json', '.fbx', '.psk', '.png')) for f in os.listdir(sub_path) if os.path.isfile(os.path.join(sub_path, f)))
+                        if has_sub_assets:
+                            discovered.append({
+                                "category": "NPC",
+                                "base_pal": item1,
+                                "mod_name": sub,
+                                "path": os.path.abspath(sub_path)
+                            })
+            continue
+
+        # Standard Monster scan (Level 1: Base Pal, Level 2: Nested variant)
         for item1 in os.listdir(cat_path):
             item1_path = os.path.join(cat_path, item1)
             if not os.path.isdir(item1_path):
                 continue
                 
-            # Level 1: Vanilla Base (e.g. Monster/Alpaca)
             if not target_mod or item1.lower() == target_mod.lower():
                 has_assets_l1 = any(f.endswith(('.blend', '.uasset', '.json', '.fbx', '.psk', '.png')) for f in os.listdir(item1_path) if os.path.isfile(os.path.join(item1_path, f)))
                 if has_assets_l1:
@@ -40,21 +124,18 @@ def scan_character_folders(base_path: str, target_mod: str | None = None) -> lis
                         "path": os.path.abspath(item1_path)
                     })
             
-            # Level 2: Nested Mod (e.g. Monster/Alpaca/Farigiraf)
             for item2 in os.listdir(item1_path):
                 item2_path = os.path.join(item1_path, item2)
                 if not os.path.isdir(item2_path):
                     continue
-                    
                 if target_mod and item2.lower() != target_mod.lower():
                     continue
-                    
                 has_assets_l2 = any(f.endswith(('.blend', '.uasset', '.json', '.fbx', '.psk', '.png')) for f in os.listdir(item2_path) if os.path.isfile(os.path.join(item2_path, f)))
                 if has_assets_l2:
                     discovered.append({
                         "category": cat,
-                        "base_pal": item1, # Parent folder is the BasePal
-                        "mod_name": item2, # Child folder is the ModName
+                        "base_pal": item1,
+                        "mod_name": item2,
                         "path": os.path.abspath(item2_path)
                     })
                     
@@ -119,17 +200,27 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
 
     merged_mods = {}
     
-    # Pre-populate defaults
+     # Pre-populate defaults for Unextracted catalog (Pals, NPCs, and Player templates)
     if not target_mod:
         for name in names_map.keys():
-            merged_mods[name] = { "base_pal": name, "mod_name": name, "category": "Monster", "fmodel_path": "", "ue_path": "" }
+            cat = "Monster"
+            if name.startswith("SK_NPC_") or name.endswith("Boss"):
+                cat = "NPC/Boss" if name.endswith("Boss") else "NPC"
+            elif name.startswith("SK_Player_") or name in ["Female", "Male"]:
+                cat = "Player"
+            merged_mods[name] = { "base_pal": name, "mod_name": name, "category": cat, "fmodel_path": "", "ue_path": "" }
+
         for cp in custom_pals:
             if cp not in merged_mods:
                 merged_mods[cp] = { "base_pal": cp, "mod_name": cp, "category": "Monster", "fmodel_path": "", "ue_path": "" }
     else:
-        # Case-insensitive manual targeting fallback
         resolved_target = resolve_casing(target_mod)
-        merged_mods[resolved_target] = { "base_pal": resolved_target, "mod_name": resolved_target, "category": "Monster", "fmodel_path": "", "ue_path": "" }
+        cat = "Monster"
+        if resolved_target.startswith("SK_NPC_") or resolved_target.endswith("Boss"):
+            cat = "NPC/Boss" if resolved_target.endswith("Boss") else "NPC"
+        elif resolved_target.startswith("SK_Player_") or resolved_target in ["Female", "Male"]:
+            cat = "Player"
+        merged_mods[resolved_target] = { "base_pal": resolved_target, "mod_name": resolved_target, "category": cat, "fmodel_path": "", "ue_path": "" }
 
     for item in discovered_fmodel_norm:
         mod_name = item["mod_name"]

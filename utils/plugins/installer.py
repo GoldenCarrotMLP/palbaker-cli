@@ -134,6 +134,8 @@ def enable_remote_execution_settings(uproject_path: str) -> tuple[bool, str]:
             if in_target_section:
                 if not remote_exec_found:
                     new_lines.append("bRemoteExecution=True\n")
+                    new_lines.append("RemoteExecutionSendBufferSizeBytes=2097152\n")
+                    new_lines.append("RemoteExecutionReceiveBufferSizeBytes=2097152\n")
                     remote_exec_found = True
                 if not dev_mode_found:
                     new_lines.append("bDeveloperMode=True\n")

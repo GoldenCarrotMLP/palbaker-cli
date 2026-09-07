@@ -2,6 +2,7 @@
 import sys
 import os
 import json
+import bpy
 
 current_dir = os.path.abspath(os.path.dirname(__file__))
 if current_dir not in sys.path:
@@ -61,6 +62,49 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
             offset_bones.append(transform_config)
 
     print(f"[PalBaker Extractor] Found {len(jiggle_bones)} jiggle bones and {len(offset_bones)} offset bones.", flush=True)
+
+    # Harvest Bone Constraints (Copy Location, Rotation, Scale)
+    arm_obj = bpy.data.objects.get("Armature")
+    copy_bones = []
+    if arm_obj and arm_obj.type == 'ARMATURE' and arm_obj.pose:
+        copy_map = {}
+        for p_bone in arm_obj.pose.bones:
+            target_name = p_bone.name.replace('.', '_')
+            for c in p_bone.constraints:
+                if getattr(c, "mute", False):
+                    continue
+                if c.type in ['COPY_LOCATION', 'COPY_ROTATION', 'COPY_SCALE']:
+                    source_subtarget = getattr(c, "subtarget", "").strip()
+                    if not source_subtarget:
+                        continue
+                    if c.target and c.target != arm_obj:
+                        continue
+                    
+                    source_name = source_subtarget.replace('.', '_')
+                    key = (target_name, source_name)
+                    if key not in copy_map:
+                        copy_map[key] = {
+                            "target_bone": target_name,
+                            "source_bone": source_name,
+                            "copy_translation": False,
+                            "copy_rotation": False,
+                            "copy_scale": False,
+                            "alpha": 1.0
+                        }
+
+                    if c.type == 'COPY_LOCATION':
+                        copy_map[key]["copy_translation"] = True
+                    elif c.type == 'COPY_ROTATION':
+                        copy_map[key]["copy_rotation"] = True
+                    elif c.type == 'COPY_SCALE':
+                        copy_map[key]["copy_scale"] = True
+
+                    if hasattr(c, "influence"):
+                        copy_map[key]["alpha"] = float(c.influence)
+
+        copy_bones = list(copy_map.values())
+        if copy_bones:
+            print(f"[PalBaker Extractor] Found {len(copy_bones)} Copy Bone constraint mapping(s).", flush=True)
 
     slots_in_order = translator.get_skeletal_mesh_material_slots()
     materials_compile = {}
@@ -133,16 +177,31 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
     #    if k not in merged_materials:
     #        merged_materials[k] = v
 
+    # Harvest all shape keys starting with 'Default'
+    default_shapekeys = []
+    mesh_objs = [obj for obj in bpy.data.objects if obj.type == 'MESH']
+    for obj in mesh_objs:
+        if obj.data and getattr(obj.data, "shape_keys", None) and obj.data.shape_keys.key_blocks:
+            for kb in obj.data.shape_keys.key_blocks:
+                if kb.name != "Basis" and kb.name.lower().startswith("default"):
+                    if kb.name not in default_shapekeys:
+                        default_shapekeys.append(kb.name)
+
+    if default_shapekeys:
+        print(f"[PalBaker Extractor] Found {len(default_shapekeys)} default shape key(s) to enforce: {default_shapekeys}", flush=True)
+
     layout_data = {
         "jiggle_bones": jiggle_bones,
         "offset_bones": offset_bones,
+        "copy_bones": copy_bones,
         "materials": merged_materials,
-        "morph_targets": []
+        "morph_targets": [],
+        "default_shapekeys": default_shapekeys
     }
     
     # Preserve existing other sidecar root parameters safely
-    for k in ["Gender", "IsRarePal", "SkinName", "ReqTrait", "PrefTrait", "MaterialOverrides", "MorphTarget", "preserve_materials"]:
-        if k in existing_data:
+    for k in ["Gender", "IsRarePal", "SkinName", "ReqTrait", "PrefTrait", "MaterialOverrides", "MorphTarget", "preserve_materials", "default_shapekeys", "copy_bones"]:
+        if k in existing_data and k not in layout_data:
             layout_data[k] = existing_data[k]
 
     print(f"[PalBaker Extractor] Writing updated sidecar to: {os.path.basename(output_path)}", flush=True)

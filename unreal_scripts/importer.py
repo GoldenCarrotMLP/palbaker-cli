@@ -1,12 +1,7 @@
-# pythoncli/unreal_scripts/importer.py
 import unreal  # type: ignore
 import os
 
 def harvest_materials(ue_path, target_mesh_name):
-    """
-    Harvests existing material assignments from the Skeletal Mesh before deletion.
-    Returns a dictionary mapping both slot_names and slot_indices to their current MaterialInstanceConstant.
-    """
     harvested = {}
     path = f"{ue_path}/{target_mesh_name}"
     
@@ -22,17 +17,13 @@ def harvest_materials(ue_path, target_mesh_name):
     return harvested
 
 def clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal=False):
-    """
-    Cleans up old mesh assets from memory/disk before re-importing.
-    Wipes the variant-level directory meshes but preserves centralized base directories.
-    """
     if fbx_file and os.path.exists(fbx_file):
         clean_mesh_name = target_mesh_name.replace("SK_", "")
         paths_to_delete = [
             f"{ue_path}/{target_mesh_name}",
             f"{ue_path}/PA_{target_mesh_name}_PhysicsAsset",
             f"{ue_path}/PA_{clean_mesh_name}_PhysicsAsset",
-            f"{ue_path}/{target_mesh_name}_PhysicsAsset"  # Ensure we also wipe stray legacy variants
+            f"{ue_path}/{target_mesh_name}_PhysicsAsset"
         ]
         
         for path in paths_to_delete:
@@ -41,7 +32,6 @@ def clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal=False):
                 try: unreal.EditorAssetLibrary.delete_asset(path)
                 except Exception as e: print(f"[PalBaker] Warning: Failed to delete mesh asset: {e}")
 
-        # Wipe any rogue custom skeletons to ensure it binds to the parent
         if is_custom_pal:
             rogue_skeleton = f"/Game/Pal/Model/Character/Skeleton/{target_mesh_name}/SK_{target_mesh_name}_Skeleton"
             if unreal.EditorAssetLibrary.does_asset_exist(rogue_skeleton):
@@ -50,26 +40,44 @@ def clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal=False):
                 except Exception: pass
 
 def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, template_id=None, is_custom_pal=False, import_tex=True):
-    """
-    Imports textures and the skeletal FBX mesh into Unreal Engine.
-    Forces all variant meshes to bind to a centralized base physics asset.
-    """
-    # 1. Textures Import
+    # 1. Textures Import (Forced Overwrite)
     if import_tex and textures:
-        print("[PalBaker] Importing textures...")
+        print(f"[PalBaker] Importing {len(textures)} textures with forced overwrite...", flush=True)
         import_tasks = []
         for png in textures:
             if os.path.exists(png):
-                tex_name = os.path.splitext(os.path.basename(png))[0]
+                clean_png = os.path.normpath(png).replace("\\", "/")
+                
+                tex_name = os.path.basename(clean_png)
+                while "." in tex_name:
+                    tex_name = os.path.splitext(tex_name)[0]
+                # Sanitize spaces to prevent invalid asset path errors
+                tex_name = tex_name.replace(" ", "_")
+                    
+                tex_asset_path = f"{ue_path}/{tex_name}"
+
+                # Silently delete existing asset to prevent memory locking
+                try:
+                    loaded = unreal.EditorAssetLibrary.load_asset(tex_asset_path)
+                    if loaded:
+                        unreal.EditorAssetLibrary.delete_asset(tex_asset_path)
+                except Exception:
+                    pass
+
                 task = unreal.AssetImportTask()
-                task.set_editor_property('filename', png)
+                task.set_editor_property('filename', clean_png)
                 task.set_editor_property('destination_path', ue_path)
+                task.set_editor_property('destination_name', tex_name)
+                task.set_editor_property('replace_existing', True)
+                task.set_editor_property('replace_existing_settings', True)
                 task.set_editor_property('automated', True)
                 task.set_editor_property('save', True)
                 task.set_editor_property('factory', unreal.TextureFactory())
                 import_tasks.append(task)
+                
         if import_tasks:
             unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(import_tasks)
+            print(f"[PalBaker] Texture buffer processing complete.", flush=True)
 
     # 2. Skeletal Mesh FBX Import
     target_asset_path = ""
@@ -81,7 +89,6 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         
         target_asset_path = f"{ue_path}/{target_mesh_name}"
         
-        # --- DYNAMIC CASING RESOLUTION FOR ROOT REDIRECTIONS ---
         parts = ue_path.replace("\\", "/").split("/")
         category = "Monster"
         if "Character" in parts:
@@ -89,11 +96,9 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
             if idx + 1 < len(parts):
                 category = parts[idx + 1]
 
-        # Explicitly construct the centralized base path and probe targets
         base_ue_path = f"/Game/Pal/Model/Character/{category}/{base_pal}"
         shared_phys_path = f"{base_ue_path}/PA_{base_pal}_PhysicsAsset"
         
-        # Check if the centralized physics asset already exists
         phys_exists = unreal.EditorAssetLibrary.does_asset_exist(shared_phys_path)
 
         clean_mesh_name = target_mesh_name.replace("SK_", "")
@@ -105,9 +110,10 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         ]
 
         task = unreal.AssetImportTask()
-        task.set_editor_property('filename', fbx_file)
+        task.set_editor_property('filename', fbx_file.replace("\\", "/"))
         task.set_editor_property('destination_path', ue_path)
         task.set_editor_property('destination_name', target_mesh_name)
+        task.set_editor_property('replace_existing', True)
         task.set_editor_property('automated', True)
         task.set_editor_property('save', True)
         
@@ -118,7 +124,6 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         import_ui.set_editor_property('import_textures', False)
         import_ui.set_editor_property('import_animations', False)
         
-        # CENTRALIZATION: Only compile a new physics asset if one does not exist yet!
         if phys_exists:
             print(f"[PalBaker] Centralized physics asset detected at {shared_phys_path}. Skipping automatic compilation and binding mesh to it.")
             import_ui.set_editor_property('create_physics_asset', False)
@@ -130,8 +135,9 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         skel_data.set_editor_property('import_mesh_lo_ds', False)
         skel_data.set_editor_property('import_morph_targets', True)
         skel_data.set_editor_property('use_t0_as_ref_pose', True)
+        # Preserve Blender custom split/weighted normals instead of recomputing
+        skel_data.set_editor_property('normal_import_method', unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
         
-        # Force strict routing to the BasePal's isolated skeleton folder
         target_skeleton_name = template_id if (is_custom_pal and template_id) else base_pal
         skeleton_path = f"/Game/Pal/Model/Character/Skeleton/{target_skeleton_name}/SK_{target_skeleton_name}_Skeleton"
         
@@ -145,7 +151,6 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         task.set_editor_property('options', import_ui)
         unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
         
-        # Post-import validation
         imported_asset = unreal.EditorAssetLibrary.load_asset(target_asset_path)
         if imported_asset:
             asset_class = imported_asset.get_class().get_name()
@@ -178,7 +183,6 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
                 unreal.EditorAssetLibrary.make_directory(f"/Game/Pal/Model/Character/Skeleton/{target_skeleton_name}")
                 unreal.EditorAssetLibrary.rename_asset(generated_skeleton_path, expected_skeleton_path)
 
-        # --- EXPLICIT COMPILER-INDEPENDENT PHYSICS RELOCATION PROBING ---
         if not phys_exists:
             found_generated = False
             for cand in candidate_phys_paths:
@@ -196,11 +200,28 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
 
 def import_icon(icon_file, destination_path):
     if icon_file and os.path.exists(icon_file):
+        clean_icon = os.path.normpath(icon_file).replace("\\", "/")
+        icon_name = os.path.basename(clean_icon)
+        while "." in icon_name:
+            icon_name = os.path.splitext(icon_name)[0]
+            
+        icon_asset_path = f"{destination_path}/{icon_name}"
+
+        try:
+            loaded = unreal.EditorAssetLibrary.load_asset(icon_asset_path)
+            if loaded:
+                print(f"[PalBaker] Clearing old UI icon to force replace: {icon_asset_path}")
+                unreal.EditorAssetLibrary.delete_asset(icon_asset_path)
+        except Exception:
+            pass
+
         print(f"[PalBaker] Importing UI Icon: {os.path.basename(icon_file)} -> {destination_path}")
         task = unreal.AssetImportTask()
-        task.set_editor_property('filename', icon_file)
+        task.set_editor_property('filename', clean_icon)
         task.set_editor_property('destination_path', destination_path)
+        task.set_editor_property('destination_name', icon_name)
+        task.set_editor_property('replace_existing', True)
+        task.set_editor_property('replace_existing_settings', True)
         task.set_editor_property('automated', True)
         task.set_editor_property('save', True)
-        task.set_editor_property('factory', unreal.TextureFactory())
         unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])

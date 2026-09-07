@@ -204,26 +204,43 @@ def handle_mod_command(args, settings):
 
     elif action == "decompile":
         from utils.plugins.decompiler import run_decompile_pipeline
-        category = get_category_from_path(mod_data["fmodel_path"] if mod_data else "")
-        
-        if mod_data and mod_data.get("is_variant", False):
-            ue_virtual_path = f"/Game/Pal/Model/Character/{category}/{base_pal}/{mod_name}"
+        category = mod_data.get("category") if (mod_data and mod_data.get("category")) else get_category_from_path(mod_data.get("fmodel_path") if mod_data else "")
+        category_sanitized = category.replace(" ", "_")
+
+        ue_path_disk = mod_data.get("ue_path", "") if mod_data else ""
+        clean_ue = ue_path_disk.replace("\\", "/")
+
+        if ue_path_disk and "Content/" in clean_ue:
+            rel_content = clean_ue.split("Content/", 1)[1].rstrip("/")
+            ue_virtual_path = f"/Game/{rel_content}"
             target_mesh_name = f"SK_{mod_name}"
         else:
-            if mod_data and mod_data.get("is_altermatic_active", False):
-                ue_virtual_path = f"/Game/Pal/Model/Character/{category}/{base_pal}/{mod_name}"
+            if mod_data and mod_data.get("is_variant", False):
+                ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}/{mod_name}"
                 target_mesh_name = f"SK_{mod_name}"
             else:
-                ue_virtual_path = f"/Game/Pal/Model/Character/{category}/{base_pal}"
-                target_mesh_name = f"SK_{base_pal}"
+                if mod_data and mod_data.get("is_altermatic_active", False):
+                    ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}/{mod_name}"
+                    target_mesh_name = f"SK_{mod_name}"
+                else:
+                    ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}"
+                    target_mesh_name = f"SK_{base_pal}"
                 
         fmodel_path = mod_data.get("fmodel_path", "") if mod_data else ""
         if not fmodel_path:
-            fmodel_path = os.path.normpath(os.path.join(
-                settings["fmodel_output"], 
-                "Exports", "Pal", "Content", "Pal", "Model", "Character", 
-                category, base_pal, mod_name
-            ))
+            is_var = mod_data.get("is_variant", False) if mod_data else (base_pal != mod_name)
+            if is_var:
+                fmodel_path = os.path.normpath(os.path.join(
+                    settings["fmodel_output"], 
+                    "Exports", "Pal", "Content", "Pal", "Model", "Character", 
+                    category, base_pal, mod_name
+                ))
+            else:
+                fmodel_path = os.path.normpath(os.path.join(
+                    settings["fmodel_output"], 
+                    "Exports", "Pal", "Content", "Pal", "Model", "Character", 
+                    category, base_pal
+                ))
         
         success, msg = run_decompile_pipeline(
             settings["ue_root"],
@@ -271,13 +288,21 @@ def handle_mod_command(args, settings):
             sys.exit(1)
 
     elif action == "browse-ue":
-        category = get_category_from_path(mod_data["fmodel_path"])
-        category_sanitized = category.replace(" ", "_")
-        
-        if mod_data["is_variant"]:
-            ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}/{mod_name}"
+        ue_path_disk = mod_data.get("ue_path", "") if mod_data else ""
+        clean_ue = ue_path_disk.replace("\\", "/")
+
+        # 1. If it exists in Unreal, convert the physical Content path directly to /Game/...
+        if ue_path_disk and "Content/" in clean_ue:
+            rel_content = clean_ue.split("Content/", 1)[1].rstrip("/")
+            ue_virtual_path = f"/Game/{rel_content}"
         else:
-            ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}"
+            # 2. Otherwise prioritize the scanner's category over fmodel_path
+            category = mod_data.get("category") if (mod_data and mod_data.get("category")) else get_category_from_path(mod_data.get("fmodel_path") if mod_data else "")
+            category_sanitized = category.replace(" ", "_")
+            if mod_data and mod_data.get("is_variant"):
+                ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}/{mod_name}"
+            else:
+                ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}"
             
         python_cmd = f'import unreal; unreal.EditorUtilityLibrary.sync_browser_to_folders(["{ue_virtual_path}"])'
         from utils.builder.unreal_helper import run_remote_command, focus_unreal_window
@@ -322,7 +347,7 @@ def handle_mod_command(args, settings):
         json_print({"status": "success", "message": "Backend compilation pipeline forcibly cancelled."})
 
     else:
-        category = get_category_from_path(mod_data["fmodel_path"] if mod_data else "")
+        category = mod_data.get("category") if (mod_data and mod_data.get("category")) else get_category_from_path(mod_data.get("fmodel_path") if mod_data else "")
         action_mapping = {
             "create-blend": "create_blend",
             "refresh-blend": "refresh_blend",
