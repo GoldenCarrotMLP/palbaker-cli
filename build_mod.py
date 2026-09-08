@@ -178,6 +178,10 @@ def main():
             elif "--overwrite-materials" in sys.argv:
                 preserve_materials = False
 
+            push_materials = bool(sidecar_data.get("push_materials", True))
+            push_textures = bool(sidecar_data.get("push_textures", True))
+            push_animbp = bool(sidecar_data.get("push_animbp", True))
+
             config = {
                 "ue_target_path": virtual_path,
                 "textures": pngs,
@@ -187,9 +191,12 @@ def main():
                 "template_id": workspace.template_id,
                 "is_custom_pal": workspace.is_custom_pal,
                 "preserve_materials": preserve_materials,
+                "push_materials": push_materials,
+                "push_textures": push_textures,
+                "push_animbp": push_animbp,
                 "base_pal": BASE_PAL,
                 "target_mesh_name": workspace.target_mesh_name,
-                "redirect_folder": redirect_folder  # <-- ADDED
+                "redirect_folder": redirect_folder
             }
             config_path = os.path.join(target_dir, "import_config.json")
             with open(config_path, "w", encoding="utf-8") as f:
@@ -244,10 +251,11 @@ def main():
             
         print("SUCCESS! Staged layout sync completed.", flush=True)
 
-    # -------------------------------------------------------------
+   # -------------------------------------------------------------
     # PHASE 2: COOK (Compile only)
     # -------------------------------------------------------------
-    if ACTION in ["cook", "full", "cook_only"]:
+    external_dependency_packages = []
+    if ACTION in ["cook", "full", "cook_only", "recursive_cook"]:
         from utils.builder.cooker_helper import verify_cooking_memory_limit
         
         is_safe, err_msg = verify_cooking_memory_limit(threshold_gb=2.5)
@@ -264,6 +272,17 @@ def main():
             extra_cook_paths.append("/Game/CartoonCelShader/Materials/CelShader")
         if workspace.has_icon:
             extra_cook_paths.append(workspace.icon_virtual_path)
+
+        if ACTION == "recursive_cook":
+            print("[Recursive Cook] Discovering deep asset dependencies in Unreal Editor...", flush=True)
+            from utils.builder.dependency_helper import run_dependency_crawler
+            external_dependency_packages = run_dependency_crawler(workspace)
+            print(f"[Recursive Cook] Discovered {len(external_dependency_packages)} external dependency package(s).", flush=True)
+            for pkg in external_dependency_packages:
+                folder = pkg.rsplit("/", 1)[0]
+                if folder not in extra_cook_paths:
+                    extra_cook_paths.append(folder)
+                    print(f"  [Recursive Cook] Queued external dependency folder: {folder}", flush=True)
             
         with GameIniCookContext(workspace, extra_paths=extra_cook_paths):
             print("Cooking Target Folders...", flush=True)
@@ -287,7 +306,7 @@ def main():
     # -------------------------------------------------------------
     # PHASE 3: PACK (Package only)
     # -------------------------------------------------------------
-    if ACTION in ["cook", "full", "pack_only"]:
+    if ACTION in ["cook", "full", "pack_only", "recursive_cook"]:
         if workspace.is_custom_pal:
             print(f"Custom Pal detected. Auto-generating patched standalone cooked blueprint...", flush=True)
             patch_actor_blueprint(settings, MOD_NAME, workspace.template_id)
@@ -298,7 +317,7 @@ def main():
         response_dir = os.path.join(workspace.project_dir, "Intermediate") if workspace.project_dir else os.path.dirname(__file__)
         response_file = os.path.normpath(os.path.join(response_dir, "response.txt"))
 
-        folders_to_pack = resolve_packaging_manifest(workspace, workspace.has_anims)
+        folders_to_pack = resolve_packaging_manifest(workspace, workspace.has_anims, extra_packages=external_dependency_packages)
 
         print("Building final PAK...", flush=True)
         files_found = pack_cooked_assets(

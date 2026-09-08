@@ -45,15 +45,29 @@ class ModWorkspace:
                 except Exception:
                     pass
 
-        # Determine target mesh name and virtual path based on variance
+        # Check if this base Pal is a nested vanilla variant (e.g. Baphomet_Dark inside Baphomet)
+        self.vanilla_parent_folder = None
+        if not self.is_variant:
+            sidecar_path = os.path.join(self.fmodel_dir, f"{mod_name}_blend.json") if self.fmodel_dir else ""
+            if os.path.exists(sidecar_path):
+                try:
+                    with open(sidecar_path, "r", encoding="utf-8") as f_side:
+                        s_data = json.load(f_side)
+                        self.vanilla_parent_folder = s_data.get("vanilla_parent_folder")
+                except Exception:
+                    pass
+
+        # Determine target mesh name and virtual path based on variance and parent nesting
         category_sanitized = category.replace(" ", "_")
         
         if self.is_variant:
-            # Variants ALWAYS route to their designated nested subfolder
             self.target_mesh_name = f"SK_{mod_name}"
             self.ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}/{mod_name}"
+        elif self.vanilla_parent_folder:
+            # Route directly into the parent folder where vanilla Palworld expects it!
+            self.target_mesh_name = f"SK_{base_pal}"
+            self.ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{self.vanilla_parent_folder}"
         else:
-            # Base Pal routes normally to the root folder
             self.target_mesh_name = f"SK_{base_pal}"
             self.ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}"
 
@@ -104,8 +118,9 @@ class ModWorkspace:
         self.custom_shader_raw = os.path.join(self.project_dir, "Content", "CartoonCelShader", "Materials", "CelShader") if self.project_dir else ""
         self.has_custom_shader = os.path.exists(self.custom_shader_raw) if self.custom_shader_raw else False
 
-        # Hardcoded constraints for dependencies to ensure they remain isolated
-        self.skeleton_virtual_path = f"/Game/Pal/Model/Character/Skeleton/{base_pal}"
+        # Skeleton path routes to parent if nested (e.g. Skeleton/Baphomet instead of Skeleton/Baphomet_Dark)
+        skel_folder = self.vanilla_parent_folder if self.vanilla_parent_folder else base_pal
+        self.skeleton_virtual_path = f"/Game/Pal/Model/Character/Skeleton/{skel_folder}"
         self.blueprint_virtual_path = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{mod_name}"
         
         if self.is_variant:

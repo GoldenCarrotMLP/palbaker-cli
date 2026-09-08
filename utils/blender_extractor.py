@@ -200,7 +200,7 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
     }
     
     # Preserve existing other sidecar root parameters safely
-    for k in ["Gender", "IsRarePal", "SkinName", "ReqTrait", "PrefTrait", "MaterialOverrides", "MorphTarget", "preserve_materials", "default_shapekeys", "copy_bones"]:
+    for k in ["Gender", "IsRarePal", "SkinName", "ReqTrait", "PrefTrait", "MaterialOverrides", "MorphTarget", "preserve_materials", "default_shapekeys", "copy_bones", "push_materials", "push_textures", "push_animbp"]:
         if k in existing_data and k not in layout_data:
             layout_data[k] = existing_data[k]
 

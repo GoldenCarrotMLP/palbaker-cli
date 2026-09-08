@@ -88,7 +88,7 @@ def clean_cook_environment(workspace):
         if not workspace.is_custom_pal:
             shutil.rmtree(workspace.cooked_bp_dir, ignore_errors=True)
 
-def resolve_packaging_manifest(workspace, has_anims: bool) -> list[tuple[str, str]]:
+def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[str] | None = None) -> list[tuple[str, str]]:
     folders_to_pack = []
 
     # 1. Pack the primary targeted directory (whether base pal or nested mod folder)
@@ -153,6 +153,21 @@ def resolve_packaging_manifest(workspace, has_anims: bool) -> list[tuple[str, st
     audio_overrides = get_staged_audio_overrides(workspace)
     if audio_overrides:
         folders_to_pack.extend(audio_overrides)
+
+    # Resolve each external dependency package to its cooked binary files
+    if extra_packages:
+        cooked_base = os.path.join(workspace.project_dir, "Saved", "Cooked", "Windows", workspace.target_project_name, "Content")
+        for pkg in extra_packages:
+            rel_pkg = pkg.replace("/Game/", "").replace("/", os.sep)
+            cooked_file_base = os.path.join(cooked_base, rel_pkg)
+            rel_virtual_dir = pkg.replace("/Game/", "").rsplit("/", 1)[0]
+            
+            for ext in [".uasset", ".uexp", ".ubulk"]:
+                candidate = cooked_file_base + ext
+                if os.path.exists(candidate):
+                    virtual_path = f"{rel_virtual_dir}/{os.path.basename(candidate)}"
+                    folders_to_pack.append((candidate, virtual_path))
+                    print(f"  [Recursive Pack] Added dependency: {virtual_path}", flush=True)
 
     return folders_to_pack
 

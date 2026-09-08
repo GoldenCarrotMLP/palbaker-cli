@@ -157,7 +157,7 @@ def handle_mod_command(args, settings):
         
     if action == "extract":
         is_valid, err_msg = validate_settings(settings, ["fmodel_output", "palworld_exe"])
-    elif action in ["create-blend", "set-icon", "open-source", "set-preserve-materials"]:
+    elif action in ["create-blend", "set-icon", "open-source", "set-preserve-materials", "set-push-setting"]:
         is_valid, err_msg = validate_settings(settings, ["fmodel_output"])
     elif action in ["open-ue", "open-pak"]:
         is_valid, err_msg = validate_settings(settings, ["uproject"])
@@ -168,7 +168,7 @@ def handle_mod_command(args, settings):
         error_print(err_msg)
         sys.exit(1)
 
-    if action in ["push", "full", "decompile", "browse-ue"]:
+    if action in ["push", "full", "decompile", "browse-ue", "recursive-cook"]:
         is_connected, err_code, err_msg = verify_unreal_connection(settings)
         if not is_connected:
             json_print({"status": "error", "error_code": err_code, "message": err_msg})
@@ -200,7 +200,6 @@ def handle_mod_command(args, settings):
         success, msg = extract_pal_assets(settings, mod_name, category)
         json_print({"status": "success" if success else "error", "message": msg})
         if not success: sys.exit(1)
-
 
     elif action == "decompile":
         from utils.plugins.decompiler import run_decompile_pipeline
@@ -287,6 +286,23 @@ def handle_mod_command(args, settings):
             error_print(f"Failed to save material preservation setting: {e}")
             sys.exit(1)
 
+    elif action == "set-push-setting":
+        setting_key = getattr(args, "key", "materials")
+        val_str = getattr(args, "path", "true")
+        bool_val = str(val_str).lower() == "true"
+        sidecar_path = os.path.join(mod_data["fmodel_path"], f"{mod_name}_blend.json")
+        if not os.path.exists(sidecar_path):
+            error_print("Skeletal companion sidecar JSON file not found. Generate the .blend file first!")
+            sys.exit(1)
+        try:
+            from utils.sidecar_helper import update_sidecar_fields
+            full_key = f"push_{setting_key}"
+            update_sidecar_fields(sidecar_path, **{full_key: bool_val})
+            json_print({"status": "success", "message": f"Successfully updated {full_key} to {bool_val} for {mod_name}."})
+        except Exception as e:
+            error_print(f"Failed to save push setting: {e}")
+            sys.exit(1)
+
     elif action == "browse-ue":
         ue_path_disk = mod_data.get("ue_path", "") if mod_data else ""
         clean_ue = ue_path_disk.replace("\\", "/")
@@ -316,7 +332,6 @@ def handle_mod_command(args, settings):
             json_print({"status": "error", "message": f"Failed to focus Unreal: {msg}"})
             sys.exit(1)
 
-    # --- REFACTOR: KEYERROR GUARD AND EXPLICIT DIRECTORY VALIDATIONS ---
     elif action in ["open-source", "open-ue", "open-pak"]:
         if action == "open-source":
             path = mod_data.get("fmodel_path", "") if mod_data else ""
@@ -352,7 +367,8 @@ def handle_mod_command(args, settings):
             "create-blend": "create_blend",
             "refresh-blend": "refresh_blend",
             "cook-only": "cook_only",
-            "pack-only": "pack_only"
+            "pack-only": "pack_only",
+            "recursive-cook": "recursive_cook"
         }
         build_action = action_mapping.get(action, action)
         run_build_mod_and_stream(base_pal, mod_name, category, build_action, preserve_override)

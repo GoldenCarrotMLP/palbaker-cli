@@ -20,7 +20,6 @@ def clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal=False):
     if fbx_file and os.path.exists(fbx_file):
         clean_mesh_name = target_mesh_name.replace("SK_", "")
         paths_to_delete = [
-            f"{ue_path}/{target_mesh_name}",
             f"{ue_path}/PA_{target_mesh_name}_PhysicsAsset",
             f"{ue_path}/PA_{clean_mesh_name}_PhysicsAsset",
             f"{ue_path}/{target_mesh_name}_PhysicsAsset"
@@ -28,9 +27,9 @@ def clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal=False):
         
         for path in paths_to_delete:
             if unreal.EditorAssetLibrary.does_asset_exist(path):
-                print(f"[PalBaker] Clearing old mesh asset from cache: {path}")
+                print(f"[PalBaker] Clearing old physics asset from cache to prevent ghost collisions: {path}")
                 try: unreal.EditorAssetLibrary.delete_asset(path)
-                except Exception as e: print(f"[PalBaker] Warning: Failed to delete mesh asset: {e}")
+                except Exception as e: print(f"[PalBaker] Warning: Failed to delete physics asset: {e}")
 
         if is_custom_pal:
             rogue_skeleton = f"/Game/Pal/Model/Character/Skeleton/{target_mesh_name}/SK_{target_mesh_name}_Skeleton"

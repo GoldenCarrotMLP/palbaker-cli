@@ -73,40 +73,9 @@ def build_pal_names_map(settings: dict) -> tuple[bool, str]:
                 }
             }
 
-        # Ingest Human and Unique NPC names from extracted JSON files
-        for extra_table in ["dt_humannametext_common.json", "dt_uniquenpctext_common.json"]:
-            extra_file = None
-            for root, _, files in os.walk(temp_out):
-                for f in files:
-                    if f.lower() == extra_table:
-                        extra_file = os.path.join(root, f)
-                        break
-                if extra_file: break
-
-            if extra_file and os.path.exists(extra_file):
-                try:
-                    with open(extra_file, "r", encoding="utf-8-sig") as f_extra:
-                        extra_json = json.load(f_extra)
-                    for obj in (extra_json if isinstance(extra_json, list) else [extra_json]):
-                        if obj.get("Type") == "DataTable" and "Rows" in obj:
-                            for r_k, r_v in obj["Rows"].items():
-                                clean_r_k = r_k.replace("NAME_", "")
-                                t_data = r_v.get("TextData", {})
-                                loc_str = t_data.get("LocalizedString", "")
-                                if loc_str and loc_str != "-":
-                                    transformed_rows[clean_r_k] = {
-                                        "TextData": {
-                                            "Namespace": extra_table,
-                                            "Key": clean_r_k,
-                                            "SourceString": t_data.get("SourceString", ""),
-                                            "LocalizedString": loc_str
-                                        }
-                                    }
-                except Exception:
-                    pass
-
-        # Friendly alias mappings for standard archetypes and Tower Bosses
+        # Human and NPC model display name mappings (keyed to the actual 3D model folder names)
         npc_aliases = {
+            # Tower Bosses
             "DesertBoss": "Marcus & Faleris (Desert Boss)",
             "ElectricBoss": "Zoe & Grizzbolt (Electric Boss)",
             "ForestBoss": "Lily & Lyleen (Forest Boss)",
@@ -116,13 +85,53 @@ def build_pal_names_map(settings: dict) -> tuple[bool, str]:
             "SorajimaBoss": "Sorajima Boss",
             "VikingBoss": "Viking Boss",
             "WorldTreeBoss": "World Tree Boss",
-            "SK_Player_Female": "Female Player Body",
-            "SK_Player_Male": "Male Player Body"
+            # Player Models
+            "SK_Player_Female": "Player Body (Female)",
+            "SK_Player_Male": "Player Body (Male)",
+            "Female": "Player Body (Female)",
+            "Male": "Player Body (Male)",
+            # Standard NPC Archetypes
+            "SK_NPC_Female_DesertPeople01": "Desert Resident (Female)",
+            "SK_NPC_Female_Farmer01": "Farmer (Female)",
+            "SK_NPC_Female_Kunoichi01": "Kunoichi (Female)",
+            "SK_NPC_Female_Nomad01": "Nomad (Female)",
+            "SK_NPC_Female_People01": "Villager 01 (Female)",
+            "SK_NPC_Female_People02": "Villager 02 (Female)",
+            "SK_NPC_Female_People03": "Villager 03 (Female)",
+            "SK_NPC_Female_Ranger01": "Free Pal Ranger (Female)",
+            "SK_NPC_Female_Soldier01": "Syndicate Gunner (Female)",
+            "SK_NPC_Female_Soldier02": "Syndicate Elite (Female)",
+            "SK_NPC_Female_Soldier03": "Syndicate Hunter (Female)",
+            "SK_NPC_Female_Soldier04": "Syndicate Enforcer (Female)",
+            "SK_NPC_Female_SnowPeople01": "Snow Resident (Female)",
+            "SK_NPC_Male_Believer01": "Cultist (Male)",
+            "SK_NPC_Male_BelieverFat01": "Cultist Brute (Male)",
+            "SK_NPC_Male_Breeder01": "Pal Breeder (Male)",
+            "SK_NPC_Male_DarkTrader01": "Black Marketeer 01",
+            "SK_NPC_Male_DarkTrader02": "Black Marketeer 02",
+            "SK_NPC_Male_DesertPeople01": "Desert Resident (Male)",
+            "SK_NPC_Male_Doctor": "Doctor (Male)",
+            "SK_NPC_Male_FireCult01": "Brothers of the Eternal Pyre",
+            "SK_NPC_Male_Hunter01": "Syndicate Thug (Male)",
+            "SK_NPC_Male_HunterFat01": "Syndicate Crusher (Male)",
+            "SK_NPC_Male_Ninja01": "Ninja (Male)",
+            "SK_NPC_Male_People01": "Villager 01 (Male)",
+            "SK_NPC_Male_People02": "Villager 02 (Male)",
+            "SK_NPC_Male_People03": "Villager 03 (Male)",
+            "SK_NPC_Male_Police01": "PIDF Officer (Male)",
+            "SK_NPC_Male_Scholar01": "Scholar 01 (Male)",
+            "SK_NPC_Male_Scholar02": "Scholar 02 (Male)",
+            "SK_NPC_Male_Scientist01": "Scientist (Male)",
+            "SK_NPC_Male_Soldier01": "PIDF Guard (Male)",
+            "SK_NPC_Male_Soldier02": "PIDF Elite (Male)",
+            "SK_NPC_Male_Trader01": "Wandering Merchant (Red)",
+            "SK_NPC_Male_Trader02": "Wandering Merchant (Green)",
+            "SK_NPC_Male_Trader03": "Pal Merchant (Blue)"
         }
         for alias_k, alias_v in npc_aliases.items():
             transformed_rows[alias_k] = {
                 "TextData": {
-                    "Namespace": "Aliases",
+                    "Namespace": "NPC_Models",
                     "Key": alias_k,
                     "SourceString": alias_v,
                     "LocalizedString": alias_v

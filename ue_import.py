@@ -33,6 +33,9 @@ def run_pipeline():
     template_id = config.get("template_id")
     is_custom_pal = config.get("is_custom_pal", False)
     preserve_materials = config.get("preserve_materials", True)
+    push_materials = config.get("push_materials", True)
+    push_textures = config.get("push_textures", True)
+    push_animbp = config.get("push_animbp", True)
     
     # Handle backward compatibility or single-mesh payloads gracefully
     models = config.get("models", [])
@@ -56,28 +59,41 @@ def run_pipeline():
         if redirect_folder:
             material_target_ue_path = f"/Game/Pal/Model/Character/Monster/{base_pal}/{redirect_folder}"
 
-        # Import FBX mesh directly to base folder using the model's specific import_name
+       # Import FBX mesh directly (only importing textures if push_textures is True)
         target_asset_path, target_phys_path = import_assets(
-            ue_path, config["textures"], fbx_file, import_name, base_pal, template_id, is_custom_pal, import_tex=True
+            ue_path, config["textures"], fbx_file, import_name, base_pal, template_id, is_custom_pal, import_tex=push_textures
         )
         
-        # But compile the materials inside the variant's folder to avoid duplication!
-        sidecar_json_path = os.path.join(working_dir, bone_data_file)
-        mi_assets = build_materials(material_target_ue_path, sidecar_json_path, config["textures"], target_asset_path, preserve_materials)
+        # Ensure Physics Asset is linked regardless of material push status
+        if target_asset_path and target_phys_path:
+            mesh = unreal.EditorAssetLibrary.load_asset(target_asset_path)
+            phys = unreal.EditorAssetLibrary.load_asset(target_phys_path)
+            if mesh and phys:
+                try: 
+                    mesh.set_editor_property('physics_asset', phys)
+                    unreal.EditorAssetLibrary.save_loaded_asset(mesh)
+                except Exception: pass
         
-        # Link materials of SK_Alpaca to point to the MI assets in Alpaca/Girafarig/
-        bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets, harvested_materials)
-        
-        # Resolve target AnimBP compilation folder
-        rigging_target_ue_path = ue_path
-        if redirect_folder:
-            rigging_target_ue_path = f"/Game/Pal/Model/Character/Monster/{base_pal}/{redirect_folder}"
-            # Re-map import name so rigging.py searches for Girafarig_BP instead of SK_Alpaca_BP
-            import_name = redirect_folder
+        # Only compile and bind Material Instances if push_materials is True
+        if push_materials:
+            sidecar_json_path = os.path.join(working_dir, bone_data_file)
+            mi_assets = build_materials(material_target_ue_path, sidecar_json_path, config["textures"], target_asset_path, preserve_materials)
+            bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets, harvested_materials)
         else:
-            import_name = folder_name
+            print("[PalBaker] Selective Push: Skipped material compilation and binding.")
+        
+        # Only compile and hook AnimBP if push_animbp is True
+        if push_animbp:
+            rigging_target_ue_path = ue_path
+            if redirect_folder:
+                rigging_target_ue_path = f"/Game/Pal/Model/Character/Monster/{base_pal}/{redirect_folder}"
+                import_name = redirect_folder
+            else:
+                import_name = folder_name
 
-        apply_rigging(working_dir, rigging_target_ue_path, import_name, base_pal, target_asset_path, bone_data_file, template_id, is_custom_pal)
+            apply_rigging(working_dir, rigging_target_ue_path, import_name, base_pal, target_asset_path, bone_data_file, template_id, is_custom_pal)
+        else:
+            print("[PalBaker] Selective Push: Skipped Animation Blueprint generation.")
 
     # Process Icon once after all meshes
     icon_file = config.get("icon_file")
