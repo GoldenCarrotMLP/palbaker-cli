@@ -187,11 +187,11 @@ def get_pose_bones_info_base(armature_name: str = "Armature") -> list[dict]:
         is_physics = False
         physics_config = {}
         for suffix, preset in PHYSICS_BONE_PRESETS.items():
-            if match_name.endswith(suffix):
+            if match_name.endswith(suffix) or match_name.endswith(f"{suffix}_l") or match_name.endswith(f"{suffix}_r"):
                 physics_config = dict(preset)
                 is_physics = True
                 break
-        
+
         loc, rot, scale = p_bone.matrix_basis.decompose()
         has_transform = (loc.length > 0.0001 or any(abs(v) > 0.0001 for v in rot.to_euler()) or any(abs(v - 1.0) > 0.0001 for v in scale))
         transform_data = None

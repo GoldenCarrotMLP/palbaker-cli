@@ -2302,5 +2302,11 @@
         "element": "Electricity",
         "category": "Melee",
         "power": 500
+    },
+    "MAX": {
+        "id": "MAX",
+        "element": "None",
+        "category": "Melee",
+        "power": 500
     }
 }

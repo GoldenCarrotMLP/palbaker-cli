@@ -2,6 +2,7 @@
 import os
 import json
 import glob
+import re
 from .names import get_localized_name, load_names_map
 from .audio_helper import get_pal_sound_metadata
 from .sidecar_helper import load_sidecar
@@ -123,6 +124,26 @@ def scan_character_folders(base_path: str, target_mod: str | None = None) -> lis
                         "mod_name": item1,
                         "path": os.path.abspath(item1_path)
                     })
+
+            # Check for vanilla co-located meshes inside the same folder (e.g. SK_Baphomet_Dark_LOD0.psk inside Baphomet/)
+            if os.path.isdir(item1_path):
+                for f in os.listdir(item1_path):
+                    if os.path.isfile(os.path.join(item1_path, f)) and (f.endswith(".psk") or f.endswith(".blend")):
+                        base_fname = os.path.splitext(f)[0]
+                        if base_fname.startswith("SK_"):
+                            base_fname = base_fname[3:]
+                            
+                        # Strip FModel's _LODX suffix
+                        base_fname = re.sub(r'_LOD\d+$', '', base_fname, flags=re.IGNORECASE)
+                        
+                        if base_fname.lower() != item1.lower() and not base_fname.startswith("."):
+                            if not target_mod or base_fname.lower() == target_mod.lower():
+                                discovered.append({
+                                    "category": cat,
+                                    "base_pal": item1,
+                                    "mod_name": base_fname,
+                                    "path": os.path.abspath(item1_path)
+                                })
             
             for item2 in os.listdir(item1_path):
                 item2_path = os.path.join(item1_path, item2)
@@ -200,26 +221,63 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
 
     merged_mods = {}
     
-     # Pre-populate defaults for Unextracted catalog (Pals, NPCs, and Player templates)
-    if not target_mod:
-        for name in names_map.keys():
-            cat = "Monster"
-            if name.startswith("SK_NPC_") or name.endswith("Boss"):
-                cat = "NPC/Boss" if name.endswith("Boss") else "NPC"
-            elif name.startswith("SK_Player_") or name in ["Female", "Male"]:
-                cat = "Player"
-            merged_mods[name] = { "base_pal": name, "mod_name": name, "category": cat, "fmodel_path": "", "ue_path": "" }
+    # Explicit catalog of verified unextracted 3D models in Palworld game paks
+    KNOWN_NPC_MODELS = [
+        # Tower Bosses (NPC/Boss/)
+        ("DesertBoss", "NPC/Boss"), ("ElectricBoss", "NPC/Boss"), ("ForestBoss", "NPC/Boss"),
+        ("GrassBoss", "NPC/Boss"), ("SakurajimaBoss", "NPC/Boss"), ("SnowBoss", "NPC/Boss"),
+        ("SorajimaBoss", "NPC/Boss"), ("VikingBoss", "NPC/Boss"), ("WorldTreeBoss", "NPC/Boss"),
+        # Standard NPC Archetypes (NPC/)
+        ("SK_NPC_Female_DesertPeople01", "NPC"), ("SK_NPC_Female_Farmer01", "NPC"),
+        ("SK_NPC_Female_Kunoichi01", "NPC"), ("SK_NPC_Female_Nomad01", "NPC"),
+        ("SK_NPC_Female_People01", "NPC"), ("SK_NPC_Female_People02", "NPC"), ("SK_NPC_Female_People03", "NPC"),
+        ("SK_NPC_Female_Ranger01", "NPC"), ("SK_NPC_Female_Soldier01", "NPC"), ("SK_NPC_Female_Soldier02", "NPC"),
+        ("SK_NPC_Female_Soldier03", "NPC"), ("SK_NPC_Female_Soldier04", "NPC"), ("SK_NPC_Female_SnowPeople01", "NPC"),
+        ("SK_NPC_Male_Believer01", "NPC"), ("SK_NPC_Male_BelieverFat01", "NPC"), ("SK_NPC_Male_Breeder01", "NPC"),
+        ("SK_NPC_Male_DarkTrader01", "NPC"), ("SK_NPC_Male_DarkTrader02", "NPC"), ("SK_NPC_Male_DesertPeople01", "NPC"),
+        ("SK_NPC_Male_Doctor", "NPC"), ("SK_NPC_Male_FireCult01", "NPC"), ("SK_NPC_Male_Hunter01", "NPC"),
+        ("SK_NPC_Male_HunterFat01", "NPC"), ("SK_NPC_Male_Ninja01", "NPC"), ("SK_NPC_Male_People01", "NPC"),
+        ("SK_NPC_Male_People02", "NPC"), ("SK_NPC_Male_People03", "NPC"), ("SK_NPC_Male_Police01", "NPC"),
+        ("SK_NPC_Male_Scholar01", "NPC"), ("SK_NPC_Male_Scholar02", "NPC"), ("SK_NPC_Male_Scientist01", "NPC"),
+        ("SK_NPC_Male_Soldier01", "NPC"), ("SK_NPC_Male_Soldier02", "NPC"), ("SK_NPC_Male_Trader01", "NPC"),
+        ("SK_NPC_Male_Trader02", "NPC"), ("SK_NPC_Male_Trader03", "NPC")
+    ]
 
+    KNOWN_PLAYER_MODELS = [
+        ("SK_Player_Female", "Player/Body"),
+        ("SK_Player_Male", "Player/Body")
+    ]
+
+    # Pre-populate defaults for Unextracted catalog
+    if not target_mod:
+        # 1. Pals: Only keys that are not NPCs or Players belong to Monster
+        for name in names_map.keys():
+            if not name.startswith("SK_NPC_") and not name.endswith("Boss") and not name.startswith("SK_Player_") and name not in ["Female", "Male"]:
+                merged_mods[name] = { "base_pal": name, "mod_name": name, "category": "Monster", "fmodel_path": "", "ue_path": "" }
+
+        # 2. NPCs: Verified game folders only
+        for npc_id, npc_cat in KNOWN_NPC_MODELS:
+            merged_mods[npc_id] = { "base_pal": npc_id, "mod_name": npc_id, "category": npc_cat, "fmodel_path": "", "ue_path": "" }
+
+        # 3. Player: Verified player meshes
+        for player_id, player_cat in KNOWN_PLAYER_MODELS:
+            merged_mods[player_id] = { "base_pal": player_id, "mod_name": player_id, "category": player_cat, "fmodel_path": "", "ue_path": "" }
+
+        # 4. Custom Pals
         for cp in custom_pals:
             if cp not in merged_mods:
                 merged_mods[cp] = { "base_pal": cp, "mod_name": cp, "category": "Monster", "fmodel_path": "", "ue_path": "" }
     else:
         resolved_target = resolve_casing(target_mod)
         cat = "Monster"
-        if resolved_target.startswith("SK_NPC_") or resolved_target.endswith("Boss"):
-            cat = "NPC/Boss" if resolved_target.endswith("Boss") else "NPC"
-        elif resolved_target.startswith("SK_Player_") or resolved_target in ["Female", "Male"]:
-            cat = "Player"
+        for npc_id, npc_cat in KNOWN_NPC_MODELS:
+            if resolved_target.lower() == npc_id.lower():
+                cat = npc_cat
+                break
+        for player_id, player_cat in KNOWN_PLAYER_MODELS:
+            if resolved_target.lower() == player_id.lower():
+                cat = player_cat
+                break
         merged_mods[resolved_target] = { "base_pal": resolved_target, "mod_name": resolved_target, "category": cat, "fmodel_path": "", "ue_path": "" }
 
     for item in discovered_fmodel_norm:
@@ -257,14 +315,20 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
         
         has_ue = False
         if ue_path and os.path.exists(ue_path):
-            if any(f.startswith("SK_") and f.endswith(".uasset") and "_PhysicsAsset" not in f for f in os.listdir(ue_path)):
-                has_ue = True
+            if is_variant and ue_path.replace("\\", "/").endswith(base_pal):
+                has_ue = any(f.lower() == f"sk_{mod_name.lower()}.uasset" for f in os.listdir(ue_path))
+            else:
+                has_ue = any(f.startswith("SK_") and f.endswith(".uasset") and "_PhysicsAsset" not in f for f in os.listdir(ue_path))
 
         has_blend = False
         has_psk = False
         if has_fmodel:
-            has_blend = any(f.endswith(".blend") for f in os.listdir(fmodel_path))
-            has_psk = any(f.endswith(".psk") for f in os.listdir(fmodel_path))
+            if is_variant and fmodel_path.replace("\\", "/").endswith(base_pal):
+                has_blend = any(f.lower() == f"{mod_name.lower()}.blend" for f in os.listdir(fmodel_path))
+                has_psk = any(mod_name.lower() in f.lower() and f.lower().endswith(".psk") for f in os.listdir(fmodel_path))
+            else:
+                has_blend = any(f.endswith(".blend") for f in os.listdir(fmodel_path))
+                has_psk = any(f.endswith(".psk") for f in os.listdir(fmodel_path))
 
         # Check Altermatic status (Only matters for Base Pals, variants don't use the manifest natively)
         is_altermatic_active = False
@@ -283,8 +347,11 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
                 except Exception:
                     pass
 
-        # Check material preservation setting
+        # Check material preservation setting and selective push toggles
         preserve_materials = True
+        push_materials = True
+        push_textures = True
+        push_animbp = True
         active_vanilla_replacer = ""
         sidecar_path = os.path.join(fmodel_path, f"{mod_name}_blend.json") if fmodel_path else ""
         if os.path.exists(sidecar_path):
@@ -292,6 +359,9 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
                 with open(sidecar_path, "r", encoding="utf-8") as f:
                     sidecar_data = json.load(f)
                     preserve_materials = sidecar_data.get("preserve_materials", True)
+                    push_materials = sidecar_data.get("push_materials", True)
+                    push_textures = sidecar_data.get("push_textures", True)
+                    push_animbp = sidecar_data.get("push_animbp", True)
                     active_vanilla_replacer = sidecar_data.get("active_vanilla_replacer", "")
             except Exception:
                 pass
@@ -398,7 +468,6 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
                 icon_path = shared_icon_path
                 has_icon = True
 
-
         sound_meta = get_pal_sound_metadata(base_pal)
         audio_overrides = {}
         if has_fmodel:
@@ -438,6 +507,9 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
             "is_altermatic_active": is_altermatic_active,
             "altermatic_variants": altermatic_variants,
             "preserve_materials": preserve_materials,
+            "push_materials": push_materials,
+            "push_textures": push_textures,
+            "push_animbp": push_animbp,
             "active_vanilla_replacer": active_vanilla_replacer,
             "physical_variants": [],
             "fmodel_path": fmodel_path,

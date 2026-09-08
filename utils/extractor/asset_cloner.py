@@ -106,19 +106,56 @@ def extract_pal_assets(settings: dict, pal_name: str, category: str = "Monster")
         print(f"[Asset Cloner] Extracting {pal_name} from game paks...")
         pal_relative_dir = f"Pal/Content/Pal/Model/Character/{category}/{pal_name}"
         
+        # Pass 1: Try dedicated folder (e.g. Monster/Kitsunebi_Ice/*)
         success_raw, msg_raw = extract_game_files(settings, [f"{pal_relative_dir}/*"], export_root, format_type="auto")
-        if not success_raw:
-            return False, f"Failed to extract raw assets: {msg_raw}"
-            
         extract_game_files(settings, [f"{pal_relative_dir}/MI_*"], export_root, format_type="json")
         
-        # Clean redundant assets
-        if os.path.exists(pal_dir):
+        has_psk = os.path.exists(pal_dir) and any(f.lower().endswith(".psk") for f in os.listdir(pal_dir))
+        has_files = has_psk
+        target_dir = pal_dir
+
+        # Pass 2: Fallback for nested variants (e.g. Baphomet_Dark inside Monster/Baphomet/)
+        if not has_psk and "_" in pal_name:
+            parent_name = pal_name.split("_")[0]
+            print(f"[Asset Cloner] Dedicated folder missing mesh in paks. Mirroring vanilla layout: Monster/{parent_name}/*{pal_name}*...")
+            
+            parent_rel_dir = f"Pal/Content/Pal/Model/Character/{category}/{parent_name}"
+            extract_patterns = [
+                f"{parent_rel_dir}/SK_{pal_name}*",
+                f"{parent_rel_dir}/*{pal_name}*",
+                f"{parent_rel_dir}/M*_{pal_name}*",
+                f"{parent_rel_dir}/T_{pal_name}*"
+            ]
+            
+            # Extract directly into parent folder to mirror vanilla
+            extract_game_files(settings, extract_patterns, export_root, format_type="auto")
+            extract_game_files(settings, [f"{parent_rel_dir}/M*_{pal_name}*"], export_root, format_type="json")
+
+            # Extract parent skeleton if not already present
+            skel_rel_dir = f"Pal/Content/Pal/Model/Character/Skeleton/{parent_name}"
+            extract_game_files(settings, [f"{skel_rel_dir}/*"], export_root, format_type="auto")
+
+            parent_disk_dir = os.path.normpath(os.path.join(export_root, parent_rel_dir))
+            target_dir = parent_disk_dir
+            
+            # Verify the variant PSK or textures exist in the parent folder
+            has_files = os.path.exists(parent_disk_dir) and any(pal_name.lower() in f.lower() for f in os.listdir(parent_disk_dir))
+
+            # Clean up the artificial folder if created from Pass 1 to prevent rogue directory conflicts
+            if os.path.exists(pal_dir):
+                has_pal_psk = any(f.lower().endswith(".psk") for f in os.listdir(pal_dir))
+                if not has_pal_psk:
+                    shutil.rmtree(pal_dir, ignore_errors=True)
+
+        if not has_files:
+            return False, f"Failed to locate or extract any assets for {pal_name} in dedicated or parent pak directories."
+
+        # Clean redundant cooked uassets from the extracted folder
+        if os.path.exists(target_dir):
             redundant_extensions = (".uasset", ".uexp", ".ubulk")
-            for root, _, files in os.walk(pal_dir):
-                for file in files:
-                    if file.lower().endswith(redundant_extensions):
-                        try: os.remove(os.path.join(root, file))
-                        except OSError: pass
+            for f in os.listdir(target_dir):
+                if f.lower().endswith(redundant_extensions):
+                    try: os.remove(os.path.join(target_dir, f))
+                    except OSError: pass
                         
-        return True, f"Successfully extracted visual assets for {pal_name}."
+        return True, f"Successfully extracted visual assets for {pal_name} into {os.path.basename(target_dir)}."
