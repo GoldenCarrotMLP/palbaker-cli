@@ -151,6 +151,8 @@ class PalManager:
                 "Learnset": cloned_learnset,
                 "SaddleItem": resolved_saddle,
                 "CoopPassives": predicted_coop_passives,
+                "HasFunnel": False,
+                "FunnelWazaID": "Funnel_DreamDemon",
                 "EnableSpawns": True,
                 "SpawnLocationID": predicted_spawner,
                 "SpawnMinLevel": 2,

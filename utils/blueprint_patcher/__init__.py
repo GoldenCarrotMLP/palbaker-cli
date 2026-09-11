@@ -9,6 +9,7 @@ from .patch_mesh import patch_mesh_references, patch_physics_asset
 from .patch_classes import patch_actor_class_and_cdo
 from .clone_weapons import clone_partner_weapons
 from .clone_actions import clone_unique_actions
+from .clone_funnels import clone_funnel_character
 from .build_variants import build_boss_variant, build_predator_variant
 
 def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_data: dict = None, log_callback=None) -> bool:
@@ -69,10 +70,17 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
 
     try:
         # STEP 1: Extract Base Template Blueprint
-        log(f"Extracting base blueprint for {template_id}...")
-        rel_uasset = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}.uasset"
-        rel_uexp = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}.uexp"
-        
+        has_funnel = pal_data.get("HasFunnel", False)
+        if has_funnel:
+            funnel_base = "RaijinDaughter" if "RaijinDaughter" in pal_data.get("FunnelWazaID", "") else "DreamDemon"
+            log(f"HasFunnel is True! Hijacking {funnel_base} blueprint as base to inherit Funnel properties...", "standard")
+            rel_uasset = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{funnel_base}/BP_{funnel_base}.uasset"
+            rel_uexp = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{funnel_base}/BP_{funnel_base}.uexp"
+        else:
+            log(f"Extracting base blueprint for {template_id}...")
+            rel_uasset = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}.uasset"
+            rel_uexp = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}.uexp"
+
         success, msg = extract_game_files(settings, [rel_uasset, rel_uexp], temp_dir, format_type="raw")
         if not success:
             log(f"Failed to extract base blueprint: {msg}", "error")
@@ -87,6 +95,25 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
             f.seek(0)
             base_json_str = f.read()
 
+        if has_funnel:
+            log(f"Retargeting {funnel_base} -> {template_id}...", "standard")
+            custom_waza = pal_data.get("FunnelWazaID", f"Funnel_{funnel_base}")
+            
+            # 1. Protect the Funnel Waza ID
+            base_json_str = base_json_str.replace(f"Funnel_{funnel_base}", "FUNNEL_PROTECTED_ID")
+            
+            # 2. Swap all base references to the template
+            base_json_str = base_json_str.replace(funnel_base, template_id)
+            
+            # 3. Restore the Waza ID with the user's selected attack
+            base_json_str = base_json_str.replace("FUNNEL_PROTECTED_ID", custom_waza)
+
+            # 4. Retarget the Funnel Character blueprint reference directly to the custom pal_id
+            base_json_str = base_json_str.replace(f"BP_FunnelCharacter_{template_id}", f"BP_FunnelCharacter_{pal_id}")
+            
+            # Reload the JSON data since the string was massively mutated
+            base_json_data = json.loads(base_json_str)
+
         # STEP 2: Clone & Retarget Partner Weapons
         base_json_data, base_json_str = clone_partner_weapons(
             base_json_data, base_json_str, template_id, pal_id, settings,
@@ -97,6 +124,12 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
         base_json_data, base_json_str = clone_unique_actions(
             base_json_data, base_json_str, template_id, pal_id, settings,
             temp_dir, cooked_dir, uasset_gui_exe, creation_flags, log
+        )
+
+        # STEP 3b: Clone & Retarget Funnel Characters
+        base_json_data, base_json_str = clone_funnel_character(
+            base_json_data, base_json_str, template_id, pal_id, settings,
+            temp_dir, cooked_dir, uasset_gui_exe, creation_flags, log, pal_data=pal_data
         )
 
         # STEP 4: Atomic Mutations (Mesh, Physics, Class, CDO)
