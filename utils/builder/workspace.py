@@ -22,11 +22,16 @@ class ModWorkspace:
         self.ue_cmd_path = os.path.join(self.ue_root, "Engine", "Binaries", "Win64", "UnrealEditor-Cmd.exe") if self.ue_root else ""
         self.unrealpak_path = os.path.join(self.ue_root, "Engine", "Binaries", "Win64", "UnrealPak.exe") if self.ue_root else ""
 
-        # Local source path
-        if self.is_variant:
-            self.fmodel_dir = os.path.join(self.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", category, base_pal, mod_name) if self.fmodel_root else ""
+        # Local source path: if a physical nested subfolder exists, use it; otherwise use shared parent folder
+        nested_dir = os.path.join(self.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", category, base_pal, mod_name) if self.fmodel_root else ""
+        parent_dir = os.path.join(self.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", category, base_pal) if self.fmodel_root else ""
+
+        if self.is_variant and os.path.exists(nested_dir):
+            self.fmodel_dir = nested_dir
+            self.is_nested_subfolder = True
         else:
-            self.fmodel_dir = os.path.join(self.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", category, base_pal) if self.fmodel_root else ""
+            self.fmodel_dir = parent_dir
+            self.is_nested_subfolder = False
         
         # Standalone Custom Pal detection
         creator_json = os.path.join(self.fmodel_root, "Exports", "Pal", "Content", "Palbaker", "Creator", f"{mod_name}_creator.json") if self.fmodel_root else ""
@@ -45,30 +50,29 @@ class ModWorkspace:
                 except Exception:
                     pass
 
-        # Check if this base Pal is a nested vanilla variant (e.g. Baphomet_Dark inside Baphomet)
+        # Check if this base Pal is a nested vanilla variant and load custom packaging blacklist
         self.vanilla_parent_folder = None
-        if not self.is_variant:
-            sidecar_path = os.path.join(self.fmodel_dir, f"{mod_name}_blend.json") if self.fmodel_dir else ""
-            if os.path.exists(sidecar_path):
-                try:
-                    with open(sidecar_path, "r", encoding="utf-8") as f_side:
-                        s_data = json.load(f_side)
+        self.custom_blacklist = []
+        sidecar_path = os.path.join(self.fmodel_dir, f"{mod_name}_blend.json") if self.fmodel_dir else ""
+        if os.path.exists(sidecar_path):
+            try:
+                with open(sidecar_path, "r", encoding="utf-8") as f_side:
+                    s_data = json.load(f_side)
+                    self.custom_blacklist = s_data.get("custom_blacklist", [])
+                    if not self.is_variant:
                         self.vanilla_parent_folder = s_data.get("vanilla_parent_folder")
-                except Exception:
-                    pass
+            except Exception:
+                pass
 
         # Determine target mesh name and virtual path based on variance and parent nesting
         category_sanitized = category.replace(" ", "_")
         
-        if self.is_variant:
+        # If user created an Altermatic subfolder, route to the subfolder; otherwise keep in shared parent
+        if self.is_variant and self.is_nested_subfolder:
             self.target_mesh_name = f"SK_{mod_name}"
             self.ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}/{mod_name}"
-        elif self.vanilla_parent_folder:
-            # Route directly into the parent folder where vanilla Palworld expects it!
-            self.target_mesh_name = f"SK_{base_pal}"
-            self.ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{self.vanilla_parent_folder}"
         else:
-            self.target_mesh_name = f"SK_{base_pal}"
+            self.target_mesh_name = f"SK_{mod_name}"
             self.ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}"
 
         # --- DETERMINISTIC PARENT TEMPLATE RESOLUTION ---

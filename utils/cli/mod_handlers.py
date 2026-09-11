@@ -157,7 +157,7 @@ def handle_mod_command(args, settings):
         
     if action == "extract":
         is_valid, err_msg = validate_settings(settings, ["fmodel_output", "palworld_exe"])
-    elif action in ["create-blend", "set-icon", "open-source", "set-preserve-materials", "set-push-setting"]:
+    elif action in ["create-blend", "set-icon", "open-source", "set-preserve-materials", "set-push-setting", "set-blacklist"]:
         is_valid, err_msg = validate_settings(settings, ["fmodel_output"])
     elif action in ["open-ue", "open-pak"]:
         is_valid, err_msg = validate_settings(settings, ["uproject"])
@@ -301,6 +301,24 @@ def handle_mod_command(args, settings):
             json_print({"status": "success", "message": f"Successfully updated {full_key} to {bool_val} for {mod_name}."})
         except Exception as e:
             error_print(f"Failed to save push setting: {e}")
+            sys.exit(1)
+
+    elif action == "set-blacklist":
+        val_str = getattr(args, "path", "[]")
+        try:
+            blacklist_array = json.loads(val_str)
+        except Exception:
+            blacklist_array = []
+        sidecar_path = os.path.join(mod_data["fmodel_path"], f"{mod_name}_blend.json")
+        if not os.path.exists(sidecar_path):
+            error_print("Skeletal companion sidecar JSON file not found. Generate the .blend file first!")
+            sys.exit(1)
+        try:
+            from utils.sidecar_helper import update_sidecar_fields
+            update_sidecar_fields(sidecar_path, custom_blacklist=blacklist_array)
+            json_print({"status": "success", "message": f"Successfully updated custom packaging blacklist for {mod_name}."})
+        except Exception as e:
+            error_print(f"Failed to save blacklist setting: {e}")
             sys.exit(1)
 
     elif action == "browse-ue":

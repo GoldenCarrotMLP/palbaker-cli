@@ -10,7 +10,7 @@ from utils.builder.workspace import ModWorkspace
 from utils.builder.config_helper import restore_palbaker_backup, GameIniCookContext
 from utils.builder.blender_helper import run_headless_blender
 from utils.builder.unreal_helper import run_remote_import
-from utils.builder.cooker_helper import clean_cook_environment, resolve_packaging_manifest, run_and_stream, pack_cooked_assets
+from utils.builder.cooker_helper import clean_cook_environment, resolve_packaging_manifest, run_and_stream, pack_cooked_assets, is_path_blacklisted
 from utils.state import save_push_state
 from utils.blueprint_patcher import patch_actor_blueprint
 
@@ -33,6 +33,7 @@ def main():
     settings = load_settings()
 
     workspace = ModWorkspace(BASE_PAL, MOD_NAME, CATEGORY, settings)
+    custom_blacklist = getattr(workspace, "custom_blacklist", [])
 
     # 1. READ VANILLA REDIRECT OPTION
     redirect_folder = ""
@@ -66,6 +67,11 @@ def main():
         psk_files.sort()
         processed_bases = set()
         
+        # Filter for the specific PSK matching this mod
+        target_psks = [p for p in psk_files if os.path.splitext(os.path.basename(p))[0].lower() in [f"sk_{MOD_NAME.lower()}", MOD_NAME.lower()]]
+        if target_psks:
+            psk_files = target_psks
+
         for psk_file in psk_files:
             psk_base = os.path.splitext(os.path.basename(psk_file))[0]
             if psk_base.lower().startswith("sk_"):
@@ -268,21 +274,28 @@ def main():
         clean_cook_environment(workspace)
 
         extra_cook_paths = []
-        if workspace.has_custom_shader:
+        if workspace.has_custom_shader and not is_path_blacklisted("/Game/CartoonCelShader/Materials/CelShader", workspace.custom_blacklist):
             extra_cook_paths.append("/Game/CartoonCelShader/Materials/CelShader")
-        if workspace.has_icon:
+        if workspace.has_icon and not is_path_blacklisted(workspace.icon_virtual_path, workspace.custom_blacklist):
             extra_cook_paths.append(workspace.icon_virtual_path)
 
         if ACTION == "recursive_cook":
             print("[Recursive Cook] Discovering deep asset dependencies in Unreal Editor...", flush=True)
             from utils.builder.dependency_helper import run_dependency_crawler
-            external_dependency_packages = run_dependency_crawler(workspace)
-            print(f"[Recursive Cook] Discovered {len(external_dependency_packages)} external dependency package(s).", flush=True)
-            for pkg in external_dependency_packages:
-                folder = pkg.rsplit("/", 1)[0]
-                if folder not in extra_cook_paths:
-                    extra_cook_paths.append(folder)
-                    print(f"  [Recursive Cook] Queued external dependency folder: {folder}", flush=True)
+            raw_dependency_packages = run_dependency_crawler(workspace)
+            print(f"[Recursive Cook] Discovered {len(raw_dependency_packages)} external dependency package(s).", flush=True)
+            
+            external_dependency_packages = []
+            for pkg in raw_dependency_packages:
+                # Blacklist priority over recursive crawling
+                if is_path_blacklisted(pkg, workspace.custom_blacklist):
+                    print(f"  [Recursive Cook] Blacklisted dependency excluded: {pkg}", flush=True)
+                else:
+                    external_dependency_packages.append(pkg)
+                    folder = pkg.rsplit("/", 1)[0]
+                    if folder not in extra_cook_paths:
+                        extra_cook_paths.append(folder)
+                        print(f"  [Recursive Cook] Queued external dependency folder: {folder}", flush=True)
             
         with GameIniCookContext(workspace, extra_paths=extra_cook_paths):
             print("Cooking Target Folders...", flush=True)
@@ -306,7 +319,7 @@ def main():
     # -------------------------------------------------------------
     # PHASE 3: PACK (Package only)
     # -------------------------------------------------------------
-    if ACTION in ["cook", "full", "pack_only", "recursive_cook"]:
+    if ACTION in ["cook", "full", "pack", "pack_only", "recursive_cook"]:
         if workspace.is_custom_pal:
             print(f"Custom Pal detected. Auto-generating patched standalone cooked blueprint...", flush=True)
             patch_actor_blueprint(settings, MOD_NAME, workspace.template_id)
@@ -325,7 +338,9 @@ def main():
             response_file, 
             final_pak_path, 
             folders_to_pack, 
-            workspace.has_anims
+            workspace.has_anims,
+            custom_blacklist,
+            is_custom_pal=workspace.is_custom_pal
         )
         
         if files_found == 0:

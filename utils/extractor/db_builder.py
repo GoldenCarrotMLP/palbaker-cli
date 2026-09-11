@@ -161,7 +161,12 @@ def build_pal_names_map(settings: dict) -> tuple[bool, str]:
     _build_wild_spawners_cache(settings, repo_root)
     _build_camera_offsets_cache(settings, repo_root)
     _build_resolved_sound_map(settings, repo_root)
-    _build_drop_item_cache(settings, repo_root) # Added
+    _build_drop_item_cache(settings, repo_root)
+    _build_items_cache(settings, repo_root)
+    _build_breeding_cache(settings, repo_root)
+    _build_cage_pals_cache(settings, repo_root)
+    _build_partner_skill_params_cache(settings, repo_root)
+    _build_boss_spawners_cache(settings, repo_root)
 
     return True, "Pal database metrics built and pre-cached successfully."
 
@@ -170,19 +175,25 @@ def _build_drop_item_cache(settings: dict, repo_root: str):
     """Extracts and compiles DT_PalDropItem from game paks into pal_drop_item_cache.json."""
     try:
         temp_drop = os.path.join(repo_root, "temp_drop_extract")
-        success, _ = extract_game_files(
+        success, msg = extract_game_files(
             settings,
-            ["Pal/Content/Pal/DataTable/Character/DT_PalDropItem.uasset"],
+            [
+                "Pal/Content/Pal/DataTable/Character/DT_PalDropItem_Common.uasset",
+                "Pal/Content/Pal/DataTable/Character/DT_PalDropItem.uasset"
+            ],
             temp_drop,
             format_type="json"
         )
         if success:
             raw_drop_path = None
-            for root, _, files in os.walk(temp_drop):
-                for file in files:
-                    if file.lower() == "dt_paldropitem.json":
-                        raw_drop_path = os.path.join(root, file)
-                        break
+            # Prioritize the Common file, fallback to standard if missing
+            for cand in ["dt_paldropitem_common.json", "dt_paldropitem.json"]:
+                for root, _, files in os.walk(temp_drop):
+                    for file in files:
+                        if file.lower() == cand:
+                            raw_drop_path = os.path.join(root, file)
+                            break
+                    if raw_drop_path: break
                 if raw_drop_path: break
                 
             if raw_drop_path and os.path.exists(raw_drop_path):
@@ -193,9 +204,19 @@ def _build_drop_item_cache(settings: dict, repo_root: str):
                     if obj.get("Type") == "DataTable" and "Rows" in obj:
                         rows_obj = obj["Rows"]
                         break
-                if rows_obj:
+                        
+                # Check for 'is not None' instead of truthiness, since {} is False in Python
+                if rows_obj is not None:
                     with open(os.path.join(repo_root, "deps", "pal_drop_item_cache.json"), "w", encoding="utf-8") as f_out:
                         json.dump(rows_obj, f_out, indent=4)
+                    print(f"[Database Builder] Successfully compiled Pal Drop Items cache", flush=True)
+                else:
+                    print(f"[Database Builder] Warning: No 'Rows' found in {raw_drop_path}", flush=True)
+            else:
+                print(f"[Database Builder] Warning: Extracted JSON not found in {temp_drop}", flush=True)
+        else:
+            print(f"[Database Builder] Failed to extract drop item tables: {msg}", flush=True)
+            
         shutil.rmtree(temp_drop, ignore_errors=True)
     except Exception as e:
         print(f"Warning: Failed to compile Pal Drop Item cache: {e}", flush=True)
@@ -693,3 +714,383 @@ def _build_resolved_sound_map(settings: dict, repo_root: str):
         shutil.rmtree(temp_sound, ignore_errors=True)
     except Exception as e:
         print(f"Warning: Failed to compile resolved_sound_map.json: {e}", flush=True)
+
+def _build_items_cache(settings: dict, repo_root: str):
+    """Extracts and compiles item names and metadata into items_cache.json."""
+    try:
+        temp_items = os.path.join(repo_root, "temp_items_extract")
+        success, _ = extract_game_files(
+            settings,
+            [
+                "Pal/Content/L10N/en/Pal/DataTable/Text/DT_ItemNameText_Common.uasset",
+                "Pal/Content/Pal/DataTable/Item/DT_ItemDataTable_Common.uasset"
+            ],
+            temp_items,
+            format_type="json"
+        )
+        if success:
+            raw_names = {}
+            raw_items = {}
+            for root, _, files in os.walk(temp_items):
+                for file in files:
+                    fl = file.lower()
+                    if fl == "dt_itemnametext_common.json":
+                        with open(os.path.join(root, file), "r", encoding="utf-8-sig") as f:
+                            d = json.load(f)
+                        for obj in (d if isinstance(d, list) else [d]):
+                            if obj.get("Type") == "DataTable" and "Rows" in obj:
+                                for rk, rv in obj["Rows"].items():
+                                    clean_k = rk[10:] if rk.startswith("ITEM_NAME_") else rk
+                                    raw_names[clean_k] = rv.get("TextData", {}).get("LocalizedString", clean_k)
+                    elif fl == "dt_itemdatatable_common.json":
+                        with open(os.path.join(root, file), "r", encoding="utf-8-sig") as f:
+                            d = json.load(f)
+                        for obj in (d if isinstance(d, list) else [d]):
+                            if obj.get("Type") == "DataTable" and "Rows" in obj:
+                                raw_items = obj["Rows"]
+
+            if raw_items:
+                items_cache = {}
+                for item_id, item_data in raw_items.items():
+                    friendly_name = raw_names.get(item_id, item_id)
+                    if friendly_name != "None" and not item_id.startswith("None"):
+                        items_cache[item_id] = {
+                            "id": item_id,
+                            "name": friendly_name,
+                            "rarity": item_data.get("Rarity", 0),
+                            "price": item_data.get("Price", 0),
+                            "max_stack": item_data.get("MaxStackCount", 9999),
+                            "type_a": item_data.get("TypeA", "")
+                        }
+                with open(os.path.join(repo_root, "deps", "items_cache.json"), "w", encoding="utf-8") as f_out:
+                    json.dump(items_cache, f_out, indent=4)
+        shutil.rmtree(temp_items, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: Failed to compile items cache: {e}", flush=True)
+
+def _build_breeding_cache(settings: dict, repo_root: str):
+    """Extracts and compiles vanilla unique breeding recipes into breeding_combi_cache.json."""
+    try:
+        temp_combi = os.path.join(repo_root, "temp_combi_extract")
+        success, _ = extract_game_files(
+            settings,
+            ["Pal/Content/Pal/DataTable/Character/DT_PalCombiUnique.uasset"],
+            temp_combi,
+            format_type="json"
+        )
+        if success:
+            raw_combi_path = None
+            for root, _, files in os.walk(temp_combi):
+                for file in files:
+                    if file.lower() == "dt_palcombiunique.json":
+                        raw_combi_path = os.path.join(root, file)
+                        break
+                if raw_combi_path: break
+            if raw_combi_path and os.path.exists(raw_combi_path):
+                with open(raw_combi_path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                rows_obj = None
+                for obj in (data if isinstance(data, list) else [data]):
+                    if obj.get("Type") == "DataTable" and "Rows" in obj:
+                        rows_obj = obj["Rows"]
+                        break
+                if rows_obj:
+                    with open(os.path.join(repo_root, "deps", "breeding_combi_cache.json"), "w", encoding="utf-8") as f_out:
+                        json.dump(rows_obj, f_out, indent=4)
+        shutil.rmtree(temp_combi, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: Failed to compile breeding combi cache: {e}", flush=True)
+
+def _build_cage_pals_cache(settings: dict, repo_root: str):
+    """Extracts and compiles cage spawn field areas into cage_pals_cache.json."""
+    try:
+        temp_cage = os.path.join(repo_root, "temp_cage_extract")
+        success, _ = extract_game_files(
+            settings,
+            ["Pal/Content/Pal/DataTable/Character/DT_CapturedCagePal.uasset"],
+            temp_cage,
+            format_type="json"
+        )
+        if success:
+            raw_cage_path = None
+            for root, _, files in os.walk(temp_cage):
+                for file in files:
+                    if file.lower() == "dt_capturedcagepal.json":
+                        raw_cage_path = os.path.join(root, file)
+                        break
+                if raw_cage_path: break
+            if raw_cage_path and os.path.exists(raw_cage_path):
+                with open(raw_cage_path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                rows_obj = None
+                for obj in (data if isinstance(data, list) else [data]):
+                    if obj.get("Type") == "DataTable" and "Rows" in obj:
+                        rows_obj = obj["Rows"]
+                        break
+                if rows_obj:
+                    field_names = sorted(list(set(row.get("FieldName") for row in rows_obj.values() if row.get("FieldName"))))
+                    payload = {
+                        "field_names": field_names,
+                        "rows": rows_obj
+                    }
+                    with open(os.path.join(repo_root, "deps", "cage_pals_cache.json"), "w", encoding="utf-8") as f_out:
+                        json.dump(payload, f_out, indent=4)
+        shutil.rmtree(temp_cage, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: Failed to compile cage pals cache: {e}", flush=True)
+
+def _build_partner_skill_params_cache(settings: dict, repo_root: str):
+    """Extracts and compiles master partner skill parameter structures."""
+    try:
+        temp_pskill = os.path.join(repo_root, "temp_pskill_extract")
+        success, _ = extract_game_files(
+            settings,
+            ["Pal/Content/Pal/DataTable/PassiveSkill/DT_PartnerSkillParameter.uasset"],
+            temp_pskill,
+            format_type="json"
+        )
+        if success:
+            raw_path = None
+            for root, _, files in os.walk(temp_pskill):
+                for file in files:
+                    if file.lower() == "dt_partnerskillparameter.json":
+                        raw_path = os.path.join(root, file)
+                        break
+                if raw_path: break
+            if raw_path and os.path.exists(raw_path):
+                with open(raw_path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                rows_obj = None
+                for obj in (data if isinstance(data, list) else [data]):
+                    if obj.get("Type") == "DataTable" and "Rows" in obj:
+                        rows_obj = obj["Rows"]
+                        break
+                if rows_obj:
+                    with open(os.path.join(repo_root, "deps", "partner_skill_params_cache.json"), "w", encoding="utf-8") as f_out:
+                        json.dump(rows_obj, f_out, indent=4)
+        shutil.rmtree(temp_pskill, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: Failed to compile partner skill parameter cache: {e}", flush=True)
+
+def _build_boss_spawners_cache(settings: dict, repo_root: str):
+    """Extracts field boss world coordinates and IDs."""
+    try:
+        temp_boss = os.path.join(repo_root, "temp_boss_spawner_extract")
+        success, _ = extract_game_files(
+            settings,
+            ["Pal/Content/Pal/DataTable/UI/DT_BossSpawnerLoactionData.uasset"],
+            temp_boss,
+            format_type="json"
+        )
+        if success:
+            raw_path = None
+            for root, _, files in os.walk(temp_boss):
+                for file in files:
+                    if file.lower() == "dt_bossspawnerloactiondata.json":
+                        raw_path = os.path.join(root, file)
+                        break
+                if raw_path: break
+            if raw_path and os.path.exists(raw_path):
+                with open(raw_path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                rows_obj = None
+                for obj in (data if isinstance(data, list) else [data]):
+                    if obj.get("Type") == "DataTable" and "Rows" in obj:
+                        rows_obj = obj["Rows"]
+                        break
+                if rows_obj:
+                    with open(os.path.join(repo_root, "deps", "boss_spawners_cache.json"), "w", encoding="utf-8") as f_out:
+                        json.dump(rows_obj, f_out, indent=4)
+        shutil.rmtree(temp_boss, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: Failed to compile boss spawner location cache: {e}", flush=True)
+
+def _build_items_cache(settings: dict, repo_root: str):
+    """Extracts and compiles item names and metadata into items_cache.json."""
+    try:
+        temp_items = os.path.join(repo_root, "temp_items_extract")
+        success, _ = extract_game_files(
+            settings,
+            [
+                "Pal/Content/L10N/en/Pal/DataTable/Text/DT_ItemNameText_Common.uasset",
+                "Pal/Content/Pal/DataTable/Item/DT_ItemDataTable_Common.uasset"
+            ],
+            temp_items,
+            format_type="json"
+        )
+        if success:
+            raw_names = {}
+            raw_items = {}
+            for root, _, files in os.walk(temp_items):
+                for file in files:
+                    fl = file.lower()
+                    if fl == "dt_itemnametext_common.json":
+                        with open(os.path.join(root, file), "r", encoding="utf-8-sig") as f:
+                            d = json.load(f)
+                        for obj in (d if isinstance(d, list) else [d]):
+                            if obj.get("Type") == "DataTable" and "Rows" in obj:
+                                for rk, rv in obj["Rows"].items():
+                                    clean_k = rk[10:] if rk.startswith("ITEM_NAME_") else rk
+                                    raw_names[clean_k] = rv.get("TextData", {}).get("LocalizedString", clean_k)
+                    elif fl == "dt_itemdatatable_common.json":
+                        with open(os.path.join(root, file), "r", encoding="utf-8-sig") as f:
+                            d = json.load(f)
+                        for obj in (d if isinstance(d, list) else [d]):
+                            if obj.get("Type") == "DataTable" and "Rows" in obj:
+                                raw_items = obj["Rows"]
+
+            if raw_items:
+                items_cache = {}
+                for item_id, item_data in raw_items.items():
+                    friendly_name = raw_names.get(item_id, item_id)
+                    if friendly_name != "None" and not item_id.startswith("None"):
+                        items_cache[item_id] = {
+                            "id": item_id,
+                            "name": friendly_name,
+                            "rarity": item_data.get("Rarity", 0),
+                            "price": item_data.get("Price", 0),
+                            "max_stack": item_data.get("MaxStackCount", 9999),
+                            "type_a": item_data.get("TypeA", "")
+                        }
+                with open(os.path.join(repo_root, "deps", "items_cache.json"), "w", encoding="utf-8") as f_out:
+                    json.dump(items_cache, f_out, indent=4)
+        shutil.rmtree(temp_items, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: Failed to compile items cache: {e}", flush=True)
+
+def _build_breeding_cache(settings: dict, repo_root: str):
+    """Extracts and compiles vanilla unique breeding recipes into breeding_combi_cache.json."""
+    try:
+        temp_combi = os.path.join(repo_root, "temp_combi_extract")
+        success, _ = extract_game_files(
+            settings,
+            ["Pal/Content/Pal/DataTable/Character/DT_PalCombiUnique.uasset"],
+            temp_combi,
+            format_type="json"
+        )
+        if success:
+            raw_combi_path = None
+            for root, _, files in os.walk(temp_combi):
+                for file in files:
+                    if file.lower() == "dt_palcombiunique.json":
+                        raw_combi_path = os.path.join(root, file)
+                        break
+                if raw_combi_path: break
+            if raw_combi_path and os.path.exists(raw_combi_path):
+                with open(raw_combi_path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                rows_obj = None
+                for obj in (data if isinstance(data, list) else [data]):
+                    if obj.get("Type") == "DataTable" and "Rows" in obj:
+                        rows_obj = obj["Rows"]
+                        break
+                if rows_obj:
+                    with open(os.path.join(repo_root, "deps", "breeding_combi_cache.json"), "w", encoding="utf-8") as f_out:
+                        json.dump(rows_obj, f_out, indent=4)
+        shutil.rmtree(temp_combi, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: Failed to compile breeding combi cache: {e}", flush=True)
+
+def _build_cage_pals_cache(settings: dict, repo_root: str):
+    """Extracts and compiles cage spawn field areas into cage_pals_cache.json."""
+    try:
+        temp_cage = os.path.join(repo_root, "temp_cage_extract")
+        success, _ = extract_game_files(
+            settings,
+            ["Pal/Content/Pal/DataTable/Character/DT_CapturedCagePal.uasset"],
+            temp_cage,
+            format_type="json"
+        )
+        if success:
+            raw_cage_path = None
+            for root, _, files in os.walk(temp_cage):
+                for file in files:
+                    if file.lower() == "dt_capturedcagepal.json":
+                        raw_cage_path = os.path.join(root, file)
+                        break
+                if raw_cage_path: break
+            if raw_cage_path and os.path.exists(raw_cage_path):
+                with open(raw_cage_path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                rows_obj = None
+                for obj in (data if isinstance(data, list) else [data]):
+                    if obj.get("Type") == "DataTable" and "Rows" in obj:
+                        rows_obj = obj["Rows"]
+                        break
+                if rows_obj:
+                    field_names = sorted(list(set(row.get("FieldName") for row in rows_obj.values() if row.get("FieldName"))))
+                    payload = {
+                        "field_names": field_names,
+                        "rows": rows_obj
+                    }
+                    with open(os.path.join(repo_root, "deps", "cage_pals_cache.json"), "w", encoding="utf-8") as f_out:
+                        json.dump(payload, f_out, indent=4)
+        shutil.rmtree(temp_cage, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: Failed to compile cage pals cache: {e}", flush=True)
+
+def _build_partner_skill_params_cache(settings: dict, repo_root: str):
+    """Extracts and compiles master partner skill parameter structures."""
+    try:
+        temp_pskill = os.path.join(repo_root, "temp_pskill_extract")
+        success, _ = extract_game_files(
+            settings,
+            ["Pal/Content/Pal/DataTable/PassiveSkill/DT_PartnerSkillParameter.uasset"],
+            temp_pskill,
+            format_type="json"
+        )
+        if success:
+            raw_path = None
+            for root, _, files in os.walk(temp_pskill):
+                for file in files:
+                    if file.lower() == "dt_partnerskillparameter.json":
+                        raw_path = os.path.join(root, file)
+                        break
+                if raw_path: break
+            if raw_path and os.path.exists(raw_path):
+                with open(raw_path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                rows_obj = None
+                for obj in (data if isinstance(data, list) else [data]):
+                    if obj.get("Type") == "DataTable" and "Rows" in obj:
+                        rows_obj = obj["Rows"]
+                        break
+                if rows_obj:
+                    with open(os.path.join(repo_root, "deps", "partner_skill_params_cache.json"), "w", encoding="utf-8") as f_out:
+                        json.dump(rows_obj, f_out, indent=4)
+        shutil.rmtree(temp_pskill, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: Failed to compile partner skill parameter cache: {e}", flush=True)
+
+def _build_boss_spawners_cache(settings: dict, repo_root: str):
+    """Extracts field boss world coordinates and IDs."""
+    try:
+        temp_boss = os.path.join(repo_root, "temp_boss_spawner_extract")
+        success, _ = extract_game_files(
+            settings,
+            ["Pal/Content/Pal/DataTable/UI/DT_BossSpawnerLoactionData.uasset"],
+            temp_boss,
+            format_type="json"
+        )
+        if success:
+            raw_path = None
+            for root, _, files in os.walk(temp_boss):
+                for file in files:
+                    if file.lower() == "dt_bossspawnerloactiondata.json":
+                        raw_path = os.path.join(root, file)
+                        break
+                if raw_path: break
+            if raw_path and os.path.exists(raw_path):
+                with open(raw_path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                rows_obj = None
+                for obj in (data if isinstance(data, list) else [data]):
+                    if obj.get("Type") == "DataTable" and "Rows" in obj:
+                        rows_obj = obj["Rows"]
+                        break
+                if rows_obj:
+                    with open(os.path.join(repo_root, "deps", "boss_spawners_cache.json"), "w", encoding="utf-8") as f_out:
+                        json.dump(rows_obj, f_out, indent=4)
+        shutil.rmtree(temp_boss, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: Failed to compile boss spawner location cache: {e}", flush=True)

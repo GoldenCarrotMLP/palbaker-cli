@@ -1,4 +1,4 @@
-# pythoncli/utils/cli/parser_helper.py
+# utils/cli/parser_helper.py
 import argparse
 
 def create_cli_parser() -> argparse.ArgumentParser:
@@ -15,7 +15,7 @@ def create_cli_parser() -> argparse.ArgumentParser:
 
     # mod
     mod_parser = subparsers.add_parser("mod", help="Pipeline execution")
-    mod_parser.add_argument("action", choices=["extract", "create-blend", "push", "cook", "pack", "full", "decompile", "set-icon", "browse-ue", "open-source", "open-ue", "open-pak", "ping", "set-preserve-materials", "refresh-blend", "recursive-cook", "set-push-setting"])
+    mod_parser.add_argument("action", choices=["extract", "create-blend", "push", "cook", "pack", "full", "decompile", "set-icon", "browse-ue", "open-source", "open-ue", "open-pak", "ping", "set-preserve-materials", "refresh-blend", "recursive-cook", "set-push-setting", "set-blacklist"])
     mod_parser.add_argument("base_pal", help="Original base Pal (e.g., WeaselDragon)")
     mod_parser.add_argument("mod", help="Unique name of the mod")
     mod_parser.add_argument("--overwrite", action="store_true", help="Overwrite existing .blend files during decompile")

@@ -79,7 +79,27 @@ class PalManager:
             base_properties = self.c.templates_cache.get(template_id, {})
             cloned_learnset = self.c.learnsets_cache.get(template_id, [])
 
-            predicted_saddle = f"SkillUnlock_{template_id}"
+            # Query Partner Skill Parameter table for exact active skill and unlock item
+            parent_params = {}
+            if hasattr(self.c, "partner_skill_params_cache"):
+                parent_params = self.c.partner_skill_params_cache.get(template_id, {})
+
+            # 1. Resolve exact default partner skill identifier
+            resolved_partner_skill = "None"
+            active_skill_name = parent_params.get("ActiveSkill", {}).get("SkillName")
+            if active_skill_name and active_skill_name != "Unknown" and active_skill_name != "None":
+                resolved_partner_skill = active_skill_name
+            elif base_properties.get("PartnerSkill") and base_properties.get("PartnerSkill") != "None":
+                resolved_partner_skill = base_properties.get("PartnerSkill")
+
+            # 2. Resolve exact saddle / harness unlock item
+            resolved_saddle = f"SkillUnlock_{template_id}"
+            restriction_items = parent_params.get("RestrictionItems", [])
+            if restriction_items and isinstance(restriction_items, list) and len(restriction_items) > 0:
+                item_key = restriction_items[0].get("Key")
+                if item_key and item_key != "None":
+                    resolved_saddle = item_key
+
             predicted_coop_passives = []
             if "weaseldragon" in template_id.lower() or "amaterasuwolf" in template_id.lower():
                 predicted_coop_passives.append("GiveADragon_Ride")
@@ -100,6 +120,13 @@ class PalManager:
                 "Defense": base_properties.get("Defense", 100),
                 "Support": base_properties.get("Support", 100),
                 "CraftSpeed": base_properties.get("CraftSpeed", 100),
+
+                "PartnerSkill": resolved_partner_skill,
+                "PartnerWeaponElement": base_properties.get("ElementType1", "EPalElementType::Fire"),
+                "PartnerWeaponEffectType": "EPalAdditionalEffectType::Burn",
+                "PartnerWeaponNiagara": "Pal/Content/Pal/Effect/Skill/FlameThrower/NS_CommonSkill_Flamethrower",
+                "Learnset": cloned_learnset,
+                "SaddleItem": resolved_saddle,
                 
                 "Size": base_properties.get("Size", "EPalSizeType::M"),
                 "Rarity": base_properties.get("Rarity", 1),
@@ -120,9 +147,9 @@ class PalManager:
 
                 "BaseSkills": ["AirCanon", "IgnisBlast"],
                 "PassiveSkills": [],
-                "PartnerSkill": base_properties.get("PartnerSkill", "None"),
+                "PartnerSkill": resolved_partner_skill,
                 "Learnset": cloned_learnset,
-                "SaddleItem": predicted_saddle,
+                "SaddleItem": resolved_saddle,
                 "CoopPassives": predicted_coop_passives,
                 "EnableSpawns": True,
                 "SpawnLocationID": predicted_spawner,

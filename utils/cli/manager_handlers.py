@@ -63,7 +63,12 @@ def handle_manager_command(args, settings):
             "learnsets": {},
             "camera_offsets": {},
             "traits_db": {},
-            "pal_names": {}
+            "pal_names": {},
+            "items": {},
+            "breeding_combos": {},
+            "cage_pals": {},
+            "partner_skill_params": {},
+            "boss_spawners": {}
         }
         
         file_mappings = {
@@ -75,7 +80,12 @@ def handle_manager_command(args, settings):
             "monster_spawners_default_map": "monster_spawners_default_map.json",
             "templates": "monster_parameter_cache.json",
             "learnsets": "waza_master_level_cache.json",
-            "camera_offsets": "camera_offsets_cache.json"
+            "camera_offsets": "camera_offsets_cache.json",
+            "items": "items_cache.json",
+            "breeding_combos": "breeding_combi_cache.json",
+            "cage_pals": "cage_pals_cache.json",
+            "partner_skill_params": "partner_skill_params_cache.json",
+            "boss_spawners": "boss_spawners_cache.json"
         }
         
         for key, filename in file_mappings.items():

@@ -31,12 +31,37 @@ def handle_env_command(args, settings):
         from utils.plugin_manager import check_project_requirements
         
         try:
-            # Resolve base database status
+            # Check all required generated database and cache JSON files
             repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            map_path = os.path.join(repo_root, "deps", "pal_names_map.json")
-            sound_map_path = os.path.join(repo_root, "deps", "resolved_sound_map.json")
-            skills_cache = os.path.join(repo_root, "deps", "active_skills_cache.json")
-            needs_db_build = not os.path.exists(map_path) or not os.path.exists(sound_map_path) or not os.path.exists(skills_cache)
+            deps_dir = os.path.join(repo_root, "deps")
+
+            EXPECTED_DB_FILES = [
+                "pal_names_map.json",
+                "resolved_sound_map.json",
+                "active_skills_cache.json",
+                "passive_skills_cache.json",
+                "coop_passives_cache.json",
+                "partner_skills_cache.json",
+                "monster_parameter_cache.json",
+                "waza_master_level_cache.json",
+                "monster_spawners_cache.json",
+                "monster_spawners_default_map.json",
+                "camera_offsets_cache.json",
+                "pal_drop_item_cache.json",
+                "items_cache.json",
+                "breeding_combi_cache.json",
+                "cage_pals_cache.json",
+                "partner_skill_params_cache.json",
+                "boss_spawners_cache.json"
+            ]
+
+            missing_db_files = []
+            for db_file in EXPECTED_DB_FILES:
+                p = os.path.join(deps_dir, db_file)
+                if not os.path.exists(p) or os.path.getsize(p) == 0:
+                    missing_db_files.append(db_file)
+
+            needs_db_build = len(missing_db_files) > 0
 
             fmodel_base = settings.get("fmodel_output", "")
             has_icons = False
@@ -67,14 +92,23 @@ def handle_env_command(args, settings):
                 }
 
             reqs["needs_db_build"] = needs_db_build
+            reqs["missing_db_files"] = missing_db_files
 
             if has_ue_paths and reqs.get("needs_plugin_sync"):
-                project_dir = os.path.dirname(settings["uproject"])
-                dest_plugin_dir = os.path.join(project_dir, "Plugins", "PalBakerEditorUtils")
-                if os.path.exists(dest_plugin_dir):
-                    json_print({"type": "log", "level": "warning", "message": "The C++ Editor Helper Plugin is outdated. If compiling, close Unreal Editor first."})
-                else:
-                    json_print({"type": "log", "level": "standard", "message": "Required C++ Editor Helper Plugin is missing."})
+                    project_dir = os.path.dirname(settings["uproject"])
+                    dest_plugin_dir = os.path.join(project_dir, "Plugins", "PalBakerEditorUtils")
+                    if os.path.exists(dest_plugin_dir):
+                        json_print({"type": "log", "level": "warning", "message": "The C++ Editor Helper Plugin is outdated. If compiling, close Unreal Editor first."})
+                    else:
+                        json_print({"type": "log", "level": "standard", "message": "Required C++ Editor Helper Plugin is missing."})
+
+            if reqs.get("needs_db_build"):
+                    missing_count = len(reqs.get("missing_db_files", []))
+                    json_print({
+                        "type": "log", 
+                        "level": "warning", 
+                        "message": f"Pal database is incomplete ({missing_count} cache files missing). Rebuild required."
+                    })
 
             json_print({"status": "success", "data": reqs, "message": "Verification completed."})
             sys.exit(0)
@@ -198,12 +232,30 @@ def handle_env_command(args, settings):
             remote_exec_enabled = check_remote_execution_settings(uproject) if uproject else False
             unreal_running = is_unreal_running()
 
+            # Check database cache readiness
+            repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            deps_dir = os.path.join(repo_root, "deps")
+            expected_db_files = [
+                "pal_names_map.json", "resolved_sound_map.json", "active_skills_cache.json",
+                "passive_skills_cache.json", "coop_passives_cache.json", "partner_skills_cache.json",
+                "monster_parameter_cache.json", "waza_master_level_cache.json", "monster_spawners_cache.json",
+                "monster_spawners_default_map.json", "camera_offsets_cache.json", "pal_drop_item_cache.json",
+                "items_cache.json", "breeding_combi_cache.json", "cage_pals_cache.json",
+                "partner_skill_params_cache.json", "boss_spawners_cache.json"
+            ]
+            missing_db_files = [
+                f for f in expected_db_files 
+                if not os.path.exists(os.path.join(deps_dir, f)) or os.path.getsize(os.path.join(deps_dir, f)) == 0
+            ]
+
             json_print({
                 "status": "success",
                 "ue4ss": ue4ss_status,
                 "palschema": palschema_status,
                 "remote_exec_enabled": remote_exec_enabled,
-                "unreal_running": unreal_running
+                "unreal_running": unreal_running,
+                "needs_db_build": len(missing_db_files) > 0,
+                "missing_db_files": missing_db_files
             })
         except Exception as e:
             error_print(f"Failed to fetch integration status: {str(e)}")
