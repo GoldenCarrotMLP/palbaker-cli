@@ -353,6 +353,7 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
         push_textures = True
         push_animbp = True
         active_vanilla_replacer = ""
+        custom_blacklist = []
         sidecar_path = os.path.join(fmodel_path, f"{mod_name}_blend.json") if fmodel_path else ""
         if os.path.exists(sidecar_path):
             try:
@@ -363,6 +364,7 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
                     push_textures = sidecar_data.get("push_textures", True)
                     push_animbp = sidecar_data.get("push_animbp", True)
                     active_vanilla_replacer = sidecar_data.get("active_vanilla_replacer", "")
+                    custom_blacklist = sidecar_data.get("custom_blacklist", [])
             except Exception:
                 pass
 
@@ -511,6 +513,7 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
             "push_textures": push_textures,
             "push_animbp": push_animbp,
             "active_vanilla_replacer": active_vanilla_replacer,
+            "custom_blacklist": custom_blacklist,
             "physical_variants": [],
             "fmodel_path": fmodel_path,
             "ue_path": ue_path

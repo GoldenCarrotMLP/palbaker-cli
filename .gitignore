@@ -44,3 +44,12 @@ package.json
 dump.mjs
 dump.txt
 manager_settings.json
+deps/boss_spawners_cache.json
+deps/breeding_combi_cache.json
+deps/cage_pals_cache.json
+deps/items_cache.json
+deps/monster_parameter_cache.json
+deps/pal_drop_item_cache.json
+temp_bp_extract
+deps/partner_skill_params_cache.json
+deps/monster_parameter_cache.json
