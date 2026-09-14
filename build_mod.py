@@ -273,7 +273,24 @@ def main():
         from utils.builder.cooker_helper import clean_cook_environment
         clean_cook_environment(workspace)
 
+        category_sanitized = workspace.category.replace(" ", "_").replace("\\", "/")
+        cat_parts = workspace.category.replace("/", os.sep)
         extra_cook_paths = []
+
+        # Automatically discover variant subfolders directly from the Unreal Project Content folder
+        ue_char_dir = os.path.normpath(os.path.join(
+            workspace.project_dir, "Content", "Pal", "Model", "Character", 
+            cat_parts, workspace.base_pal
+        )) if workspace.project_dir else ""
+        if os.path.exists(ue_char_dir):
+            for sub in os.listdir(ue_char_dir):
+                sub_p = os.path.join(ue_char_dir, sub)
+                if os.path.isdir(sub_p) and not sub.startswith(".") and sub.lower() not in ["sources", ".palbaker_audio"]:
+                    variant_vpath = f"/Game/Pal/Model/Character/{category_sanitized}/{workspace.base_pal}/{sub}"
+                    if variant_vpath not in extra_cook_paths:
+                        extra_cook_paths.append(variant_vpath)
+                        print(f"  [Cook Queue] Added variant directory to cook: {variant_vpath}", flush=True)
+
         if workspace.has_custom_shader and not is_path_blacklisted("/Game/CartoonCelShader/Materials/CelShader", workspace.custom_blacklist):
             extra_cook_paths.append("/Game/CartoonCelShader/Materials/CelShader")
         if workspace.has_icon and not is_path_blacklisted(workspace.icon_virtual_path, workspace.custom_blacklist):
@@ -287,7 +304,6 @@ def main():
             
             external_dependency_packages = []
             for pkg in raw_dependency_packages:
-                # Blacklist priority over recursive crawling
                 if is_path_blacklisted(pkg, workspace.custom_blacklist):
                     print(f"  [Recursive Cook] Blacklisted dependency excluded: {pkg}", flush=True)
                 else:
@@ -300,7 +316,9 @@ def main():
         with GameIniCookContext(workspace, extra_paths=extra_cook_paths):
             print("Cooking Target Folders...", flush=True)
             from utils.builder.cooker_helper import run_and_stream
-            had_cook_issues = run_and_stream([
+            
+            # Construct command and explicitly force target directories via -cookdir
+            cook_cmd = [
                 workspace.ue_cmd_path, 
                 workspace.uproject_path, 
                 "-run=cook", 
@@ -308,7 +326,8 @@ def main():
                 "-unversioned", 
                 "-NoUI", 
                 "-Map=/Engine/Maps/Entry"
-            ])
+            ]
+            had_cook_issues = run_and_stream(cook_cmd)
             if had_cook_issues:
                 print("COOK FAILED: Errors encountered during compile.", flush=True)
                 sys.exit(1)

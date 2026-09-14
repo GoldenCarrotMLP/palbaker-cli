@@ -110,27 +110,44 @@ class ModWorkspace:
             except Exception:
                 pass
 
-        # Custom ModKit Staging Checks (AnimBP Isolation enforcement)
+        # Category-agnostic pathing: dynamically supports Monster, NPC, NPC/Boss, and Player
+        cat_rel = os.path.normpath(category.replace("/", os.sep))
+        cat_virtual = category_sanitized
+
         self.anims_source_dir = ""
         if self.project_dir:
             if self.is_variant:
-                self.anims_source_dir = os.path.join(self.project_dir, "Content", "Pal", "Animation", "Character", "Monster", base_pal, mod_name)
+                self.anims_source_dir = os.path.join(self.project_dir, "Content", "Pal", "Animation", "Character", cat_rel, base_pal, mod_name)
             else:
-                self.anims_source_dir = os.path.join(self.project_dir, "Content", "Pal", "Animation", "Character", "Monster", base_pal)
+                self.anims_source_dir = os.path.join(self.project_dir, "Content", "Pal", "Animation", "Character", cat_rel, base_pal)
         
         self.has_anims = os.path.exists(self.anims_source_dir) if self.anims_source_dir else False
         self.custom_shader_raw = os.path.join(self.project_dir, "Content", "CartoonCelShader", "Materials", "CelShader") if self.project_dir else ""
         self.has_custom_shader = os.path.exists(self.custom_shader_raw) if self.custom_shader_raw else False
 
-        # Skeleton path routes to parent if nested (e.g. Skeleton/Baphomet instead of Skeleton/Baphomet_Dark)
-        skel_folder = self.vanilla_parent_folder if self.vanilla_parent_folder else base_pal
+        # Resolve skeleton directory dynamically for Humans / NPCs / Monsters
+        if self.vanilla_parent_folder:
+            skel_folder = self.vanilla_parent_folder
+        elif "npc" in self.category.lower() or "player" in self.category.lower():
+            # Check if project contains Human or Player skeleton folder
+            skel_folder = "Human" if os.path.exists(os.path.join(self.project_dir, "Content", "Pal", "Model", "Character", "Skeleton", "Human")) else "Player"
+        else:
+            skel_folder = base_pal
+
         self.skeleton_virtual_path = f"/Game/Pal/Model/Character/Skeleton/{skel_folder}"
-        self.blueprint_virtual_path = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{mod_name}"
+        
+        # Route blueprints and animations under the actual category folder
+        if "npc" in category.lower():
+            self.blueprint_virtual_path = f"/Game/Pal/Blueprint/Character/NPC/{mod_name}"
+        elif "player" in category.lower():
+            self.blueprint_virtual_path = f"/Game/Pal/Blueprint/Character/Player/{mod_name}"
+        else:
+            self.blueprint_virtual_path = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{mod_name}"
         
         if self.is_variant:
-            self.anims_virtual_path = f"/Game/Pal/Animation/Character/Monster/{base_pal}/{mod_name}"
+            self.anims_virtual_path = f"/Game/Pal/Animation/Character/{cat_virtual}/{base_pal}/{mod_name}"
         else:
-            self.anims_virtual_path = f"/Game/Pal/Animation/Character/Monster/{base_pal}"
+            self.anims_virtual_path = f"/Game/Pal/Animation/Character/{cat_virtual}/{base_pal}"
             
         self.icon_virtual_path = "/Game/Pal/Texture/PalIcon/Normal"
 

@@ -83,6 +83,7 @@ def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action
         cmd.append("--overwrite-materials")
     
     creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+    error_context = []
     
     try:
         proc = subprocess.Popen(
@@ -128,14 +129,39 @@ def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action
                     json_print({"type": "progress", "percent": percent, "message": line_clean})
                     
                 level = "error" if "error" in line_clean.lower() else ("warning" if "warning" in line_clean.lower() else "standard")
+                
+                if level == "error" and "0 error" not in line_clean.lower() and "warning/error summary" not in line_clean.lower():
+                    error_context.append(line_clean)
+                    
                 json_print({"type": "log", "level": level, "message": line_clean})
                 
         proc.wait()
         if proc.returncode == 0:
             json_print({"type": "result", "status": "success", "message": f"Successfully completed action: {action}"})
         else:
-            json_print({"type": "result", "status": "error", "message": f"Pipeline action {action} failed with exit code: {proc.returncode}"})
-            sys.exit(proc.returncode)
+                err_msg = f"Pipeline action {action} failed with exit code: {proc.returncode}"
+                if error_context:
+                    # Prioritize logs that specifically identify the broken asset or compiler failure
+                    asset_errors = [
+                        e for e in error_context 
+                        if "[assetlog]" in e.lower() or ".uasset" in e.lower() or "[compiler]" in e.lower()
+                    ]
+                    if asset_errors:
+                        err_msg += f"\n{asset_errors[-1]}"
+                    else:
+                        real_errors = [
+                            e for e in error_context 
+                            if "subprocess.calledprocesserror" not in e.lower() 
+                            and "failed with exit code" not in e.lower() 
+                            and "loginit: display: failure" not in e.lower()
+                        ]
+                        if real_errors:
+                            err_msg += f"\n{real_errors[-1]}"
+                        else:
+                            err_msg += f"\n{error_context[-1]}"
+                        
+                json_print({"type": "result", "status": "error", "message": err_msg})
+                sys.exit(proc.returncode)
             
     except Exception as e:
         json_print({"type": "result", "status": "error", "message": f"Pipeline execution crashed: {str(e)}"})

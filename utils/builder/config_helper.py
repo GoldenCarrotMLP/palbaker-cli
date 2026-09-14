@@ -46,8 +46,13 @@ def inject_packaging_settings(ini_path: str, ue_virtual_path: str, skeleton_virt
         append_lines.append(f'+DirectoriesToAlwaysCook=(Path="{anims_virtual_path}")\n')
         
     if extra_paths:
-        for path in extra_paths:
-            append_lines.append(f'+DirectoriesToAlwaysCook=(Path="{path}")\n')
+            for path in extra_paths:
+                clean_p = path.strip()
+                # Inject both /Game/... and relative content paths to guarantee UE5 cooker finds the folder
+                append_lines.append(f'+DirectoriesToAlwaysCook=(Path="{clean_p}")\n')
+                if clean_p.startswith("/Game/"):
+                    rel_p = clean_p[6:]
+                    append_lines.append(f'+DirectoriesToAlwaysCook=(Path="{rel_p}")\n')
             
     append_lines.append("MapsToCook=(Map=\"/Engine/Maps/Entry\")\n")
 
@@ -97,20 +102,41 @@ class GameIniCookContext:
             actual_extra_paths = list(self.extra_paths)
             
             # --- DYNAMIC RECURSIVE DISCOVERY AND BINDING ---
-            category_sanitized = self.workspace.category.replace(" ", "_")
+            category_sanitized = self.workspace.category.replace(" ", "_").replace("\\", "/")
+            cat_parts = self.workspace.category.replace("/", os.sep)
+                
+            # Check both FModel export directory AND Unreal Project Content folder
+            candidate_source_dirs = []
+                
             base_fmodel_dir = os.path.normpath(os.path.join(
                 self.workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
-                self.workspace.category, self.workspace.base_pal
-            ))
-            
+                cat_parts, self.workspace.base_pal
+            )) if self.workspace.fmodel_root else ""
             if os.path.exists(base_fmodel_dir):
-                for sub in os.listdir(base_fmodel_dir):
-                    sub_path = os.path.join(base_fmodel_dir, sub)
-                    # Automatically queue every subdirectory on disk to always cook
-                    if os.path.isdir(sub_path) and not sub.startswith(".") and sub.lower() != "sources":
-                        variant_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{self.workspace.base_pal}/{sub}"
-                        actual_extra_paths.append(variant_virtual_path)
-                        print(f"  [Recursive Cook] Automatically queued variant subfolder: {variant_virtual_path}", flush=True)
+                candidate_source_dirs.append(base_fmodel_dir)
+
+            ue_project_char_dir = os.path.normpath(os.path.join(
+                self.workspace.project_dir, "Content", "Pal", "Model", "Character", 
+                cat_parts, self.workspace.base_pal
+            )) if self.workspace.project_dir else ""
+            if os.path.exists(ue_project_char_dir) and ue_project_char_dir not in candidate_source_dirs:
+                candidate_source_dirs.append(ue_project_char_dir)
+
+            discovered_subs = set()
+            for c_dir in candidate_source_dirs:
+                for sub in os.listdir(c_dir):
+                    sub_path = os.path.join(c_dir, sub)
+                    if os.path.isdir(sub_path) and not sub.startswith(".") and sub.lower() not in ["sources", ".palbaker_audio"]:
+                        discovered_subs.add(sub)
+
+            for sub in sorted(list(discovered_subs)):
+                variant_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{self.workspace.base_pal}/{sub}"
+                if variant_virtual_path not in actual_extra_paths:
+                    actual_extra_paths.append(variant_virtual_path)
+                    print(f"  [Recursive Cook] Automatically queued variant subfolder: {variant_virtual_path}", flush=True)
+
+
+
 
             inject_packaging_settings(
                 self.workspace.ini_path,

@@ -54,10 +54,10 @@ def run_pipeline():
         
         clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal)
         
-        # Resolve target material compilation folder
+        # Resolve target material compilation folder dynamically based on active category
         material_target_ue_path = ue_path
         if redirect_folder:
-            material_target_ue_path = f"/Game/Pal/Model/Character/Monster/{base_pal}/{redirect_folder}"
+            material_target_ue_path = f"{ue_path}/{redirect_folder}"
 
        # Import FBX mesh directly (only importing textures if push_textures is True)
         target_asset_path, target_phys_path = import_assets(
@@ -86,7 +86,7 @@ def run_pipeline():
         if push_animbp:
             rigging_target_ue_path = ue_path
             if redirect_folder:
-                rigging_target_ue_path = f"/Game/Pal/Model/Character/Monster/{base_pal}/{redirect_folder}"
+                rigging_target_ue_path = f"{ue_path}/{redirect_folder}"
                 import_name = redirect_folder
             else:
                 import_name = folder_name

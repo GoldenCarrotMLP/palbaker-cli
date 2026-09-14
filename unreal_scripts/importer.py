@@ -138,7 +138,32 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         skel_data.set_editor_property('normal_import_method', unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
         
         target_skeleton_name = template_id if (is_custom_pal and template_id) else base_pal
-        skeleton_path = f"/Game/Pal/Model/Character/Skeleton/{target_skeleton_name}/SK_{target_skeleton_name}_Skeleton"
+        clean_skel_name = target_skeleton_name[3:] if target_skeleton_name.startswith("SK_") else target_skeleton_name
+
+        is_humanoid = (
+            "npc" in category.lower() or 
+            "player" in category.lower() or 
+            base_pal.lower().startswith("sk_npc") or 
+            base_pal.lower().startswith("sk_player") or
+            "human" in base_pal.lower()
+        )
+
+        if is_humanoid:
+            # NPCs and Players share standardized Human skeletons in Palworld
+            candidate_skeletons = [
+                "/Game/Pal/Model/Character/Skeleton/Human/SK_PalHuman_Skeleton",
+                "/Game/Pal/Model/Character/Skeleton/Human/SK_PalHuman_Female_Skeleton",
+                "/Game/Pal/Model/Character/Skeleton/Human/SK_PalHuman_Male_Skeleton",
+                "/Game/Pal/Model/Character/Skeleton/Player/SK_PalHuman_Skeleton"
+            ]
+            skeleton_path = candidate_skeletons[0]
+            for cand in candidate_skeletons:
+                if unreal.EditorAssetLibrary.does_asset_exist(cand):
+                    skeleton_path = cand
+                    break
+            print(f"[PalBaker] Humanoid NPC/Player detected. Target skeleton routed to: {skeleton_path}")
+        else:
+            skeleton_path = f"/Game/Pal/Model/Character/Skeleton/{clean_skel_name}/SK_{clean_skel_name}_Skeleton"
         
         existing_skeleton = unreal.EditorAssetLibrary.load_asset(skeleton_path)
         if existing_skeleton:
@@ -171,15 +196,21 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
             
             asset_class = asset.get_class().get_name()
             if asset_class == "Skeleton":
-                if imported_path != expected_skeleton_path:
-                    unreal.EditorAssetLibrary.make_directory(f"/Game/Pal/Model/Character/Skeleton/{target_skeleton_name}")
-                    unreal.EditorAssetLibrary.rename_asset(imported_path, expected_skeleton_path)
+                if is_humanoid:
+                    # Clean up rogue generated skeleton for humanoids and bind mesh to master human skeleton
+                    if existing_skeleton and asset != existing_skeleton:
+                        print(f"[PalBaker] Master skeleton active. Deleting rogue generated skeleton: {imported_path}")
+                        unreal.EditorAssetLibrary.delete_asset(imported_path)
+                else:
+                    if imported_path != expected_skeleton_path:
+                        unreal.EditorAssetLibrary.make_directory(f"/Game/Pal/Model/Character/Skeleton/{clean_skel_name}")
+                        unreal.EditorAssetLibrary.rename_asset(imported_path, expected_skeleton_path)
                 skeleton_relocated = True
 
-        if not skeleton_relocated:
+        if not skeleton_relocated and not is_humanoid:
             generated_skeleton_path = f"{ue_path}/{target_mesh_name}_Skeleton"
             if unreal.EditorAssetLibrary.does_asset_exist(generated_skeleton_path) and generated_skeleton_path != expected_skeleton_path:
-                unreal.EditorAssetLibrary.make_directory(f"/Game/Pal/Model/Character/Skeleton/{target_skeleton_name}")
+                unreal.EditorAssetLibrary.make_directory(f"/Game/Pal/Model/Character/Skeleton/{clean_skel_name}")
                 unreal.EditorAssetLibrary.rename_asset(generated_skeleton_path, expected_skeleton_path)
 
         if not phys_exists:

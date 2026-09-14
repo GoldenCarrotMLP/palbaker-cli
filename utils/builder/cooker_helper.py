@@ -78,8 +78,7 @@ def clean_cook_environment(workspace):
                 print(f"CRITICAL ERROR: Cannot overwrite '{os.path.basename(p)}'. Close the game!", flush=True)
                 sys.exit(1)
 
-    if os.path.exists(workspace.cooked_dir): 
-        shutil.rmtree(workspace.cooked_dir, ignore_errors=True)
+    # Note: We do NOT delete workspace.cooked_dir so that pre-cooked variant subfolders (like TestingA) are preserved!
     if os.path.exists(workspace.cooked_skel_dir): 
         shutil.rmtree(workspace.cooked_skel_dir, ignore_errors=True)
     if os.path.exists(workspace.cooked_anims_dir): 
@@ -146,30 +145,46 @@ def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[
         folders_to_pack.append((workspace.cooked_dir, workspace.ue_virtual_path.replace("/Game/", "")))
         
     # 2. DYNAMIC RECURSIVE DISCOVERY AND GATHERING
-    category_sanitized = workspace.category.replace(" ", "_")
+    category_sanitized = workspace.category.replace(" ", "_").replace("\\", "/")
+    cat_parts = workspace.category.replace("/", os.sep)
+    
+    # Check both FModel export directory AND Unreal Project Content folder
+    candidate_source_dirs = []
     base_fmodel_dir = os.path.normpath(os.path.join(
         workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
-        workspace.category, workspace.base_pal
-    ))
-    
+        cat_parts, workspace.base_pal
+    )) if workspace.fmodel_root else ""
     if os.path.exists(base_fmodel_dir):
-        for sub in os.listdir(base_fmodel_dir):
-            sub_path = os.path.join(base_fmodel_dir, sub)
-            if os.path.isdir(sub_path) and not sub.startswith(".") and sub.lower() != "sources":
-                variant_rel = f"Pal/Model/Character/{category_sanitized}/{workspace.base_pal}/{sub}"
-                
-                # Check blacklist before packing variant subfolder
-                if is_path_blacklisted(f"/Game/{variant_rel}", blacklist):
-                    print(f"  [Recursive Pack] Blacklisted variant folder excluded: {variant_rel}", flush=True)
-                    continue
+        candidate_source_dirs.append(base_fmodel_dir)
 
-                variant_cooked_dir = os.path.join(
-                    workspace.project_dir, "Saved", "Cooked", "Windows", workspace.target_project_name, 
-                    "Content", os.path.normpath(variant_rel)
-                )
-                if os.path.exists(variant_cooked_dir):
-                    folders_to_pack.append((variant_cooked_dir, variant_rel))
-                    print(f"  [Recursive Pack] Bundled cooked assets for variant subfolder: {sub}", flush=True)
+    ue_project_char_dir = os.path.normpath(os.path.join(
+        workspace.project_dir, "Content", "Pal", "Model", "Character", 
+        cat_parts, workspace.base_pal
+    )) if workspace.project_dir else ""
+    if os.path.exists(ue_project_char_dir) and ue_project_char_dir not in candidate_source_dirs:
+        candidate_source_dirs.append(ue_project_char_dir)
+
+    discovered_subs = set()
+    for c_dir in candidate_source_dirs:
+        for sub in os.listdir(c_dir):
+            sub_path = os.path.join(c_dir, sub)
+            if os.path.isdir(sub_path) and not sub.startswith(".") and sub.lower() not in ["sources", ".palbaker_audio"]:
+                discovered_subs.add(sub)
+
+    for sub in sorted(list(discovered_subs)):
+        variant_rel = f"Pal/Model/Character/{category_sanitized}/{workspace.base_pal}/{sub}"
+        
+        if is_path_blacklisted(f"/Game/{variant_rel}", blacklist):
+            print(f"  [Recursive Pack] Blacklisted variant folder excluded: {variant_rel}", flush=True)
+            continue
+
+        variant_cooked_dir = os.path.join(
+            workspace.project_dir, "Saved", "Cooked", "Windows", workspace.target_project_name, 
+            "Content", os.path.normpath(variant_rel)
+        )
+        if os.path.exists(variant_cooked_dir):
+            folders_to_pack.append((variant_cooked_dir, variant_rel))
+            print(f"  [Recursive Pack] Bundled cooked assets for variant subfolder: {sub}", flush=True)
 
     if os.path.exists(workspace.cooked_skel_dir):
         folders_to_pack.append((workspace.cooked_skel_dir, workspace.skeleton_virtual_path.replace("/Game/", "")))
@@ -255,25 +270,26 @@ def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[
 
 def pack_cooked_assets(unrealpak_path: str, response_file: str, output_pak: str, folders_to_pack: list, has_anims: bool, custom_blacklist: list = None, is_custom_pal: bool = False) -> int:
     os.makedirs(os.path.dirname(response_file), exist_ok=True)
-    PACKAGING_BLACKLIST = [""]#["extra"]
     if custom_blacklist is None:
         custom_blacklist = []
         
     files_found = 0
+    print(f"  [Packer] Scanning {len(folders_to_pack)} folder targets for compiled assets...", flush=True)
     
     with open(response_file, "w") as f:
         for path_on_disk, relative_virtual_path in folders_to_pack:
+            print(f"  [Packer] Evaluating Target: {path_on_disk}", flush=True)
+            
             if os.path.exists(path_on_disk):
                 if os.path.isdir(path_on_disk):
                     for root, _, files in os.walk(path_on_disk):
+                        print(f"  [Packer] Walking sub-directory '{root}' (Found {len(files)} files)", flush=True)
                         for file in files:
                             if file.endswith((".uasset", ".uexp", ".ubulk")):
                                 # Standalone Custom Pals MUST package their physics assets to ragdoll properly
                                 if "PhysicsAsset" in file and not is_custom_pal:
                                     continue
                                 if "Skeleton" in file and not has_anims and not is_custom_pal:
-                                    continue
-                                if any(term.lower() in file.lower() for term in PACKAGING_BLACKLIST):
                                     continue
                                     
                                 abs_path = os.path.join(root, file)
@@ -283,26 +299,26 @@ def pack_cooked_assets(unrealpak_path: str, response_file: str, output_pak: str,
                                 
                                 # Evaluate user-defined custom blacklist
                                 if is_path_blacklisted(game_virtual_path, custom_blacklist):
-                                    print(f"  [Blacklist] Excluded via custom rule: {game_virtual_path}", flush=True)
+                                    print(f"  [Packer] Ignored by Blacklist: {game_virtual_path}", flush=True)
                                     continue
 
                                 rel_virtual = "../../../Pal/Content/" + rel_virtual_tail
                                 f.write(f'"{abs_path}" "{rel_virtual}"\n')
                                 files_found += 1
                 else:
-                    filename = os.path.basename(path_on_disk)
-                    if any(term.lower() in filename.lower() for term in PACKAGING_BLACKLIST):
-                        continue
-                        
                     game_virtual_path = f"/Game/{relative_virtual_path.replace(chr(92), '/')}"
                     if is_path_blacklisted(game_virtual_path, custom_blacklist):
-                        print(f"  [Blacklist] Excluded via custom rule: {game_virtual_path}", flush=True)
+                        print(f"  [Packer] Ignored standalone file by Blacklist: {game_virtual_path}", flush=True)
                         continue
                         
                     rel_virtual = "../../../Pal/Content/" + relative_virtual_path.replace("\\", "/")
                     f.write(f'"{path_on_disk}" "{rel_virtual}"\n')
                     files_found += 1
+            else:
+                print(f"  [Packer] Target directory does not exist on disk, skipping: {path_on_disk}", flush=True)
                                 
+    print(f"  [Packer] Total packable files discovered: {files_found}", flush=True)
+    
     if files_found > 0:
         # 1. Ensure target directory exists (UnrealPak fails if destination directory does not exist)
         out_dir = os.path.dirname(output_pak)
