@@ -370,22 +370,33 @@ def main():
             swap_json_dir = os.path.join(os.path.dirname(workspace.palworld_exe), "Pal", "Content", "Paks", "~Mods", "SwapJSON")
         
         if swap_json_dir:
-            has_subfolders = False
-            base_fmodel_dir = os.path.normpath(os.path.join(
-                workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
-                workspace.category, workspace.base_pal
-            ))
-            if os.path.exists(base_fmodel_dir):
-                for sub in os.listdir(base_fmodel_dir):
-                    if os.path.isdir(os.path.join(base_fmodel_dir, sub)) and not sub.startswith(".") and sub.lower() != "sources":
-                        has_subfolders = True
-                        break
-            
-            if has_subfolders:
-                from utils.altermatic_helper import compile_unified_altermatic_json
-                print(f"[Altermatic] Dynamically compiling unified variants registration config for {workspace.base_pal}...", flush=True)
-                success, msg = compile_unified_altermatic_json(workspace.base_pal, base_fmodel_dir, swap_json_dir)
-                print(msg, flush=True)
+            target_deployed_json = os.path.join(swap_json_dir, f"palbaker-{workspace.base_pal}.json")
+
+            # If Altermatic is toggled off, guarantee the deployed JSON is deleted from the game
+            if not workspace.is_altermatic_active:
+                if os.path.exists(target_deployed_json):
+                    try:
+                        os.remove(target_deployed_json)
+                        print(f"[Altermatic] Cleaned up disabled Altermatic config from game: {os.path.basename(target_deployed_json)}", flush=True)
+                    except OSError:
+                        pass
+            else:
+                has_subfolders = False
+                base_fmodel_dir = os.path.normpath(os.path.join(
+                    workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
+                    workspace.category, workspace.base_pal
+                ))
+                if os.path.exists(base_fmodel_dir):
+                    for sub in os.listdir(base_fmodel_dir):
+                        if os.path.isdir(os.path.join(base_fmodel_dir, sub)) and not sub.startswith(".") and sub.lower() != "sources":
+                            has_subfolders = True
+                            break
+                
+                if has_subfolders:
+                    from utils.altermatic_helper import compile_unified_altermatic_json
+                    print(f"[Altermatic] Dynamically compiling unified variants registration config for {workspace.base_pal}...", flush=True)
+                    success, msg = compile_unified_altermatic_json(workspace.base_pal, base_fmodel_dir, swap_json_dir)
+                    print(msg, flush=True)
 
 if __name__ == "__main__":
     main()

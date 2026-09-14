@@ -69,6 +69,18 @@ class AltermaticController:
         
         if is_active:
             self.compiler.deploy_to_game(current_char_id, fmodel_dir)
+        else:
+            # Immediately delete deployed config from the game folder when toggled OFF
+            palworld_exe = self.settings.get("palworld_exe", "")
+            if palworld_exe and os.path.exists(palworld_exe):
+                swap_json_dir = os.path.join(os.path.dirname(palworld_exe), "Pal", "Content", "Paks", "~Mods", "SwapJSON")
+                target_json = os.path.join(swap_json_dir, f"palbaker-{current_char_id}.json")
+                if os.path.exists(target_json):
+                    try:
+                        os.remove(target_json)
+                        self.view.write_log(f"Purged disabled Altermatic config from game: {os.path.basename(target_json)}", "standard")
+                    except OSError:
+                        pass
             
         self.mc.refresh_mods(scan_disk=True, target_mod=current_char_id)
 

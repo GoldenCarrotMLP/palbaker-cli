@@ -161,6 +161,17 @@ def compile_unified_altermatic_json(monster_name: str, altermatic_staging_dir: s
     try:
         with open(manifest_path, "r", encoding="utf-8") as f_man:
             manifest_data = json.load(f_man)
+
+        # Respect the toggle switch: if disabled, clean up the deployed JSON and exit early
+        if not manifest_data.get("is_altermatic_active", True):
+            target_path = os.path.join(swap_json_dir, f"palbaker-{monster_name}.json")
+            if os.path.exists(target_path):
+                try:
+                    os.remove(target_path)
+                except OSError:
+                    pass
+            return True, f"Altermatic is disabled for {monster_name}. Deployed config removed from game."
+
         variants_data = manifest_data.get("variants", {})
         
         variants_list = []

@@ -255,7 +255,7 @@ def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[
 
 def pack_cooked_assets(unrealpak_path: str, response_file: str, output_pak: str, folders_to_pack: list, has_anims: bool, custom_blacklist: list = None, is_custom_pal: bool = False) -> int:
     os.makedirs(os.path.dirname(response_file), exist_ok=True)
-    PACKAGING_BLACKLIST = ["extra"]
+    PACKAGING_BLACKLIST = [""]#["extra"]
     if custom_blacklist is None:
         custom_blacklist = []
         
