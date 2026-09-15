@@ -1,3 +1,4 @@
+# ui_client/dispatcher.py
 import asyncio
 import json
 import subprocess
@@ -108,6 +109,7 @@ class PalBakerCLI:
         if res.get("status") == "success":
             return res.get("data", {})
         return {}
+
     async def creator_add(self, pal_id: str, template_id: str):
         """Create a new standalone Pal."""
         return await self._execute(["creator", "add", pal_id, "--template", template_id])
@@ -122,31 +124,31 @@ class PalBakerCLI:
         data_str = json_lib.dumps(data_payload)
         return await self._execute(["creator", "update", pal_id, "--data", data_str])
 
-    async def altermatic_toggle(self, mod_name: str, status: str):
-        """Toggle Altermatic framework on/off (status: 'on' or 'off')."""
-        return await self._execute(["altermatic", "toggle", mod_name, status])
+    async def dynamic_pals_toggle(self, mod_name: str, status: str):
+        """Toggle Dynamic Pals framework on/off (status: 'on' or 'off')."""
+        return await self._execute(["dynamic_pals", "toggle", mod_name, status])
 
-    async def altermatic_list(self, mod_name: str):
-        """List all Altermatic variants for a mod."""
-        return await self._execute(["altermatic", "list", mod_name])
+    async def dynamic_pals_list(self, mod_name: str):
+        """List all Dynamic Pal variants for a mod."""
+        return await self._execute(["dynamic_pals", "list", mod_name])
 
-    async def altermatic_add(self, mod_name: str, label: str, custom: bool, source: str):
-        """Add Altermatic variant via CLI."""
-        args = ["altermatic", "add", mod_name, label]
+    async def dynamic_pals_add(self, mod_name: str, label: str, custom: bool, source: str):
+        """Add Dynamic Pal variant via CLI."""
+        args = ["dynamic_pals", "add", mod_name, label]
         if custom:
             args.append("--custom")
         args.extend(["--source", source])
         return await self._execute(args)
 
-    async def altermatic_delete(self, mod_name: str, index: int):
-        """Delete Altermatic variant via CLI."""
-        return await self._execute(["altermatic", "delete", mod_name, str(index)])
+    async def dynamic_pals_delete(self, mod_name: str, index: int):
+        """Delete Dynamic Pal variant via CLI."""
+        return await self._execute(["dynamic_pals", "delete", mod_name, str(index)])
 
-    async def altermatic_save(self, index: int, data: dict):
-        """Save Altermatic variant via CLI."""
+    async def dynamic_pals_save(self, index: int, data: dict):
+        """Save Dynamic Pal variant via CLI in Format V2."""
         import json as json_lib
         data_str = json_lib.dumps(data)
-        return await self._execute(["altermatic", "save", str(index), "--data", data_str])
+        return await self._execute(["dynamic_pals", "save", str(index), "--data", data_str])
 
     async def env_status(self):
         """Fetch UE4SS and PalSchema status via CLI."""
@@ -168,14 +170,14 @@ class PalBakerCLI:
         """Autodetect Unreal, Palworld, and Blender paths via CLI."""
         return await self._execute(["env", "autodetect"])
 
-    async def altermatic_metadata(self, mod_name: str):
+    async def dynamic_pals_metadata(self, mod_name: str):
         """Fetch blend files and available materials via CLI."""
-        return await self._execute(["altermatic", "metadata", mod_name])
+        return await self._execute(["dynamic_pals", "metadata", mod_name])
 
-    async def altermatic_open_blend(self, mod_name: str, blend_name: str, category="Monster"):
+    async def dynamic_pals_open_blend(self, mod_name: str, blend_name: str, category="Monster"):
         """Launch Blender for a specific blend file via CLI."""
-        return await self._execute(["altermatic", "open-blend", mod_name, blend_name, "--category", category])
+        return await self._execute(["dynamic_pals", "open-blend", mod_name, blend_name, "--category", category])
 
-    async def altermatic_sidecar(self, mod_name: str, blend_name: str):
+    async def dynamic_pals_sidecar(self, mod_name: str, blend_name: str):
         """Generates or loads the sidecar JSON structure for a blend file via the CLI."""
-        return await self._execute(["altermatic", "sidecar", mod_name, blend_name])
+        return await self._execute(["dynamic_pals", "sidecar", mod_name, blend_name])

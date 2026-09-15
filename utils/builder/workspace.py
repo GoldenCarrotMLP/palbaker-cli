@@ -37,16 +37,16 @@ class ModWorkspace:
         creator_json = os.path.join(self.fmodel_root, "Exports", "Pal", "Content", "Palbaker", "Creator", f"{mod_name}_creator.json") if self.fmodel_root else ""
         self.is_custom_pal = os.path.exists(creator_json)
 
-        # Read Altermatic toggle state (Only applies if this is the base_pal)
-        self.is_altermatic_active = False
+        # Read Dynamic Pals toggle state (Only applies if this is the base_pal)
+        self.is_dynamic_pals_active = False
         manifest_path = ""
         if not self.is_variant:
-            manifest_path = os.path.join(self.fmodel_dir, f"{mod_name}_altermatic.json") if self.fmodel_dir else ""
+            manifest_path = os.path.join(self.fmodel_dir, f"{mod_name}_dynamic_pals.json") if self.fmodel_dir else ""
             if os.path.exists(manifest_path):
                 try:
                     with open(manifest_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                        self.is_altermatic_active = bool(data.get("is_altermatic_active", False))
+                        self.is_dynamic_pals_active = bool(data.get("is_dynamic_pals_active", False))
                 except Exception:
                     pass
 
@@ -67,7 +67,7 @@ class ModWorkspace:
         # Determine target mesh name and virtual path based on variance and parent nesting
         category_sanitized = category.replace(" ", "_")
         
-        # If user created an Altermatic subfolder, route to the subfolder; otherwise keep in shared parent
+        # If user created an Dynamic Pals subfolder, route to the subfolder; otherwise keep in shared parent
         if self.is_variant and self.is_nested_subfolder:
             self.target_mesh_name = f"SK_{mod_name}"
             self.ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}/{mod_name}"

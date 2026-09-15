@@ -9,19 +9,19 @@ from . import translator
 PHYSICS_BONE_PRESETS = {
     "_jiggle": {
         "spring_stiffness": 300.0, "spring_damping": 8.0, "max_displacement": 20.0, 
-        "error_reset_thresh": 1000.0, "limit_displacement": True,
+        "error_reset_thresh": 100000.0, "limit_displacement": True,
         "translate_x": True, "translate_y": True, "translate_z": True,
         "rotate_x": True, "rotate_y": True, "rotate_z": True, "alpha": 1.0
     },
     "_phy": {
         "spring_stiffness": 300.0, "spring_damping": 8.0, "max_displacement": 20.0, 
-        "error_reset_thresh": 1000.0, "limit_displacement": True,
+        "error_reset_thresh": 100000.0, "limit_displacement": True,
         "translate_x": True, "translate_y": True, "translate_z": True,
         "rotate_x": True, "rotate_y": True, "rotate_z": True, "alpha": 1.0
     },
     "_hair": {
         "spring_stiffness": 300.0, "spring_damping": 20.0, "max_displacement": 20.0, 
-        "error_reset_thresh": 1000.0, "limit_displacement": True,
+        "error_reset_thresh": 100000.0, "limit_displacement": True,
         "translate_x": True, "translate_y": True, "translate_z": True,
         "rotate_x": True, "rotate_y": True, "rotate_z": True, "alpha": 0.5
     }
@@ -178,6 +178,31 @@ def get_pose_bones_info_base(armature_name: str = "Armature") -> list[dict]:
     bones_info = []
     swap = Matrix(((1, 0, 0, 0), (0, -1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1)))
 
+    # Helper: Check if a bone name matches the jiggle physics pattern
+    def is_jiggle_bone_type(name: str) -> bool:
+        clean = re.sub(r'\.\d+$', '', name.lower())
+        for sfx in ["_jiggle", "_phy"]:
+            if clean.endswith(sfx) or clean.endswith(f"{sfx}_l") or clean.endswith(f"{sfx}_r"):
+                return True
+        return False
+
+    # Helper: Climb up the parent chain to find the top-most jiggle ancestor
+    def find_jiggle_family_root(p_bone):
+        curr = p_bone
+        while curr.parent and is_jiggle_bone_type(curr.parent.name):
+            curr = curr.parent
+        return curr.name
+
+    # 1. Pre-pass: Discover all contiguous jiggle chains/families
+    jiggle_families = {}  # { root_bone_name: [member_bone_names...] }
+    for p_bone in arm_obj.pose.bones:
+        if is_jiggle_bone_type(p_bone.name):
+            root_name = find_jiggle_family_root(p_bone)
+            if root_name not in jiggle_families:
+                jiggle_families[root_name] = []
+            jiggle_families[root_name].append(p_bone.name)
+
+    # 2. Main pass: Extract transforms, offsets, and normalized physics configs
     for p_bone in arm_obj.pose.bones:  # type: ignore
         raw_name = p_bone.name
         ue_bone_name = raw_name.replace('.', '_')
@@ -190,6 +215,21 @@ def get_pose_bones_info_base(armature_name: str = "Armature") -> list[dict]:
             if match_name.endswith(suffix) or match_name.endswith(f"{suffix}_l") or match_name.endswith(f"{suffix}_r"):
                 physics_config = dict(preset)
                 is_physics = True
+                
+                # Normalize connected jiggle bone chains to prevent compounding bounce
+                if suffix in ["_jiggle", "_phy"]:
+                    root_name = find_jiggle_family_root(p_bone)
+                    family_members = jiggle_families.get(root_name, [p_bone.name])
+                    family_size = len(family_members)
+                    
+                    if family_size > 0:
+                        normalized_alpha = round(1.0 / family_size, 4)
+                        physics_config["alpha"] = normalized_alpha
+                        print(
+                            f"[PalBaker Rigging] Normalized jiggle bone '{ue_bone_name}': "
+                            f"alpha = {normalized_alpha} (family size: {family_size}, chain root: '{root_name}')",
+                            flush=True
+                        )
                 break
 
         loc, rot, scale = p_bone.matrix_basis.decompose()

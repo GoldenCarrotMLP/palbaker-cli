@@ -1,4 +1,4 @@
-# utils/cli/altermatic_handlers.py
+# utils/cli/dynamic_pals_handlers.py
 import os
 import sys
 import json
@@ -6,14 +6,14 @@ import shutil
 import subprocess
 from utils.config import validate_settings
 from utils.cli.shared import json_print, error_print
-from utils.altermatic import AltermaticController
-from utils.altermatic_helper import (
+from utils.dynamic_pals import DynamicPalsController
+from utils.dynamic_pals_helper import (
     sync_sidecar_metadata, 
     get_blend_files_for_context, 
     get_available_materials_for_context
 )
 
-class CliAltermaticView:
+class CliDynamicPalsView:
     def write_log(self, text: str, category: str = "standard"):
         json_print({"type": "log", "level": category, "message": text})
     def show_snackbar(self, message: str, color: str = ""):
@@ -22,11 +22,16 @@ class CliAltermaticView:
 class CliMasterController:
     def __init__(self, settings: dict):
         self.settings = settings
-        self.view = CliAltermaticView()
+        self.view = CliDynamicPalsView()
         self.raw_mods = []
-    def refresh_mods(self, scan_disk: bool = True, target_mod: str | None = None):
+        
+    def refresh_mods(self, scan_disk: bool = True, target_mod: str | None = None, base_pal: str | None = None):
         from utils.scanner import get_mod_info
-        self.raw_mods = get_mod_info(self.settings, target_mod)
+        mods = get_mod_info(self.settings, target_mod)
+        if base_pal:
+            mods = [m for m in mods if m["base_pal"].lower() == base_pal.lower()]
+        self.raw_mods = mods
+
 
 def get_category_from_path(path: str | None) -> str:
     if not path: return "Monster"
@@ -37,36 +42,36 @@ def get_category_from_path(path: str | None) -> str:
             return parts[idx + 1]
     return "Monster"
 
-
-def handle_altermatic_command(args, settings):
+def handle_dynamic_pals_command(args, settings):
     subcommand = args.subcommand
     is_valid, err_msg = validate_settings(settings, ["fmodel_output"])
     if not is_valid:
         error_print(err_msg)
         sys.exit(1)
 
-    base_pal = getattr(args, "base_pal", "")
     mod_name = getattr(args, "mod", "")
+    base_pal = getattr(args, "base_pal", "")
     data_str = getattr(args, "data", "")
 
     mc = CliMasterController(settings)
 
     if subcommand == "toggle":
         status = args.status
-        mc.refresh_mods(target_mod=mod_name)
+        mc.refresh_mods(target_mod=mod_name, base_pal=base_pal)
         if not mc.raw_mods:
+
             error_print(f"Mod {mod_name} was not found on disk.")
             sys.exit(1)
-        controller = AltermaticController(mc)
-        controller.toggle_altermatic(mc.raw_mods[0], status == "on")
-        json_print({"status": "success", "message": f"Successfully toggled Altermatic {status} for {mod_name}."})
+        controller = DynamicPalsController(mc)
+        controller.toggle_dynamic_pals(mc.raw_mods[0], status == "on")
+        json_print({"status": "success", "message": f"Successfully toggled Dynamic Pals {status} for {mod_name}."})
 
     elif subcommand == "list":
         mc.refresh_mods(target_mod=mod_name)
         if not mc.raw_mods:
             error_print(f"Mod {mod_name} was not found on disk.")
             sys.exit(1)
-        json_print({"status": "success", "data": mc.raw_mods[0].get("altermatic_variants", [])})
+        json_print({"status": "success", "data": mc.raw_mods[0].get("dynamic_pal_variants", [])})
 
     elif subcommand == "add":
         label = args.label
@@ -74,16 +79,21 @@ def handle_altermatic_command(args, settings):
         if not mc.raw_mods:
             error_print(f"Mod {mod_name} was not found on disk.")
             sys.exit(1)
+            
         custom_mesh = getattr(args, "custom", False)
         source_choice = getattr(args, "source", "base")
+        anim_target = getattr(args, "anim_target", "")  # <-- NEW: Fetch from CLI args
+
         fmodel_dir = mc.raw_mods[0]["fmodel_path"]
         base_blend_path = os.path.join(fmodel_dir, f"{mod_name}.blend")
 
-        controller = AltermaticController(mc)
+        controller = DynamicPalsController(mc)
         controller.cloner._execute_clone_workflow(
-            mc.raw_mods[0], label, custom_mesh, source_choice, base_blend_path, fmodel_dir, sync=True
+            # FIXED: Added anim_target to the parameter sequence
+            mc.raw_mods[0], label, custom_mesh, source_choice, anim_target, base_blend_path, fmodel_dir, sync=True
         )
         json_print({"status": "success", "message": f"Added variant '{label}' successfully."})
+
 
     elif subcommand == "delete":
         index = args.index
@@ -95,7 +105,7 @@ def handle_altermatic_command(args, settings):
         fmodel_dir = mc.raw_mods[0]["fmodel_path"]
         sidecar_to_clean = ""
         idx_int = int(index)
-        variants = mc.raw_mods[0].get("altermatic_variants", [])
+        variants = mc.raw_mods[0].get("dynamic_pal_variants", [])
         
         if fmodel_dir and 0 <= idx_int < len(variants):
             v = variants[idx_int]
@@ -103,8 +113,8 @@ def handle_altermatic_command(args, settings):
                 sidecar_name = v["SkeletonSource"].replace(".blend", "_blend.json")
                 sidecar_to_clean = os.path.join(fmodel_dir, sidecar_name)
 
-        controller = AltermaticController(mc)
-        controller.delete_altermatic_variant(mc.raw_mods[0], idx_int, sync=True)
+        controller = DynamicPalsController(mc)
+        controller.delete_dynamic_pal_variant(mc.raw_mods[0], idx_int, sync=True)
         
         if sidecar_to_clean and os.path.exists(sidecar_to_clean):
             try: os.remove(sidecar_to_clean)
@@ -122,16 +132,16 @@ def handle_altermatic_command(args, settings):
                 error_print(f"Parent mod {current_char_id} not found on disk.")
                 sys.exit(1)
 
-            controller = AltermaticController(mc)
-            variants = mc.raw_mods[0].get("altermatic_variants", [])
+            controller = DynamicPalsController(mc)
+            variants = mc.raw_mods[0].get("dynamic_pal_variants", [])
             idx_int = int(index)
             if 0 <= idx_int < len(variants):
                 controller.original_editing_label = variants[idx_int]["label"]
                 
-            controller.save_altermatic_variant_callback(idx_int, variant_data, sync=True)
+            controller.save_dynamic_pal_variant_callback(idx_int, variant_data, sync=True)
             json_print({"status": "success", "message": "Successfully saved variant parameters."})
         except Exception as e:
-            error_print(f"Failed to save Altermatic variant: {str(e)}")
+            error_print(f"Failed to save Dynamic Pal variant: {str(e)}")
             sys.exit(1)
 
     elif subcommand == "sidecar":
@@ -144,7 +154,6 @@ def handle_altermatic_command(args, settings):
             error_print(f"Mod {mod_name} was not found on disk.")
             sys.exit(1)
 
-        # RECURSIVE DISCOVERY: Search children folders recursively to locate the target variant blend file
         fmodel_dir = mc.raw_mods[0].get("fmodel_path", "")
         blend_path = None
         if fmodel_dir:
@@ -173,16 +182,21 @@ def handle_altermatic_command(args, settings):
         mod_data = mc.raw_mods[0]
         category = get_category_from_path(mod_data["fmodel_path"])
         
-        # Harvest recursively
         blend_files = get_blend_files_for_context(mod_data["fmodel_path"], None)
         available_mats = get_available_materials_for_context(settings["fmodel_output"], mod_data["fmodel_path"], mod_name, category)
+        
+        # --- NEW: Fetch global workspace blend files ---
+        from utils.dynamic_pals_helper import get_all_blend_files_for_workspace
+        all_blend_files = get_all_blend_files_for_workspace(settings["fmodel_output"], category)
 
         json_print({
             "status": "success",
             "blend_files": blend_files,
+            "all_blend_files": all_blend_files,
             "available_materials": available_mats,
             "category": category
         })
+
 
     elif subcommand == "open-blend":
         blend_name = getattr(args, "blend_name", "base")
@@ -194,7 +208,6 @@ def handle_altermatic_command(args, settings):
             error_print(f"Mod {mod_name} was not found on disk.")
             sys.exit(1)
 
-        # RECURSIVE DISCOVERY: Walk through directories to find the physical model file to launch
         blend_path = None
         fmodel_dir = mc.raw_mods[0].get("fmodel_path", "")
         if fmodel_dir:

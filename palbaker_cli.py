@@ -51,10 +51,10 @@ def main():
             from utils.cli.mod_handlers import handle_mod_command
             handle_mod_command(args, settings)
 
-        elif args.command == "altermatic":
-            from utils.cli.altermatic_handlers import handle_altermatic_command
+        elif args.command == "dynamic_pals":
+            from utils.cli.dynamic_pals_handlers import handle_dynamic_pals_command
             settings = load_settings()
-            handle_altermatic_command(args, settings)
+            handle_dynamic_pals_command(args, settings)
 
         elif args.command == "creator":
             from utils.cli.creator_handlers import handle_creator_command

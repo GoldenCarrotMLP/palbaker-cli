@@ -21,7 +21,7 @@ The repository follows a decoupled architecture separating the GUI layout from t
 ### 2. `views/` (Flet UI Layouts)
 Follows a specific "View Wrapper Pattern" to bypass Flet's C++ inheritance issues. Components are instantiated as standard Python classes that store their built Flet control tree in a `self.view` attribute.
 * `mods_view.py`: Displays active mods. Uses in-memory component caching to support lag-free, real-time search filtering.
-* `creator_view.py`: The UI for creating and setting up new mods (Altermatic/PalSchema inputs).
+* `creator_view.py`: The UI for creating and setting up new mods (Dynamic Pals/PalSchema inputs).
 * `settings_view.py`: Handles executable path configurations (Blender, Unreal Editor, FModel directory).
 
 ### 3. `controllers/` (UI State & Business Logic)
@@ -71,7 +71,7 @@ When a mod is triggered for execution, the pipeline runs as follows:
 ## 🛠️ Modding Paradigm (PalSchema vs. Compiled)
 The suite supports dual-tier modding:
 1. **Compiled Modding:** Replacing existing character meshes via traditional `_P.pak` file overrides.
-2. **Runtime Modding (Altermatic/PalSchema):** Generating `.json` configurations (`DT_PalBPClass`, `Furret.json`, `SpawnGroupList` array overrides) that dynamically inject new, standalone species IDs into spawner blueprints and map them to custom models at runtime.
+2. **Runtime Modding (Dynamic Pals/PalSchema):** Generating `.json` configurations (`DT_PalBPClass`, `Furret.json`, `SpawnGroupList` array overrides) that dynamically inject new, standalone species IDs into spawner blueprints and map them to custom models at runtime.
 
 ---
 

@@ -4,6 +4,16 @@ import os
 import json
 import bpy
 
+SPECIAL_PARENT_MATERIALS = {
+    "m_pal_twinkle": "/Game/Pal/Model/Character/Monster/DreamDemon/M_Pal_Twinkle",
+    "m_pal_dream": "/Game/Pal/Model/Character/Monster/DreamDemon/M_Pal_Dream",
+    "m_pal_fire": "/Game/Pal/Model/Character/Monster/Kitsunebi/M_Pal_Fire",
+    "m_pal_manticore_fire": "/Game/Pal/Model/Character/Monster/Manticore/M_Pal_Manticore_Fire",
+    "m_nightlady": "/Game/Pal/Model/Character/Monster/NightLady/M_NightLady",
+    "m_pallit_rainbow": "/Game/Pal/Model/Character/Monster/YakushimaMonster001_Rainbow/M_PalLit_Rainbow",
+}
+
+
 current_dir = os.path.abspath(os.path.dirname(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
@@ -35,6 +45,22 @@ def parse_args():
         elif arg == "--fbx" and i + 1 < len(args):
             output_fbx = args[i + 1]
     return output_json, output_fbx
+
+def resolve_special_parent_material(mat_name: str) -> str | None:
+    if not mat_name: return None
+    import re
+    clean = re.sub(r'\.\d+$', '', mat_name.strip()).lower()
+    if clean in SPECIAL_PARENT_MATERIALS:
+        return SPECIAL_PARENT_MATERIALS[clean]
+    if clean.startswith("mi_"):
+        alt_m = "m_" + clean[3:]
+        if alt_m in SPECIAL_PARENT_MATERIALS:
+            return SPECIAL_PARENT_MATERIALS[alt_m]
+        alt_direct = clean[1:]
+        if alt_direct in SPECIAL_PARENT_MATERIALS:
+            return SPECIAL_PARENT_MATERIALS[alt_direct]
+    return None
+
 
 def extract_metadata(output_path: str, fbx_path: str | None = None):
     print(f"\n[PalBaker Extractor] Starting metadata extraction for {os.path.basename(output_path)}...", flush=True)
@@ -117,21 +143,28 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
         print(f"[PalBaker Extractor] Node-walking shader tree for material: '{mat_name}'...", flush=True)
         extracted_textures = translator.get_material_textures(mat_name)
         
-        parent_class = "MI_PalLit_CharacterEyeBase"
-        has_complex_nodes = (
-            "Normal Map" in extracted_textures or 
-            "MetallicRoughnessOcclusionSpecularTexture" in extracted_textures or 
-            "Emissive Texture" in extracted_textures
-        )
-        
-        if has_complex_nodes or "body" in k_lower:
-            parent_class = "MI_PalLit_CharacterBodyBase"
-        elif "hair" in k_lower:
-            parent_class = "MI_PalLit_CharacterHairBase"
+        # 1. Check for Special Material name match first!
+        special_parent = resolve_special_parent_material(mat_name)
+        if special_parent:
+            parent_class = special_parent
+            print(f"[PalBaker Extractor] Matched special shader preset for '{mat_name}' -> {special_parent}", flush=True)
+        else:
+            parent_class = "MI_PalLit_CharacterEyeBase"
+            has_complex_nodes = (
+                "Normal Map" in extracted_textures or 
+                "MetallicRoughnessOcclusionSpecularTexture" in extracted_textures or 
+                "Emissive Texture" in extracted_textures
+            )
+            
+            if has_complex_nodes or "body" in k_lower:
+                parent_class = "MI_PalLit_CharacterBodyBase"
+            elif "hair" in k_lower:
+                parent_class = "MI_PalLit_CharacterHairBase"
             
         materials_compile[mat_name] = {
             "parent_class": parent_class,
             "textures": extracted_textures
+
         }
 
     # Centralized Loader takes care of safe parsing

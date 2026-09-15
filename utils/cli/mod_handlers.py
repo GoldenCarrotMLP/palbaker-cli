@@ -11,7 +11,7 @@ from utils.audio_helper import apply_custom_audio_worker, clear_audio_worker
 
 def check_vanilla_collision(mods: list[dict], target_mod_data: dict) -> tuple[bool, str]:
     """Ensures multiple Vanilla mode mods targeting the same BasePal do not overwrite each other."""
-    if target_mod_data.get("is_altermatic_active", False):
+    if target_mod_data.get("is_dynamic_pals_active", False):
         return True, ""
         
     base_pal = target_mod_data.get("base_pal")
@@ -19,8 +19,8 @@ def check_vanilla_collision(mods: list[dict], target_mod_data: dict) -> tuple[bo
     
     for m in mods:
         if m.get("base_pal") == base_pal and m.get("mod_name") != mod_name:
-            if not m.get("is_altermatic_active", False) and m.get("has_ue", False):
-                return False, f"Collision Lock: Mod '{m['mod_name']}' is already using Vanilla mode for base '{base_pal}' and is pushed to Unreal Engine. Please switch one of these mods to Altermatic mode to prevent them from overwriting each other in the Editor."
+            if not m.get("is_dynamic_pals_active", False) and m.get("has_ue", False):
+                return False, f"Collision Lock: Mod '{m['mod_name']}' is already using Vanilla mode for base '{base_pal}' and is pushed to Unreal Engine. Please switch one of these mods to Dynamic Pals mode to prevent them from overwriting each other in the Editor."
     return True, ""
 
 def get_category_from_path(path: str | None) -> str:
@@ -194,6 +194,7 @@ def handle_mod_command(args, settings):
         error_print(err_msg)
         sys.exit(1)
 
+
     if action in ["push", "full", "decompile", "browse-ue", "recursive-cook"]:
         is_connected, err_code, err_msg = verify_unreal_connection(settings)
         if not is_connected:
@@ -207,8 +208,13 @@ def handle_mod_command(args, settings):
             sys.exit(1)
 
     mods = get_mod_info(settings, mod_name)
+    
+    # STRICT FILTERING: Prevent variant name collisions by matching base_pal if provided
+    if base_pal:
+        mods = [m for m in mods if m["base_pal"].lower() == base_pal.lower()]
+
     if not mods and action not in ["extract", "cancel-pipeline"]:
-        error_print(f"Mod {mod_name} was not found on disk.")
+        error_print(f"Mod '{mod_name}' (Base: '{base_pal}') was not found on disk.")
         sys.exit(1)
 
     mod_data = mods[0] if mods else None
@@ -244,7 +250,7 @@ def handle_mod_command(args, settings):
                 ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}/{mod_name}"
                 target_mesh_name = f"SK_{mod_name}"
             else:
-                if mod_data and mod_data.get("is_altermatic_active", False):
+                if mod_data and mod_data.get("is_dynamic_pals_active", False):
                     ue_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{base_pal}/{mod_name}"
                     target_mesh_name = f"SK_{mod_name}"
                 else:
@@ -431,11 +437,15 @@ def handle_audio_command(args, settings):
         sys.exit(1)
 
     mods = get_mod_info(settings, mod_name)
+    if base_pal:
+        mods = [m for m in mods if m["base_pal"].lower() == base_pal.lower()]
+
     if not mods:
-        error_print(f"Mod {mod_name} not found.")
+        error_print(f"Mod '{mod_name}' (Base: '{base_pal}') not found.")
         sys.exit(1)
         
     mod_data = mods[0]
+
 
     if subcommand == "set":
         success, msg = apply_custom_audio_worker(settings, mod_data, cry_name, path)

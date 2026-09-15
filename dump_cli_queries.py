@@ -7,7 +7,7 @@ import sys
 # Target output dump file
 OUTPUT_FILE = "cli_queries_dump.json"
 
-# Define the baseline mock Pal ID to query mod-specific Altermatic states
+# Define the baseline mock Pal ID to query mod-specific Dynamic Pals states
 BASELINE_PAL = "Furret" 
 
 # Comprehensive array of read/get query endpoints of your CLI API
@@ -20,9 +20,9 @@ QUERY_COMMANDS = [
     ("env_status", ["env", "status"]),
     ("env_verify", ["env", "verify"]),
     ("env_autodetect", ["env", "autodetect"]),
-    ("altermatic_list", ["altermatic", "list", BASELINE_PAL]),
-    ("altermatic_metadata", ["altermatic", "metadata", BASELINE_PAL]),
-    ("altermatic_sidecar", ["altermatic", "sidecar", BASELINE_PAL, "base"])
+    ("dynamic_pals_list", ["dynamic_pals", "list", BASELINE_PAL]),
+    ("dynamic_pals_metadata", ["dynamic_pals", "metadata", BASELINE_PAL]),
+    ("dynamic_pals_sidecar", ["dynamic_pals", "sidecar", BASELINE_PAL, "base"])
 ]
 
 def truncate_first_mid_last(data):

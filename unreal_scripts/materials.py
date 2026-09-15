@@ -1,9 +1,39 @@
+# unreal_scripts/materials.py
 import unreal  # type: ignore
 import json
 import os
+import re
+
+SPECIAL_PARENT_MATERIALS = {
+    "m_pal_twinkle": "/Game/Pal/Model/Character/Monster/DreamDemon/M_Pal_Twinkle",
+    "m_pal_dream": "/Game/Pal/Model/Character/Monster/DreamDemon/M_Pal_Dream",
+    "m_pal_fire": "/Game/Pal/Model/Character/Monster/Kitsunebi/M_Pal_Fire",
+    "m_pal_manticore_fire": "/Game/Pal/Model/Character/Monster/Manticore/M_Pal_Manticore_Fire",
+    "m_nightlady": "/Game/Pal/Model/Character/Monster/NightLady/M_NightLady",
+    "m_pallit_rainbow": "/Game/Pal/Model/Character/Monster/YakushimaMonster001_Rainbow/M_PalLit_Rainbow",
+}
+
+# FIXED: Removed the Python 3.10+ `-> str | None` hint so Unreal Engine 5.1's Python 3.9 can parse it!
+def resolve_special_parent_material(mat_name: str):
+    """Matches material slot names (including Blender .001 suffixes or MI_ prefixes) to special parent materials."""
+    if not mat_name:
+        return None
+    clean = re.sub(r'\.\d+$', '', mat_name.strip()).lower()
+    if clean in SPECIAL_PARENT_MATERIALS:
+        return SPECIAL_PARENT_MATERIALS[clean]
+    
+    # Handle cases where user prefixed with MI_ instead of M_
+    if clean.startswith("mi_"):
+        alt_m = "m_" + clean[3:]
+        if alt_m in SPECIAL_PARENT_MATERIALS:
+            return SPECIAL_PARENT_MATERIALS[alt_m]
+        alt_direct = clean[1:]  # e.g. mi_nightlady -> m_nightlady
+        if alt_direct in SPECIAL_PARENT_MATERIALS:
+            return SPECIAL_PARENT_MATERIALS[alt_direct]
+
+    return None
 
 def sanitize_asset_name(name):
-    import re
     sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
     sanitized = re.sub(r'_+', '_', sanitized)
     return sanitized.strip('_')
@@ -76,7 +106,6 @@ def build_materials_heuristically(ue_path, textures, material_slots, preserve_ma
         if unreal.EditorAssetLibrary.does_asset_exist(mi_path):
             existing_asset = unreal.EditorAssetLibrary.load_asset(mi_path)
             
-            # SAFEGUARD: Skip shader modification, BUT re-link refreshed texture parameters!
             if preserve_materials and existing_asset:
                 print(f"  [Preserve] Preserving custom shaders for existing asset: {sanitized_slot}")
                 tex_b = find_best_texture_match(sanitized_slot, textures, "B")
@@ -105,7 +134,12 @@ def build_materials_heuristically(ue_path, textures, material_slots, preserve_ma
             continue
             
         lower_name = sanitized_slot.lower()
-        if "eye" in lower_name or "mouth" in lower_name:
+        special_parent = resolve_special_parent_material(sanitized_slot) or resolve_special_parent_material(slot_name)
+        
+        if special_parent:
+            parent_path = special_parent
+            print(f"  [Special Material] Matched '{sanitized_slot}' -> Parent: {parent_path}")
+        elif "eye" in lower_name or "mouth" in lower_name:
             parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterEyeBase"
         elif "hair" in lower_name:
             parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterHairBase"
@@ -177,7 +211,6 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
             if unreal.EditorAssetLibrary.does_asset_exist(mi_path):
                 existing_asset = unreal.EditorAssetLibrary.load_asset(mi_path)
                 
-                # SAFEGUARD: Skip shader modification, BUT re-link refreshed texture parameters!
                 if preserve_materials and existing_asset:
                     print(f"  [Preserve] Preserving custom shaders for existing asset: {sanitized_name}")
                     textures_dict = data.get("textures", {})
@@ -206,14 +239,28 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
             if not mi_asset or not isinstance(mi_asset, unreal.MaterialInstanceConstant):
                 continue
                 
-            parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterBodyBase"
-            parent_class_lower = data.get("parent_class", "").lower()
-            mat_name_lower = sanitized_name.lower()
-            
-            if "eye" in parent_class_lower or "mouth" in parent_class_lower or "eye" in mat_name_lower or "mouth" in mat_name_lower:
-                parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterEyeBase"
-            elif "hair" in parent_class_lower or "hair" in mat_name_lower:
-                parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterHairBase"
+            # Check for Special Material match first!
+            parent_class_raw = data.get("parent_class", "")
+            special_parent = (
+                resolve_special_parent_material(sanitized_name) or 
+                resolve_special_parent_material(mat_name) or
+                resolve_special_parent_material(parent_class_raw)
+            )
+
+            if special_parent:
+                parent_path = special_parent
+                print(f"  [Special Material] Matched '{sanitized_name}' -> Parent: {parent_path}")
+            elif parent_class_raw.startswith("/Game/"):
+                parent_path = parent_class_raw
+            else:
+                parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterBodyBase"
+                parent_class_lower = parent_class_raw.lower()
+                mat_name_lower = sanitized_name.lower()
+                
+                if "eye" in parent_class_lower or "mouth" in parent_class_lower or "eye" in mat_name_lower or "mouth" in mat_name_lower:
+                    parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterEyeBase"
+                elif "hair" in parent_class_lower or "hair" in mat_name_lower:
+                    parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterHairBase"
                 
             parent_mat = unreal.EditorAssetLibrary.load_asset(parent_path)
             if parent_mat:
@@ -307,7 +354,10 @@ def bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets, harve
             skel_mat.material_interface = matched_mi
             print(f"  Linked slot {slot_name} -> {matched_mi.get_name()}")
         else:
-            if "eye" in slot_name or "mouth" in slot_name:
+            special_parent = resolve_special_parent_material(slot_name)
+            if special_parent:
+                fallback_path = special_parent
+            elif "eye" in slot_name or "mouth" in slot_name:
                 fallback_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterEyeBase"
             elif "hair" in slot_name:
                 fallback_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterHairBase"

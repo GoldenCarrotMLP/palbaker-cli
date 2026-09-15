@@ -130,7 +130,8 @@ def main():
             print("ERROR: No raw model sources found in workspaces to push.", flush=True)
             sys.exit(1)
 
-        from utils.altermatic_helper import sync_sidecar_metadata
+        from utils.dynamic_pals_helper import compile_unified_dynamic_pals_json, sync_sidecar_metadata
+
         for target_dir, _ in import_targets:
             blend_files = glob.glob(os.path.join(target_dir, "*.blend"))
             for blend_file in blend_files:
@@ -363,7 +364,7 @@ def main():
         )
         
         if files_found == 0:
-            has_other_outputs = bool(workspace.is_altermatic_active or (hasattr(workspace, 'has_icon') and workspace.has_icon))
+            has_other_outputs = bool(workspace.is_dynamic_pals_active or (hasattr(workspace, 'has_icon') and workspace.has_icon))
             if not has_other_outputs:
                 from utils.builder.cooker_helper import get_staged_audio_overrides
                 if get_staged_audio_overrides(workspace):
@@ -373,16 +374,7 @@ def main():
                 print("ERROR: No files found to pack. Cook process might have failed.", flush=True)
                 sys.exit(1)
             else:
-                print("WARNING: No compiled uassets found to pack. Staging non-uasset files (Altermatic configs/audio/icon) separately.", flush=True)
-            
-        print(f"SUCCESS! Pak created at: {final_pak_path} ({files_found} files)", flush=True)
-        for suffix in ["_err_P.pak", "_err_p.pak"]:
-            err_pak = os.path.join(workspace.output_dir, f"{MOD_NAME}{suffix}")
-            if os.path.exists(err_pak):
-                try:
-                    os.remove(err_pak)
-                except OSError:
-                    pass
+                print("WARNING: No compiled uassets found to pack. Staging non-uasset files (Dynamic Pals configs/audio/icon) separately.", flush=True)
 
         swap_json_dir = ""
         if workspace.palworld_exe and os.path.exists(workspace.palworld_exe):
@@ -391,12 +383,11 @@ def main():
         if swap_json_dir:
             target_deployed_json = os.path.join(swap_json_dir, f"palbaker-{workspace.base_pal}.json")
 
-            # If Altermatic is toggled off, guarantee the deployed JSON is deleted from the game
-            if not workspace.is_altermatic_active:
+            if not workspace.is_dynamic_pals_active:
                 if os.path.exists(target_deployed_json):
                     try:
                         os.remove(target_deployed_json)
-                        print(f"[Altermatic] Cleaned up disabled Altermatic config from game: {os.path.basename(target_deployed_json)}", flush=True)
+                        print(f"[Dynamic Pals] Cleaned up disabled Dynamic Pals config from game: {os.path.basename(target_deployed_json)}", flush=True)
                     except OSError:
                         pass
             else:
@@ -412,9 +403,8 @@ def main():
                             break
                 
                 if has_subfolders:
-                    from utils.altermatic_helper import compile_unified_altermatic_json
-                    print(f"[Altermatic] Dynamically compiling unified variants registration config for {workspace.base_pal}...", flush=True)
-                    success, msg = compile_unified_altermatic_json(workspace.base_pal, base_fmodel_dir, swap_json_dir)
+                    print(f"[Dynamic Pals] Dynamically compiling unified variants registration config for {workspace.base_pal}...", flush=True)
+                    success, msg = compile_unified_dynamic_pals_json(workspace.base_pal, base_fmodel_dir, swap_json_dir)
                     print(msg, flush=True)
 
 if __name__ == "__main__":

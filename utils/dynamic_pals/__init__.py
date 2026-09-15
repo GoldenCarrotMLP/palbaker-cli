@@ -1,19 +1,23 @@
-# utils/altermatic/__init__.py
+# utils/dynamic_pals/__init__.py
 import os
 import threading
-from utils.altermatic_helper import sync_sidecar_metadata, get_blend_files_for_context, get_available_materials_for_context
+from utils.dynamic_pals_helper import (
+    sync_sidecar_metadata, 
+    get_blend_files_for_context, 
+    get_available_materials_for_context
+)
 from .manifest_manager import ManifestManager
-from .cloner import AltermaticCloner
-from .compiler import AltermaticCompiler
+from .cloner import DynamicPalsCloner
+from .compiler import DynamicPalsCompiler
 
-class AltermaticController:
+class DynamicPalsController:
     def __init__(self, master_controller):
         self.mc = master_controller
         self.settings = master_controller.settings
         self.view = master_controller.view
         self.manifest = ManifestManager(self)
-        self.cloner = AltermaticCloner(self)
-        self.compiler = AltermaticCompiler(self)
+        self.cloner = DynamicPalsCloner(self)
+        self.compiler = DynamicPalsCompiler(self)
         self.original_editing_label = ""
 
     def get_category_from_path(self, path: str | None) -> str:
@@ -25,11 +29,10 @@ class AltermaticController:
                 return parts[idx + 1]
         return "Monster"
 
-    def toggle_altermatic(self, mod_data: dict, is_active: bool):
+    def toggle_dynamic_pals(self, mod_data: dict, is_active: bool):
         current_char_id = mod_data["name"]
         fmodel_dir = mod_data.get("fmodel_path", "")
         
-        # SELF-HEALING: If the parent is currently unextracted, resolve its target local workspace folder
         if not fmodel_dir:
             category = mod_data.get("category", "Monster")
             fmodel_dir = os.path.normpath(os.path.join(
@@ -41,13 +44,12 @@ class AltermaticController:
         os.makedirs(fmodel_dir, exist_ok=True)
         manifest_path = self.manifest.get_manifest_path(current_char_id, fmodel_dir)
         manifest_data = self.manifest.load_manifest(manifest_path)
-        manifest_data["is_altermatic_active"] = is_active
+        manifest_data["is_dynamic_pals_active"] = is_active
 
         if is_active:
             has_base = any(k == "base" for k in manifest_data["variants"].keys())
             if not has_base:
                 base_blend_path = os.path.join(fmodel_dir, f"{current_char_id}.blend")
-                # Fallback to the unmodded game mesh ("base") if no root .blend exists
                 default_skeleton_source = f"{current_char_id}.blend" if os.path.exists(base_blend_path) else "base"
                 
                 manifest_data["variants"]["base"] = {
@@ -55,22 +57,35 @@ class AltermaticController:
                     "CharacterID": current_char_id,
                     "SkeletonSource": default_skeleton_source,
                     "Gender": "None",
-                    "IsRarePal": False,
+                    "LuckyStarReq": False,
                     "SkinName": "",
-                    "ReqTrait": [],
+                    "SetNickname": "",
+                    "MinLevel": 1,
+                    "MaxLevel": 999,
+                    "MinTrust": 0,
+                    "MaxTrust": 999999,
+                    "MinRank": 0,
+                    "MaxRank": 999,
+                    "SpawnWeight": 1,
+                    "IsWildPal": False,
+                    "MinSizeMultiplier": 1.0,
+                    "MaxSizeMultiplier": 1.0,
+                    "ReqSwap": [],
+                    "PassiveSkills": [],
                     "PrefTrait": [],
-                    "MatReplace": [],
-                    "MorphTarget": [],
+                    "SkipTrait": [],
+                    "SpecialMaterial": [],
+                    "ShapeKeys": [],
+                    "Extra": "{}",
                     "is_base": True
                 }
 
         self.manifest.save_manifest(manifest_path, manifest_data)
-        self.view.write_log(f"Altermatic framework toggled {'ON' if is_active else 'OFF'}.", "success")
+        self.view.write_log(f"Dynamic Pals framework toggled {'ON' if is_active else 'OFF'}.", "success")
         
         if is_active:
             self.compiler.deploy_to_game(current_char_id, fmodel_dir)
         else:
-            # Immediately delete deployed config from the game folder when toggled OFF
             palworld_exe = self.settings.get("palworld_exe", "")
             if palworld_exe and os.path.exists(palworld_exe):
                 swap_json_dir = os.path.join(os.path.dirname(palworld_exe), "Pal", "Content", "Paks", "~Mods", "SwapJSON")
@@ -78,14 +93,14 @@ class AltermaticController:
                 if os.path.exists(target_json):
                     try:
                         os.remove(target_json)
-                        self.view.write_log(f"Purged disabled Altermatic config from game: {os.path.basename(target_json)}", "standard")
+                        self.view.write_log(f"Purged disabled Dynamic Pals config from game: {os.path.basename(target_json)}", "standard")
                     except OSError:
                         pass
             
         self.mc.refresh_mods(scan_disk=True, target_mod=current_char_id)
 
-    def delete_altermatic_variant(self, mod_data: dict, index: int, sync: bool = False):
-        variants = mod_data.get("altermatic_variants", [])
+    def delete_dynamic_pal_variant(self, mod_data: dict, index: int, sync: bool = False):
+        variants = mod_data.get("dynamic_pal_variants", [])
         if index < 0 or index >= len(variants): return
         
         v = variants[index]
@@ -116,7 +131,7 @@ class AltermaticController:
         if sync: background_worker()
         else: threading.Thread(target=background_worker, daemon=True).start()
 
-    def save_altermatic_variant_callback(self, index: int, variant_data: dict, sync: bool = False):
+    def save_dynamic_pal_variant_callback(self, index: int, variant_data: dict, sync: bool = False):
         old_label = self.original_editing_label if (index != -1 and hasattr(self, "original_editing_label")) else ""
         
         def background_worker():
@@ -135,13 +150,13 @@ class AltermaticController:
 
             new_label = f"{current_char_id}_{variant_data['label']}" if not is_base else "base"
 
-            for label_key, other_var in manifest_data["variants"].items():
+            for label_key in manifest_data["variants"].keys():
                 if label_key != old_label and label_key == new_label:
                     self.view.write_log(f"Error: A variant named '{variant_data['label']}' already exists!", "error")
                     self.mc.refresh_mods(scan_disk=True, target_mod=current_char_id)
                     return
 
-            if index >= 0 and index < len(manifest_data["variants"]):
+            if 0 <= index < len(manifest_data["variants"]):
                 if old_label and old_label != new_label and not is_base:
                     old_sidecar = os.path.join(fmodel_target_dir, f"{old_label}_blend.json")
                     new_sidecar = os.path.join(fmodel_target_dir, f"{new_label}_blend.json")
@@ -160,52 +175,72 @@ class AltermaticController:
 
                 manifest_data["variants"].pop(old_label, None)
 
-            mat_replace_map = {}
-            for item in variant_data.get("MatReplace", []):
-                if "SlotName" in item:
-                    mat_replace_map[item["SlotName"]] = item["MatPath"].split("/")[-1]
-
-            sidecar_structure = {
-                "Gender": variant_data["Gender"],
-                "IsRarePal": variant_data["IsRarePal"],
-                "SkinName": variant_data["SkinName"],
-                "ReqTrait": variant_data["ReqTrait"],
-                "PrefTrait": variant_data["PrefTrait"],
-                "MaterialOverrides": mat_replace_map,
-                "MorphTarget": []
-            }
-
-            for m in variant_data.get("MorphTarget", []):
-                if "Set" in m:
-                    sidecar_structure["MorphTarget"].append({"Target": m["Target"], "Type": "Static", "Set": m["Set"]})
-                else:
-                    sidecar_structure["MorphTarget"].append({"Target": m["Target"], "Type": "Random", "Min": m.get("Min", 0.0), "Max": m.get("Max", 1.0), "TypeVal": m.get("TypeVal", "Free")})
-
-            if is_base:
-                base_type = "custom" if variant_data["SkeletonSource"] not in ["base", f"{current_char_id}.blend"] else "vanilla"
-            else:
-                base_skel = manifest_data["variants"].get("base", {}).get("SkeletonSource", "base")
-                base_type = "custom" if base_skel not in ["base", f"{current_char_id}.blend"] else "vanilla"
-
+            # Construct Format V2 Property Structure
             save_block = {
-                "SkeletonSource": variant_data["SkeletonSource"]
+                "SkeletonSource": variant_data.get("SkeletonSource", "base"),
+                "label": variant_data.get("label", ""),
+                "is_base": is_base
             }
 
-            if sidecar_structure["Gender"] != "None": save_block["Gender"] = sidecar_structure["Gender"]
-            if sidecar_structure["IsRarePal"]: save_block["IsRarePal"] = sidecar_structure["IsRarePal"]
-            if sidecar_structure["SkinName"]: save_block["SkinName"] = sidecar_structure["SkinName"]
-            if sidecar_structure["ReqTrait"]: save_block["ReqTrait"] = variant_data["ReqTrait"]
-            if sidecar_structure["PrefTrait"]: save_block["PrefTrait"] = variant_data["PrefTrait"]
-            if sidecar_structure["MaterialOverrides"]: save_block["MaterialOverrides"] = sidecar_structure["MaterialOverrides"]
-            if sidecar_structure["MorphTarget"]: save_block["MorphTarget"] = sidecar_structure["MorphTarget"]
+            if variant_data.get("AnimTarget"):
+                save_block["AnimTarget"] = variant_data["AnimTarget"]
+            
+            if variant_data.get("Gender") and variant_data["Gender"] != "None":
+                save_block["Gender"] = variant_data["Gender"]
+            if variant_data.get("LuckyStarReq"):
+                save_block["LuckyStarReq"] = True
+            if variant_data.get("IsWildPal"):
+                save_block["IsWildPal"] = True
+            if variant_data.get("SkinName"):
+                save_block["SkinName"] = variant_data["SkinName"]
+            if variant_data.get("SetNickname"):
+                save_block["SetNickname"] = variant_data["SetNickname"]
+            if variant_data.get("SpawnWeight") is not None and variant_data.get("SpawnWeight") != 1:
+                sw = float(variant_data["SpawnWeight"])
+                save_block["SpawnWeight"] = int(sw) if sw.is_integer() else sw
 
-            save_block["is_base"] = is_base
-            save_block["base_type"] = base_type
+            # On/Off Switched Range Constraints
+            if variant_data.get("enableLevelRange"):
+                save_block["enableLevelRange"] = True
+                save_block["MinLevel"] = int(variant_data.get("MinLevel", 5))
+                save_block["MaxLevel"] = int(variant_data.get("MaxLevel", 20))
+
+            if variant_data.get("enableTrustRange"):
+                save_block["enableTrustRange"] = True
+                save_block["MinTrust"] = int(variant_data.get("MinTrust", 2))
+                save_block["MaxTrust"] = int(variant_data.get("MaxTrust", 40))
+
+            if variant_data.get("enableRankRange"):
+                save_block["enableRankRange"] = True
+                save_block["MinRank"] = int(variant_data.get("MinRank", 50))
+                save_block["MaxRank"] = int(variant_data.get("MaxRank", 200))
+
+            if variant_data.get("enableSizeRange"):
+                save_block["enableSizeRange"] = True
+                save_block["MinSizeMultiplier"] = float(variant_data.get("MinSizeMultiplier", 0.7))
+                save_block["MaxSizeMultiplier"] = float(variant_data.get("MaxSizeMultiplier", 2.0))
+
+            # Array collections (omit if empty)
+            if variant_data.get("ReqSwap"):                               
+                save_block["ReqSwap"] = variant_data["ReqSwap"]           
+            if variant_data.get("PassiveSkills"):
+                save_block["PassiveSkills"] = variant_data["PassiveSkills"]
+            if variant_data.get("PrefTrait"):
+                save_block["PrefTrait"] = variant_data["PrefTrait"]
+            if variant_data.get("SkipTrait"):
+                save_block["SkipTrait"] = variant_data["SkipTrait"]
+            if variant_data.get("SpecialMaterial"):
+                save_block["SpecialMaterial"] = variant_data["SpecialMaterial"]
+            if variant_data.get("ShapeKeys"):
+                save_block["ShapeKeys"] = variant_data["ShapeKeys"]
+            if variant_data.get("Extra") and variant_data["Extra"] != "{}":
+                save_block["Extra"] = variant_data["Extra"]
 
             manifest_data["variants"][new_label] = save_block
 
+
             if self.manifest.save_manifest(manifest_path, manifest_data):
-                self.view.write_log(f"Successfully saved Altermatic variant manifest: {os.path.basename(manifest_path)}", "success")
+                self.view.write_log(f"Successfully saved Dynamic Pals variant manifest: {os.path.basename(manifest_path)}", "success")
                 self.compiler.deploy_to_game(current_char_id, fmodel_target_dir)
 
             self.mc.refresh_mods(scan_disk=True, target_mod=current_char_id)

@@ -155,7 +155,7 @@
         "palworld_exe": "H:\\SteamLibrary\\steamapps\\common\\PalServer\\Pal\\Binaries\\Win64\\PalServer-Win64-Shipping.exe",
         "blender_versions": []
     },
-    "altermatic_list": {
+    "dynamic_pals_list": {
         "status": "success",
         "data": [
             {
@@ -170,7 +170,7 @@
             }
         ]
     },
-    "altermatic_metadata": {
+    "dynamic_pals_metadata": {
         "status": "success",
         "available_materials": [
             "MI_Furret_Body",
@@ -179,7 +179,7 @@
         ],
         "category": "Monster"
     },
-    "altermatic_sidecar": {
+    "dynamic_pals_sidecar": {
         "status": "error",
         "message": "'Namespace' object has no attribute 'label'"
     }

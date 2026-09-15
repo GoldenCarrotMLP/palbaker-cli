@@ -253,20 +253,21 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
         # 1. Pals: Only keys that are not NPCs or Players belong to Monster
         for name in names_map.keys():
             if not name.startswith("SK_NPC_") and not name.endswith("Boss") and not name.startswith("SK_Player_") and name not in ["Female", "Male"]:
-                merged_mods[name] = { "base_pal": name, "mod_name": name, "category": "Monster", "fmodel_path": "", "ue_path": "" }
+                merged_mods[f"{name}::{name}"] = { "base_pal": name, "mod_name": name, "category": "Monster", "fmodel_path": "", "ue_path": "" }
 
         # 2. NPCs: Verified game folders only
         for npc_id, npc_cat in KNOWN_NPC_MODELS:
-            merged_mods[npc_id] = { "base_pal": npc_id, "mod_name": npc_id, "category": npc_cat, "fmodel_path": "", "ue_path": "" }
+            merged_mods[f"{npc_id}::{npc_id}"] = { "base_pal": npc_id, "mod_name": npc_id, "category": npc_cat, "fmodel_path": "", "ue_path": "" }
 
         # 3. Player: Verified player meshes
         for player_id, player_cat in KNOWN_PLAYER_MODELS:
-            merged_mods[player_id] = { "base_pal": player_id, "mod_name": player_id, "category": player_cat, "fmodel_path": "", "ue_path": "" }
+            merged_mods[f"{player_id}::{player_id}"] = { "base_pal": player_id, "mod_name": player_id, "category": player_cat, "fmodel_path": "", "ue_path": "" }
 
         # 4. Custom Pals
         for cp in custom_pals:
-            if cp not in merged_mods:
-                merged_mods[cp] = { "base_pal": cp, "mod_name": cp, "category": "Monster", "fmodel_path": "", "ue_path": "" }
+            key = f"{cp}::{cp}"
+            if key not in merged_mods:
+                merged_mods[key] = { "base_pal": cp, "mod_name": cp, "category": "Monster", "fmodel_path": "", "ue_path": "" }
     else:
         resolved_target = resolve_casing(target_mod)
         cat = "Monster"
@@ -278,35 +279,40 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
             if resolved_target.lower() == player_id.lower():
                 cat = player_cat
                 break
-        merged_mods[resolved_target] = { "base_pal": resolved_target, "mod_name": resolved_target, "category": cat, "fmodel_path": "", "ue_path": "" }
+        merged_mods[f"{resolved_target}::{resolved_target}"] = { "base_pal": resolved_target, "mod_name": resolved_target, "category": cat, "fmodel_path": "", "ue_path": "" }
 
     for item in discovered_fmodel_norm:
         mod_name = item["mod_name"]
+        base_pal = item["base_pal"]
         if target_mod and mod_name.lower() != target_mod.lower():
             continue
-        if mod_name not in merged_mods:
-            merged_mods[mod_name] = { "base_pal": item["base_pal"], "mod_name": mod_name, "category": item["category"], "fmodel_path": "", "ue_path": "" }
-        merged_mods[mod_name]["fmodel_path"] = item["path"]
-        merged_mods[mod_name]["category"] = item["category"]
-        merged_mods[mod_name]["base_pal"] = item["base_pal"]
+        key = f"{base_pal}::{mod_name}"
+        if key not in merged_mods:
+            merged_mods[key] = { "base_pal": base_pal, "mod_name": mod_name, "category": item["category"], "fmodel_path": "", "ue_path": "" }
+        merged_mods[key]["fmodel_path"] = item["path"]
+        merged_mods[key]["category"] = item["category"]
 
     for item in discovered_ue_norm:
         mod_name = item["mod_name"]
+        base_pal = item["base_pal"]
         if target_mod and mod_name.lower() != target_mod.lower():
             continue
-        if mod_name not in merged_mods:
-            merged_mods[mod_name] = { "base_pal": item["base_pal"], "mod_name": mod_name, "category": item["category"], "fmodel_path": "", "ue_path": "" }
-        merged_mods[mod_name]["ue_path"] = item["path"]
-        merged_mods[mod_name]["category"] = item["category"]
-        merged_mods[mod_name]["base_pal"] = item["base_pal"]
+        key = f"{base_pal}::{mod_name}"
+        if key not in merged_mods:
+            merged_mods[key] = { "base_pal": base_pal, "mod_name": mod_name, "category": item["category"], "fmodel_path": "", "ue_path": "" }
+        merged_mods[key]["ue_path"] = item["path"]
+        merged_mods[key]["category"] = item["category"]
 
     results = []
 
-    for mod_name, data in merged_mods.items():
+    for key, data in merged_mods.items():
+        # Retrieve mod_name and base_pal directly from the object to prevent bleeding loop state
+        mod_name = data["mod_name"]
+        base_pal = data["base_pal"]
+        
         if target_mod and mod_name.lower() != target_mod.lower():
             continue
 
-        base_pal = data["base_pal"]
         fmodel_path = data["fmodel_path"]
         ue_path = data["ue_path"]
         is_variant = (mod_name != base_pal)
@@ -330,20 +336,20 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
                 has_blend = any(f.endswith(".blend") for f in os.listdir(fmodel_path))
                 has_psk = any(f.endswith(".psk") for f in os.listdir(fmodel_path))
 
-        # Check Altermatic status (Only matters for Base Pals, variants don't use the manifest natively)
-        is_altermatic_active = False
-        altermatic_variants = []
+        # Check Dynamic Pals status (Only matters for Base Pals)
+        is_dynamic_pals_active = False
+        dynamic_pal_variants = []
         if not is_variant:
-            manifest_path = os.path.join(fmodel_path, f"{mod_name}_altermatic.json") if fmodel_path else ""
+            manifest_path = os.path.join(fmodel_path, f"{mod_name}_dynamic_pals.json") if fmodel_path else ""
             if os.path.exists(manifest_path):
                 try:
                     with open(manifest_path, "r", encoding="utf-8") as f:
                         man_data = json.load(f)
-                        is_altermatic_active = bool(man_data.get("is_altermatic_active", False))
+                        is_dynamic_pals_active = bool(man_data.get("is_dynamic_pals_active", False))
                         variants_dict = man_data.get("variants", {})
                         for k, v in variants_dict.items():
                             v["label"] = k
-                            altermatic_variants.append(v)
+                            dynamic_pal_variants.append(v)
                 except Exception:
                     pass
 
@@ -448,8 +454,8 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
         if source_modified: 
             badges.append(["SRC CHANGED", "#F59E0B"])
             
-        if is_altermatic_active and not is_variant: 
-            badges.append(["ALTERMATIC", "#06B6D4"])
+        if is_dynamic_pals_active and not is_variant: 
+            badges.append(["DYNAMIC PALS", "#06B6D4"])
             
         if is_variant:
             badges.append(["VARIANT", "#9333EA"])
@@ -506,8 +512,8 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
             "badges": badges,
             "sound_metadata": sound_meta,
             "audio_overrides": audio_overrides,
-            "is_altermatic_active": is_altermatic_active,
-            "altermatic_variants": altermatic_variants,
+            "is_dynamic_pals_active": is_dynamic_pals_active,
+            "dynamic_pal_variants": dynamic_pal_variants,
             "preserve_materials": preserve_materials,
             "push_materials": push_materials,
             "push_textures": push_textures,
