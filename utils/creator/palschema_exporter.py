@@ -71,6 +71,16 @@ class PalSchemaExporter:
                     self.c.view.write_log(f"Successfully deleted deployed PalSchema export directory: {mod_name}", "warning")
                 except Exception as e:
                     self.c.view.write_log(f"Failed to delete deployed PalSchema export: {e}", "error")
+            
+            # --- NEW: Delete CustomPalSpawners config ---
+            cps_json = os.path.join(mods_dir, "CustomPalSpawners", "spawns", f"palbaker_{pal_id}.json")
+            if os.path.exists(cps_json):
+                try:
+                    os.remove(cps_json)
+                    self.c.view.write_log(f"Deleted CustomPalSpawners config: palbaker_{pal_id}.json", "warning")
+                except OSError: 
+                    pass
+
 
     def generate_custom_actor_blueprint(self, p: dict) -> bool:
         """Proxies standalone blueprint compilation cleanly to the centralized patching engine."""
@@ -693,82 +703,126 @@ class PalSchemaExporter:
 
         # 13. Overworld Spawners (Blueprint Infiltration)
         if p.get("EnableSpawns", True):
-            blueprints_dir = os.path.join(mod_root, "blueprints")
-            os.makedirs(blueprints_dir, exist_ok=True)
-            spawn_location = p.get("SpawnLocationID", "1_1_plain_begginer")
-            spawner_bp_path = f"/Game/Pal/Blueprint/Spawner/SheetsVariant/BP_PalSpawner_Sheets_{spawn_location}.BP_PalSpawner_Sheets_{spawn_location}_C"
+            wild_spawners = p.get("WildSpawners", [])
             
-            spawner_items = [
-                {
-                    "Weight": int(p.get("SpawnWeight", 40)),
-                    "PalList": [
-                        {
-                            "PalId": { "Key": f"MOD_{pal_id}" },
-                            "Level": int(p.get("SpawnMinLevel", 2)),
-                            "Level_Max": int(p.get("SpawnMaxLevel", 5)),
-                            "Num": int(p.get("SpawnMinGroup", 1)),
-                            "Num_Max": int(p.get("SpawnMaxGroup", 3))
-                        }
-                    ]
-                }
-            ]
-
-            # Predator encounter at night
-            if p.get("GeneratePredator", False):
-                spawner_items.append({
-                    "Weight": 5,
-                    "OnlyTime": "EPalOneDayTimeType::Night",
-                    "PalList": [
-                        {
-                            "PalId": { "Key": f"MOD_PREDATOR_{pal_id}" },
-                            "Level": int(p.get("SpawnMaxLevel", 5)) + 15,
-                            "Level_Max": int(p.get("SpawnMaxLevel", 5)) + 20,
-                            "Num": 1,
-                            "Num_Max": 1
-                        }
-                    ]
+            # Backwards compatibility for older Pals
+            if not wild_spawners and p.get("SpawnLocationID"):
+                wild_spawners.append({
+                    "SpawnLocationID": p.get("SpawnLocationID"),
+                    "SpawnWeight": p.get("SpawnWeight", 40),
+                    "SpawnMinLevel": p.get("SpawnMinLevel", 2),
+                    "SpawnMaxLevel": p.get("SpawnMaxLevel", 5),
+                    "SpawnMinGroup": p.get("SpawnMinGroup", 1),
+                    "SpawnMaxGroup": p.get("SpawnMaxGroup", 3)
                 })
 
-            spawner_payload = {
-                spawner_bp_path: {
-                    "SpawnGroupList": {
-                        "Items": spawner_items
-                    }
-                }
-            }
-            with open(os.path.join(blueprints_dir, f"{pal_id}_spawner_bp.json"), "w", encoding="utf-8") as f_bp:
-                json.dump(spawner_payload, f_bp, indent=4)
+            if wild_spawners:
+                blueprints_dir = os.path.join(mod_root, "blueprints")
+                os.makedirs(blueprints_dir, exist_ok=True)
+                
+                spawner_payload = {}
+                
+                for spawner in wild_spawners:
+                    loc = spawner.get("SpawnLocationID")
+                    if not loc or loc == "None":
+                        continue
+                        
+                    bp_path = f"/Game/Pal/Blueprint/Spawner/SheetsVariant/BP_PalSpawner_Sheets_{loc}.BP_PalSpawner_Sheets_{loc}_C"
+                    
+                    if bp_path not in spawner_payload:
+                        spawner_payload[bp_path] = {
+                            "SpawnGroupList": {
+                                "Items": []
+                            }
+                        }
+                        
+                    spawner_items = spawner_payload[bp_path]["SpawnGroupList"]["Items"]
+                    
+                    # Normal Spawns
+                    spawner_items.append({
+                        "Weight": int(spawner.get("SpawnWeight", 40)),
+                        "PalList": [
+                            {
+                                "PalId": { "Key": f"MOD_{pal_id}" },
+                                "Level": int(spawner.get("SpawnMinLevel", 2)),
+                                "Level_Max": int(spawner.get("SpawnMaxLevel", 5)),
+                                "Num": int(spawner.get("SpawnMinGroup", 1)),
+                                "Num_Max": int(spawner.get("SpawnMaxGroup", 3))
+                            }
+                        ]
+                    })
+
+                    # Predator encounters at night
+                    if p.get("GeneratePredator", False):
+                        spawner_items.append({
+                            "Weight": 5,
+                            "OnlyTime": "EPalOneDayTimeType::Night",
+                            "PalList": [
+                                {
+                                    "PalId": { "Key": f"MOD_PREDATOR_{pal_id}" },
+                                    "Level": int(spawner.get("SpawnMaxLevel", 5)) + 15,
+                                    "Level_Max": int(spawner.get("SpawnMaxLevel", 5)) + 20,
+                                    "Num": 1,
+                                    "Num_Max": 1
+                                }
+                            ]
+                        })
+
+                if spawner_payload:
+                    with open(os.path.join(blueprints_dir, f"{pal_id}_spawner_bp.json"), "w", encoding="utf-8") as f_bp:
+                        json.dump(spawner_payload, f_bp, indent=4)
+
 
         # 14. Fixed Field Boss Spawner Coordinates (BossSpawn.json)
         field_boss_spawns = p.get("FieldBossSpawns", [])
         if field_boss_spawns:
             spawners_dir = os.path.join(mod_root, "spawners")
             os.makedirs(spawners_dir, exist_ok=True)
-            boss_spawn_entries = []
+            
+            map_spawn_entries = []
             for idx, fb in enumerate(field_boss_spawns):
-                boss_spawn_entries.append({
+                is_boss = fb.get("isBoss", True)
+                spawner_name = f"PalBaker_{pal_id}_{'Boss' if is_boss else 'Spawn'}_{idx+1:03d}"
+                
+                entry = {
                     "Type": "Sheet",
                     "Location": { "X": fb.get("x", 0.0), "Y": fb.get("y", 0.0), "Z": fb.get("z", 0.0) },
                     "Rotation": { "Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0 },
-                    "SpawnerName": f"BOSS_MOD_{pal_id}_Spawn_{idx+1}",
-                    "SpawnerType": "FieldBoss",
-                    "SpawnGroupList": [
-                        {
-                            "Weight": 100,
-                            "PalList": [
-                                {
-                                    "PalId": f"MOD_BOSS_{pal_id}",
-                                    "Level": int(fb.get("level", 50)),
-                                    "Level_Max": int(fb.get("level", 50)),
-                                    "Num": 1,
-                                    "Num_Max": 1
-                                }
-                            ]
-                        }
-                    ]
-                })
-            with open(os.path.join(spawners_dir, f"{pal_id}_BossSpawn.json"), "w", encoding="utf-8") as f_bs:
-                json.dump(boss_spawn_entries, f_bs, indent=4)
+                    "SpawnerName": spawner_name,
+                }
+                
+                if is_boss:
+                    entry["SpawnerType"] = "FieldBoss"
+                    spawn_id = f"MOD_BOSS_{pal_id}" if p.get("GenerateBoss", True) is not False else f"MOD_{pal_id}"
+                    level = int(fb.get("level", 50))
+                    level_max = int(fb.get("levelMax", level))
+                    amount_min = 1
+                    amount_max = 1
+                else:
+                    spawn_id = f"MOD_{pal_id}"
+                    level = int(fb.get("level", 1))
+                    level_max = int(fb.get("levelMax", 5))
+                    amount_min = int(fb.get("amountMin", 1))
+                    amount_max = int(fb.get("amountMax", 3))
+
+                entry["SpawnGroupList"] = [
+                    {
+                        "Weight": 50,
+                        "PalList": [
+                            {
+                                "PalId": spawn_id,
+                                "Level": level,
+                                "Level_Max": level_max,
+                                "Num": amount_min,
+                                "Num_Max": amount_max
+                            }
+                        ]
+                    }
+                ]
+                map_spawn_entries.append(entry)
+
+            with open(os.path.join(spawners_dir, f"{pal_id}_Spawns.json"), "w", encoding="utf-8") as f_bs:
+                json.dump(map_spawn_entries, f_bs, indent=4)
 
         # 15. Deploy to Palworld directory
         game_mods_dir = self.get_palschema_mods_dir()
@@ -785,11 +839,22 @@ class PalSchemaExporter:
                 try:
                     os.rmdir(game_mod_root)
                 except OSError: pass
+            
             try:
                 shutil.copytree(mod_root, game_mod_root, dirs_exist_ok=True)
                 self.c.view.write_log(f"Successfully deployed PalSchema schemas to game: {mod_name}", "success")
             except Exception as e:
                 self.c.view.write_log(f"Failed to deploy PalSchema config to game: {e}", "error")
                 raise RuntimeError(f"Deployment failed: {e}")
+                
+            # --- NEW: Deploy interactive map spawners directly into the CustomPalSpawners folder! ---
+            if field_boss_spawns:
+                cps_spawns_dir = os.path.join(game_mods_dir, "CustomPalSpawners", "spawns")
+                os.makedirs(cps_spawns_dir, exist_ok=True)
+                src_json = os.path.join(spawners_dir, f"{pal_id}_Spawns.json")
+                dest_json = os.path.join(cps_spawns_dir, f"palbaker_{pal_id}.json")
+                if os.path.exists(src_json):
+                    shutil.copy2(src_json, dest_json)
+                    self.c.view.write_log(f"Deployed interactive spawns to CustomPalSpawners: palbaker_{pal_id}.json", "success")
         else:
             self.c.view.write_log("Game PalSchema directory not found. Saved schemas locally in workspace.", "warning")

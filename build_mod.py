@@ -382,7 +382,14 @@ def main():
         
         if swap_json_dir:
             target_deployed_json = os.path.join(swap_json_dir, f"palbaker-{workspace.base_pal}.json")
+            
+            base_fmodel_dir = os.path.normpath(os.path.join(
+                workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
+                workspace.category, workspace.base_pal
+            ))
+            manifest_path = os.path.join(base_fmodel_dir, f"{workspace.base_pal}_dynamic_pals.json")
 
+            # Only delete if Dynamic Pals is EXPLICITLY disabled in the base Pal's manifest
             if not workspace.is_dynamic_pals_active:
                 if os.path.exists(target_deployed_json):
                     try:
@@ -391,19 +398,11 @@ def main():
                     except OSError:
                         pass
             else:
-                has_subfolders = False
-                base_fmodel_dir = os.path.normpath(os.path.join(
-                    workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
-                    workspace.category, workspace.base_pal
-                ))
-                if os.path.exists(base_fmodel_dir):
-                    for sub in os.listdir(base_fmodel_dir):
-                        if os.path.isdir(os.path.join(base_fmodel_dir, sub)) and not sub.startswith(".") and sub.lower() != "sources":
-                            has_subfolders = True
-                            break
-                
-                if has_subfolders:
-                    print(f"[Dynamic Pals] Dynamically compiling unified variants registration config for {workspace.base_pal}...", flush=True)
+                # FIXED: As long as the manifest exists, compile and deploy it directly!
+                # No longer requires physical subfolders on disk (supports cross-pal models & reskins).
+                if os.path.exists(manifest_path):
+                    from utils.dynamic_pals_helper import compile_unified_dynamic_pals_json
+                    print(f"[Dynamic Pals] Compiling and updating deployed variants registration config for {workspace.base_pal}...", flush=True)
                     success, msg = compile_unified_dynamic_pals_json(workspace.base_pal, base_fmodel_dir, swap_json_dir)
                     print(msg, flush=True)
 

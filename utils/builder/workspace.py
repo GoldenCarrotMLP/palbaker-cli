@@ -37,18 +37,17 @@ class ModWorkspace:
         creator_json = os.path.join(self.fmodel_root, "Exports", "Pal", "Content", "Palbaker", "Creator", f"{mod_name}_creator.json") if self.fmodel_root else ""
         self.is_custom_pal = os.path.exists(creator_json)
 
-        # Read Dynamic Pals toggle state (Only applies if this is the base_pal)
+        # FIXED: Always check the base_pal's manifest, even if this specific workspace is a variant!
         self.is_dynamic_pals_active = False
-        manifest_path = ""
-        if not self.is_variant:
-            manifest_path = os.path.join(self.fmodel_dir, f"{mod_name}_dynamic_pals.json") if self.fmodel_dir else ""
-            if os.path.exists(manifest_path):
-                try:
-                    with open(manifest_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        self.is_dynamic_pals_active = bool(data.get("is_dynamic_pals_active", False))
-                except Exception:
-                    pass
+        manifest_path = os.path.join(parent_dir, f"{base_pal}_dynamic_pals.json") if parent_dir else ""
+        if os.path.exists(manifest_path):
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.is_dynamic_pals_active = bool(data.get("is_dynamic_pals_active", False))
+            except Exception:
+                pass
+
 
         # Check if this base Pal is a nested vanilla variant and load custom packaging blacklist
         self.vanilla_parent_folder = None

@@ -153,12 +153,16 @@ class PalManager:
                 "CoopPassives": predicted_coop_passives,
                 "HasFunnel": False,
                 "FunnelWazaID": "Funnel_DreamDemon",
-                "EnableSpawns": True,
-                "SpawnLocationID": predicted_spawner,
-                "SpawnMinLevel": 2,
-                "SpawnMaxLevel": 5,
-                "SpawnMinGroup": 1,
-                "SpawnMaxGroup": 3,
+                 "WildSpawners": [
+                    {
+                        "SpawnLocationID": predicted_spawner,
+                        "SpawnWeight": 40,
+                        "SpawnMinLevel": 2,
+                        "SpawnMaxLevel": 5,
+                        "SpawnMinGroup": 1,
+                        "SpawnMaxGroup": 3
+                    }
+                ],
                 "EnablePaldeck": True,
                 "ZukanIndex": -1,
                 "ZukanIndexSuffix": "",
