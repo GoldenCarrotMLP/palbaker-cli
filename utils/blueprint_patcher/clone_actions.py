@@ -5,7 +5,7 @@ import json
 import subprocess
 from utils.extractor.core import extract_game_files
 
-def clone_unique_actions(json_data: dict, json_str: str, template_id: str, pal_id: str, settings: dict, temp_dir: str, cooked_dir: str, uasset_gui: str, flags: int, log) -> tuple[dict, str]:
+def clone_unique_actions(json_data: dict, json_str: str, template_id: str, pal_id: str, settings: dict, temp_dir: str, cooked_dir: str, uasset_gui: str, usmap_path: str, flags: int, log) -> tuple[dict, str]:
     """
     Actions contain compiled bytecode that breaks when regex-replaced (causing player T-poses).
     Instead of cloning them, we allow the custom Pal to inherit and use the pristine vanilla actions.

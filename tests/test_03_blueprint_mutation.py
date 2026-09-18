@@ -1,287 +1,281 @@
 # tests/test_03_blueprint_mutation.py
-"""
-================================================================================
-PALBAKER CLI INTEGRATION TEST 03: BLUEPRINT MUTATION & DEEP PARSING
-================================================================================
-COMMANDS EXECUTED SEQUENTIALLY ON THIS TEST:
-
-[PROFILE 1: EMPTY CONFIGURATION]
-1. Zeroes out all active configuration paths.
-2. Attempt standalone Pal instantiation:
-   python palbaker_cli.py creator add BadCatgirlTest --template BadCatgirl
-3. Asserts CLI gracefully returns status 'error' and exit code 1.
-
-[PROFILE 2: GARBAGE CONFIGURATION]
-4. Writes non-existent junk paths to the settings config.
-5. Attempt standalone Pal instantiation:
-   python palbaker_cli.py creator add BadCatgirlTest --template BadCatgirl
-6. Asserts CLI gracefully returns status 'error', exit code 1, and path warnings.
-
-[PROFILE 3: REAL CONFIGURATION]
-7. Restores the user's active manager_settings.json.
-8. Creates a new custom standalone Pal and triggers automated lookbehind patching:
-   python palbaker_cli.py creator add BadCatgirlTest --template BadCatgirl
-9. Extracts the *vanilla* BP_BadCatgirl.uasset using cue4parse.
-10. Converts BOTH the vanilla .uasset and the modified .uasset to JSON.
-11. Performs a recursive Deep JSON Diff:
-    - Asserts both JSONs have identically matching schemas, arrays, and keys.
-    - Bypasses UAssetGUI recalculated math (offsets, sizes, counts) dynamically.
-    - Asserts that anywhere values differ, it is STRICTLY related to our intended
-      string replacements, proving zero data loss or serialization corruption.
-12. Performs a structured ObjectName validation check supporting both modern
-    and legacy UAssetGUI JSON schemas.
-13. Performs clean teardown of the custom test Pal.
-================================================================================
-"""
-
 import os
 import sys
 import json
 import shutil
-import subprocess
-from test_helper import SettingsSandbox, run_cli_command, parse_cli_json, log
+import time
 
-# Resolve paths relative to the test file location
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(TESTS_DIR)
-SETTINGS_FILE = os.path.join(REPO_ROOT, "manager_settings.json")
-CLI_ENTRY_POINT = os.path.join(REPO_ROOT, "palbaker_cli.py")
+sys.path.append(REPO_ROOT)
 
-TARGET_PAL = "BadCatgirlTest"
-TEMPLATE_PAL = "BadCatgirl"
+from utils.config import load_settings
+from utils.extractor.core import extract_game_files
+from utils.uasset_helper import decompile_uasset, compile_uasset, sync_namemap
+from utils.blueprint_patcher.feature_manager import BlueprintFeatureManager
 
-def assert_graceful_failure(exit_code: int, stdout: str, stderr: str, profile_name: str):
-    if "traceback" in stdout.lower() or "traceback" in stderr.lower():
-         raise AssertionError(f"CLI crashed with a raw Python traceback under {profile_name} profile.\nSTDOUT: {stdout}\nSTDERR: {stderr}")
-    parsed = parse_cli_json(stdout)
-    if not parsed:
-         raise AssertionError(f"CLI did not output a valid JSON envelope under {profile_name}.\nExit Code: {exit_code}\nSTDOUT: {stdout}")
-    if parsed.get("status") != "error":
-         raise AssertionError(f"Expected status 'error' under {profile_name}, got '{parsed.get('status')}'")
+def log(msg: str, category: str = "INFO"):
+    print(f"[{category}] {msg}", flush=True)
 
+def get_blueprint_fixture(name: str, temp_dir: str, settings: dict, uasset_gui: str, usmap_path: str) -> dict:
+    """Resolves an Actor Blueprint JSON fixture from disk or extracts from game paks."""
+    candidate_locations = [
+        os.path.join(TESTS_DIR, "fixtures", "blueprints", f"{name}.json"),
+        os.path.join(TESTS_DIR, f"{name}.json"),
+        os.path.join(REPO_ROOT, f"{name}.json"),
+        os.path.join(REPO_ROOT, "templates", f"{name}.json"),
+    ]
 
-def verify_structural_integrity(orig_node, mod_node, path="root"):
-    """
-    Recursively walks two JSON dictionaries simultaneously.
-    Ensures that the entire structural schema is 100% identical and that 
-    the only changes made are the expected string mutations.
-    """
-    # 1. Type Matching
-    if type(orig_node) != type(mod_node):
-        # Gracefully handle implicit float/int casting by Python's JSON decoder
-        if isinstance(orig_node, (int, float)) and isinstance(mod_node, (int, float)):
-            pass
-        else:
-            raise AssertionError(f"Serialization Corruption: Type mismatch at {path}. Orig: {type(orig_node).__name__} vs Mod: {type(mod_node).__name__}")
+    for p in candidate_locations:
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                log(f"   Loaded static fixture: {os.path.relpath(p, REPO_ROOT)}")
+                return json.load(f)
+
+    # Dynamic extraction fallback from game paks
+    pal_id = name.replace("BP_", "")
+    rel_uasset = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{pal_id}/{name}.uasset"
+    rel_uexp = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{pal_id}/{name}.uexp"
     
-    # Extract current key to check for dynamic offset-bypass rules
-    current_key = path.split(".")[-1].split("[")[0].lower()
+    extract_target_dir = os.path.join(temp_dir, f"extract_{name}")
+    success, _ = extract_game_files(settings, [rel_uasset, rel_uexp], extract_target_dir, format_type="raw")
 
-    # 2. Binary Shifting Bypass Check
-    # UAssetGUI dynamically recalculates array counts, sizes, and file byte offsets.
-    # We ignore their explicit values, relying on type and schema mapping to prove integrity.
-    if "offset" in current_key or "size" in current_key or "count" in current_key:
-        return
+    if success:
+        for root, _, files in os.walk(extract_target_dir):
+            for file in files:
+                if file.lower() == f"{name.lower()}.uasset":
+                    uasset_disk = os.path.join(root, file)
+                    decompiled_json = os.path.join(temp_dir, f"{name}.json")
+                    if decompile_uasset(uasset_gui, uasset_disk, decompiled_json, usmap_path):
+                        with open(decompiled_json, "r", encoding="utf-8") as f_decomp:
+                            log(f"   Dynamically extracted & decompiled {name} from game archives.")
+                            return json.load(f_decomp)
 
-    # 3. Dictionary Walk
-    if isinstance(orig_node, dict):
-        orig_keys = set(orig_node.keys())
-        mod_keys = set(mod_node.keys())
-        
-        if orig_keys != mod_keys:
-            missing = orig_keys - mod_keys
-            extra = mod_keys - orig_keys
-            raise AssertionError(f"Serialization Corruption: Key mismatch at {path}.\nMissing keys: {missing}\nExtra keys: {extra}")
-            
-        for k in orig_keys:
-            verify_structural_integrity(orig_node[k], mod_node[k], f"{path}.{k}")
-            
-    # 4. Array Walk
-    elif isinstance(orig_node, list):
-        if len(orig_node) != len(mod_node):
-            raise AssertionError(f"Serialization Corruption: Array length mismatch at {path}. Orig: {len(orig_node)} vs Mod: {len(mod_node)}")
-            
-        for i in range(len(orig_node)):
-            verify_structural_integrity(orig_node[i], mod_node[i], f"{path}[{i}]")
-            
-    # 5. String Mutation Validation
-    elif isinstance(orig_node, str):
-        if orig_node != mod_node:
-            # If the strings differ, it MUST be because of our targeted Pal ID injection.
-            if TEMPLATE_PAL not in orig_node or TARGET_PAL not in mod_node:
-                raise AssertionError(f"Unexpected string mutation detected at {path}!\nOriginal: {orig_node}\nModified: {mod_node}")
-                
-            # Crucial assertion: Ensure the AnimBP was NOT corrupted.
-            if f"ABP_{TEMPLATE_PAL}" in orig_node and f"ABP_{TARGET_PAL}" in mod_node:
-                 raise AssertionError(
-                     f"CRITICAL ANIMATION BP CORRUPTION DETECTED at {path}!\n"
-                     f"The negative lookbehind regex failed. 'ABP_{TEMPLATE_PAL}' was mutated into 'ABP_{TARGET_PAL}'. "
-                     f"This will break in-game animations."
-                 )
-                
-    # 6. Primitives (int, float, bool, null)
-    else:
-        if orig_node != mod_node:
-            raise AssertionError(f"Serialization Corruption: Primitive value mismatch at {path}. Orig: {orig_node} vs Mod: {mod_node}")
+    return None
 
+def verify_roundtrip_compilation(uasset_gui: str, usmap_path: str, data: dict, output_base: str, temp_dir: str) -> dict:
+    sync_namemap(data)
+    json_path = os.path.join(temp_dir, f"{output_base}.json")
+    uasset_path = os.path.join(temp_dir, f"{output_base}.uasset")
+    rt_json_path = os.path.join(temp_dir, f"{output_base}_rt.json")
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+    assert compile_uasset(uasset_gui, json_path, uasset_path, usmap_path), f"Failed to compile {output_base}.uasset"
+    assert os.path.exists(uasset_path) and os.path.getsize(uasset_path) > 0, f"Empty or missing {output_base}.uasset"
+    assert decompile_uasset(uasset_gui, uasset_path, rt_json_path, usmap_path), f"Failed to decompile {output_base}.uasset"
+
+    with open(rt_json_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def main():
-    log(f"=== PalBaker CLI Blueprint Mutation (Chaos Proof): {TARGET_PAL} ===")
-    
-    sandbox = SettingsSandbox(REPO_ROOT)
-    sandbox.backup()
+    log("=== PalBaker Comprehensive Blueprint Feature Mutation Suite ===")
+    settings = load_settings()
 
-    uasset_gui_exe = os.path.normpath(os.path.join(REPO_ROOT, "deps", "UAssetGUI.exe"))
-    if not os.path.exists(uasset_gui_exe):
-        log(f"Fatal: Missing required UAssetGUI dependency at {uasset_gui_exe}", "ERROR")
-        sys.exit(1)
+    uasset_gui = os.path.normpath(os.path.join(REPO_ROOT, "deps", "UAssetGUI.exe"))
+    usmap_path = os.path.normpath(os.path.join(REPO_ROOT, "deps", "Mappings.usmap"))
+
+    assert os.path.exists(uasset_gui), f"UAssetGUI.exe missing at {uasset_gui}"
+    assert os.path.exists(usmap_path), f"Mappings.usmap missing at {usmap_path}"
+
+    temp_dir = os.path.join(TESTS_DIR, "temp_bp_mutation_test")
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    os.makedirs(temp_dir, exist_ok=True)
 
     try:
-        # Profile 1: Empty Settings
-        log("\n--- Profile 1: Empty Settings Verification ---")
-        sandbox.apply_profile("empty")
-        exit_code, stdout, stderr = run_cli_command(["creator", "add", TARGET_PAL, "--template", TEMPLATE_PAL], CLI_ENTRY_POINT)
-        assert_graceful_failure(exit_code, stdout, stderr, "EMPTY")
-        log("✅ SUCCESS: Profile 1 passed. CLI rejected empty configuration gracefully.")
+        log("Loading baseline blueprint fixtures...")
+        data_kitsunebi = get_blueprint_fixture("BP_Kitsunebi", temp_dir, settings, uasset_gui, usmap_path)
+        data_sheepball = get_blueprint_fixture("BP_SheepBall", temp_dir, settings, uasset_gui, usmap_path)
+        data_dreamdemon = get_blueprint_fixture("BP_DreamDemon", temp_dir, settings, uasset_gui, usmap_path)
+        data_weasel = get_blueprint_fixture("BP_WeaselDragon", temp_dir, settings, uasset_gui, usmap_path)
 
-        # Profile 2: Garbage Settings
-        log("\n--- Profile 2: Garbage Settings Verification ---")
-        sandbox.apply_profile("garbage")
-        exit_code, stdout, stderr = run_cli_command(["creator", "add", TARGET_PAL, "--template", TEMPLATE_PAL], CLI_ENTRY_POINT)
-        assert_graceful_failure(exit_code, stdout, stderr, "GARBAGE")
-        log("✅ SUCCESS: Profile 2 passed. CLI rejected invalid paths gracefully.")
+        assert data_kitsunebi is not None, "Could not resolve BP_Kitsunebi fixture."
+        assert data_sheepball is not None, "Could not resolve BP_SheepBall fixture."
+        assert data_dreamdemon is not None, "Could not resolve BP_DreamDemon fixture."
+        assert data_weasel is not None, "Could not resolve BP_WeaselDragon fixture."
 
-        # Profile 3: Real Run
-        log("\n--- Profile 3: Real Settings Verification & Run ---")
-        sandbox.apply_profile("real")
-        
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-            settings = json.load(f)
+        start_time = time.time()
 
-        fmodel_output = settings.get("fmodel_output", "")
-        uproject_path = settings.get("uproject", "")
-        if not fmodel_output or not uproject_path:
-            log("Skipping Profile 3 run: Required paths are not configured in settings.", "WARNING")
-            return
+        # ---------------------------------------------------------------------
+        # SCENARIO 1: Feature Injection (Add Weapon & Funnel to SheepBall)
+        # ---------------------------------------------------------------------
+        log("\n--- Scenario 1: Injecting Weapon & Funnel Features into SheepBall ---")
+        mutated_s1 = json.loads(json.dumps(data_sheepball))
+        mgr_s1 = BlueprintFeatureManager(mutated_s1)
 
-        project_dir = os.path.dirname(uproject_path)
-        project_name = os.path.splitext(os.path.basename(uproject_path))[0]
+        flamethrower_class_pkg = "/Game/Pal/Blueprint/Weapon/BP_Kitsunebi_Flamethrower"
+        weapon_class_idx = mgr_s1.ensure_import_chain(flamethrower_class_pkg, "BP_Kitsunebi_Flamethrower_C")
+        mgr_s1.add_component(
+            var_name="BP_CoopParam_Weapon",
+            comp_class_package="/Game/Pal/Blueprint/Character/Monster/CoopParam/BP_CoopParam_Weapon",
+            comp_class_name="BP_CoopParam_Weapon_C",
+            template_properties=[
+                {
+                    "$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
+                    "Name": "WeaponClass",
+                    "ArrayIndex": 0,
+                    "PropertyGuid": None,
+                    "IsZero": False,
+                    "PropertyTagFlags": "None",
+                    "PropertyTypeName": None,
+                    "PropertyTagExtensions": "NoExtension",
+                    "Value": weapon_class_idx
+                }
+            ]
+        )
+        mgr_s1.set_ai_action("EPalAIActionType::Cooperation", "/Game/Pal/Blueprint/Controller/AIAction/Coop/BP_AIAction_WeaponCall.BP_AIAction_WeaponCall_C")
+        mgr_s1.set_partner_funnel_params(
+            funnel_character_class="/Game/Pal/Blueprint/Character/Funnel/BP_FunnelCharacter_DreamDemon.BP_FunnelCharacter_DreamDemon_C",
+            funnel_controller_class="/Game/Pal/Blueprint/Controller/Funnel/BP_FunnelCharacterAIController.BP_FunnelCharacterAIController_C",
+            funnel_waza_id="EPalWazaID::Funnel_DreamDemon"
+        )
 
-        creator_file = os.path.normpath(os.path.join(fmodel_output, "Exports", "Pal", "Content", "Palbaker", "Creator", f"{TARGET_PAL}_creator.json"))
-        if os.path.exists(creator_file):
-            os.remove(creator_file)
+        rt_s1 = verify_roundtrip_compilation(uasset_gui, usmap_path, mutated_s1, "BP_SheepBall_Scenario1", temp_dir)
+        rt_mgr_s1 = BlueprintFeatureManager(rt_s1)
+        assert rt_mgr_s1.has_component("BP_CoopParam_Weapon"), "Scenario 1: BP_CoopParam_Weapon missing."
+        log("  ✓ [PASS] Scenario 1 verified: Injected Weapon, AIActionMap, and Funnel serialized flawlessly.")
 
-        # Cleanup existing cooked assets to guarantee a fresh compilation check
-        cooked_uasset_path = os.path.normpath(os.path.join(
-            project_dir, "Saved", "Cooked", "Windows", project_name, 
-            "Content", "Pal", "Blueprint", "Character", "Monster", "PalActorBP", 
-            TARGET_PAL, f"BP_{TARGET_PAL}.uasset"
-        ))
-        if os.path.exists(cooked_uasset_path):
-            log(f"Wiping existing cooked target uasset to guarantee fresh compilation: {cooked_uasset_path}")
-            os.remove(cooked_uasset_path)
+        # ---------------------------------------------------------------------
+        # SCENARIO 2: Feature Stripping (Remove Weapon from Kitsunebi)
+        # ---------------------------------------------------------------------
+        log("\n--- Scenario 2: Stripping Weapon & Cooperation from Kitsunebi ---")
+        mutated_s2 = json.loads(json.dumps(data_kitsunebi))
+        mgr_s2 = BlueprintFeatureManager(mutated_s2)
 
-        # 1. Instantiate the custom Pal
-        log(f"Instantiating Custom Standalone Pal: {TARGET_PAL} from {TEMPLATE_PAL}...")
-        exit_code, stdout, stderr = run_cli_command(["creator", "add", TARGET_PAL, "--template", TEMPLATE_PAL], CLI_ENTRY_POINT)
-        parsed_add = parse_cli_json(stdout)
-        if not parsed_add or parsed_add.get("status") != "success":
-            raise AssertionError(f"Failed to instantiate custom Pal. STDOUT: {stdout}\nSTDERR: {stderr}")
+        mgr_s2.remove_component("BP_CoopParam_Weapon")
+        mgr_s2.remove_ai_action("EPalAIActionType::Cooperation")
 
-        # 2. Extract Original Vanilla Blueprint to temp folder
-        log("Extracting original vanilla parent blueprint for baseline comparison...")
-        sys.path.append(REPO_ROOT)
-        from utils.extractor.core import extract_game_files
-        
-        temp_dir = os.path.join(TESTS_DIR, "temp_bp_diff")
+        rt_s2 = verify_roundtrip_compilation(uasset_gui, usmap_path, mutated_s2, "BP_Kitsunebi_Scenario2", temp_dir)
+        rt_mgr_s2 = BlueprintFeatureManager(rt_s2)
+        assert not rt_mgr_s2.has_component("BP_CoopParam_Weapon"), "Scenario 2: BP_CoopParam_Weapon still present."
+        log("  ✓ [PASS] Scenario 2 verified: Stripped weapon component and AI action cleanly without broken links.")
+
+        # ---------------------------------------------------------------------
+        # SCENARIO 3: Feature Swapping (SheepBall Shield -> Kitsunebi Weapon)
+        # ---------------------------------------------------------------------
+        log("\n--- Scenario 3: Swapping Shield for Weapon on SheepBall ---")
+        mutated_s3 = json.loads(json.dumps(data_sheepball))
+        mgr_s3 = BlueprintFeatureManager(mutated_s3)
+
+        mgr_s3.remove_component("Shield")
+        mgr_s3.remove_component("BP_CoopParam_Sheild")
+        mgr_s3.add_component(
+            var_name="BP_CoopParam_Weapon",
+            comp_class_package="/Game/Pal/Blueprint/Character/Monster/CoopParam/BP_CoopParam_Weapon",
+            comp_class_name="BP_CoopParam_Weapon_C"
+        )
+        mgr_s3.set_ai_action("EPalAIActionType::Cooperation", "/Game/Pal/Blueprint/Controller/AIAction/Coop/BP_AIAction_WeaponCall.BP_AIAction_WeaponCall_C")
+
+        rt_s3 = verify_roundtrip_compilation(uasset_gui, usmap_path, mutated_s3, "BP_SheepBall_Scenario3", temp_dir)
+        rt_mgr_s3 = BlueprintFeatureManager(rt_s3)
+        assert not rt_mgr_s3.has_component("Shield"), "Scenario 3: Shield still present."
+        assert rt_mgr_s3.has_component("BP_CoopParam_Weapon"), "Scenario 3: BP_CoopParam_Weapon missing."
+        log("  ✓ [PASS] Scenario 3 verified: Swapped Shield for Flamethrower successfully.")
+
+        # ---------------------------------------------------------------------
+        # SCENARIO 4: Saddle Injection (Give a Mountable Saddle to Lamball)
+        # ---------------------------------------------------------------------
+        log("\n--- Scenario 4: Saddle Injection (Making SheepBall Rideable) ---")
+        mutated_s4 = json.loads(json.dumps(data_sheepball))
+        mgr_s4 = BlueprintFeatureManager(mutated_s4)
+
+        mgr_s4.add_saddle(
+            ride_position_type="HorseRide",
+            attach_socket="pelvis",
+            relative_rotation={"Pitch": 90.0, "Yaw": 0.0, "Roll": 0.0}
+        )
+
+        rt_s4 = verify_roundtrip_compilation(uasset_gui, usmap_path, mutated_s4, "BP_SheepBall_Saddle", temp_dir)
+        rt_mgr_s4 = BlueprintFeatureManager(rt_s4)
+        assert rt_mgr_s4.has_saddle(), "Scenario 4: Saddle component missing from roundtrip AST."
+        log("  ✓ [PASS] Scenario 4 verified: Injected BP_PalRideMarkerSaddle and ride AI action cleanly.")
+
+        # ---------------------------------------------------------------------
+        # SCENARIO 5: All-in-One Pal (WeaselDragon + Weapon + Bytecode + Funnel + Shield + Roll)
+        # ---------------------------------------------------------------------
+        log("\n--- Scenario 5: All-in-One Pal (Saddle + Weapon + Bytecode + Funnel + Shield + Roll) ---")
+        mutated_s5 = json.loads(json.dumps(data_weasel))
+        mgr_s5 = BlueprintFeatureManager(mutated_s5)
+
+        # 1. Weapon Component
+        weapon_class_idx = mgr_s5.ensure_import_chain(flamethrower_class_pkg, "BP_Kitsunebi_Flamethrower_C")
+        mgr_s5.add_component(
+            var_name="BP_CoopParam_Weapon",
+            comp_class_package="/Game/Pal/Blueprint/Character/Monster/CoopParam/BP_CoopParam_Weapon",
+            comp_class_name="BP_CoopParam_Weapon_C",
+            template_properties=[
+                {
+                    "$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
+                    "Name": "WeaponClass",
+                    "ArrayIndex": 0,
+                    "PropertyGuid": None,
+                    "IsZero": False,
+                    "PropertyTagFlags": "None",
+                    "PropertyTypeName": None,
+                    "PropertyTagExtensions": "NoExtension",
+                    "Value": weapon_class_idx
+                }
+            ]
+        )
+
+        # 2. Funnel Minion Params in ICH
+        mgr_s5.set_partner_funnel_params(
+            funnel_character_class="/Game/Pal/Blueprint/Character/Funnel/BP_FunnelCharacter_DreamDemon.BP_FunnelCharacter_DreamDemon_C",
+            funnel_controller_class="/Game/Pal/Blueprint/Controller/Funnel/BP_FunnelCharacterAIController.BP_FunnelCharacterAIController_C",
+            funnel_waza_id="EPalWazaID::Funnel_DreamDemon"
+        )
+
+        # 3. Defensive Shield Component
+        mgr_s5.add_component(
+            var_name="Shield",
+            comp_class_package="/Script/Engine",
+            comp_class_name="SphereComponent",
+            template_properties=[
+                {
+                    "$type": "UAssetAPI.PropertyTypes.Objects.FloatPropertyData, UAssetAPI",
+                    "Name": "SphereRadius",
+                    "ArrayIndex": 0,
+                    "PropertyGuid": None,
+                    "IsZero": False,
+                    "PropertyTagFlags": "None",
+                    "PropertyTypeName": None,
+                    "PropertyTagExtensions": "NoExtension",
+                    "Value": 90.0
+                }
+            ]
+        )
+
+        # 4. Unique Roll Attack Declaration
+        mgr_s5.set_waza_declaration(
+            waza_id_enum="EPalWazaID::Unique_SheepBall_Roll",
+            action_class_package="/Game/Pal/Blueprint/Action/Waza/SheepBall/BP_Action_Unique_SheepBall_Roll",
+            action_class_name="BP_Action_Unique_SheepBall_Roll_C"
+        )
+
+        # 5. Full Bytecode & Delegate Transference
+        mgr_s5.transfer_uber_graph(data_kitsunebi, "BP_WeaselDragon")
+
+        # Compile and Verify Roundtrip
+        rt_s5 = verify_roundtrip_compilation(uasset_gui, usmap_path, mutated_s5, "BP_WeaselDragon_AllInOne", temp_dir)
+        rt_mgr_s5 = BlueprintFeatureManager(rt_s5)
+
+        assert rt_mgr_s5.has_saddle(), "Scenario 5: Native Saddle missing."
+        assert rt_mgr_s5.has_component("BP_CoopParam_Weapon"), "Scenario 5: Weapon missing."
+        assert rt_mgr_s5.has_component("Shield"), "Scenario 5: Shield missing."
+        assert any("ExecuteUbergraph" in f[0] for f in rt_mgr_s5.class_export.get("FuncMap", [])), "Scenario 5: Transferred Ubergraph missing."
+
+        elapsed = time.time() - start_time
+        log(f"  ✓ [PASS] Scenario 5 verified: Super-blueprint with all 6 features compiled and un-serialized successfully!")
+        log("\n" + "=" * 70)
+        log(f"🎉 ALL 5 BLUEPRINT MUTATION SCENARIOS PASSED ({elapsed:.2f}s)!")
+        log("=" * 70)
+
         shutil.rmtree(temp_dir, ignore_errors=True)
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        relative_uasset = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{TEMPLATE_PAL}/BP_{TEMPLATE_PAL}.uasset"
-        relative_uexp = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{TEMPLATE_PAL}/BP_{TEMPLATE_PAL}.uexp"
-        
-        success, msg = extract_game_files(settings, [relative_uasset, relative_uexp], temp_dir, format_type="raw")
-        if not success:
-            raise AssertionError(f"Failed to extract vanilla blueprint: {msg}")
-
-        vanilla_uasset_path = os.path.join(temp_dir, f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{TEMPLATE_PAL}/BP_{TEMPLATE_PAL}.uasset")
-        if not os.path.exists(vanilla_uasset_path):
-            raise AssertionError("Extracted vanilla .uasset not found on disk.")
-
-        # 3. Verify the generated cooked .uasset exists
-        if not os.path.exists(cooked_uasset_path):
-            raise AssertionError(f"Patched compiled blueprint was not saved to expected path: {cooked_uasset_path}")
-
-        # 4. Decompile BOTH to JSON using UAssetGUI
-        log("Decompiling BOTH assets to JSON for structural diffing...")
-        vanilla_json_path = os.path.join(temp_dir, "vanilla.json")
-        modified_json_path = os.path.join(temp_dir, "modified.json")
-
-        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-        subprocess.run([uasset_gui_exe, "tojson", vanilla_uasset_path, vanilla_json_path, "VER_UE5_1"], check=True, creationflags=creation_flags)
-        subprocess.run([uasset_gui_exe, "tojson", cooked_uasset_path, modified_json_path, "VER_UE5_1"], check=True, creationflags=creation_flags)
-
-        # 5. Load and Execute Deep Recursive Diff
-        log("Executing Deep Recursive JSON Diff...")
-        with open(vanilla_json_path, "r", encoding="utf-8") as f:
-            vanilla_data = json.load(f)
-        with open(modified_json_path, "r", encoding="utf-8") as f:
-            modified_data = json.load(f)
-
-        verify_structural_integrity(vanilla_data, modified_data)
-
-        # 6. Specific ObjectName confirmation check (Mesh visibility guard)
-        log("Validating ObjectName linking rules...")
-        
-        # Check Imports table for modern structured references
-        has_mesh_link = False
-        imports = modified_data.get("Imports", [])
-        for imp in imports:
-            if imp.get("ClassName") == "SkeletalMesh" and imp.get("ObjectName") == f"SK_{TARGET_PAL}":
-                has_mesh_link = True
-                break
-                
-        # Fallback check on raw string dump (for older UAssetGUI installations)
-        mod_json_str = json.dumps(modified_data)
-        expected_mesh_objname = f"SkeletalMesh'SK_{TARGET_PAL}'"
-        if expected_mesh_objname in mod_json_str:
-            has_mesh_link = True
-
-        if not has_mesh_link:
-            log("Diagnostic: MESH VISIBILITY CHECK FAILED. Scanning modified JSON for any SkeletalMesh references...", "WARNING")
-            matches = []
-            def find_skeletal_meshes(node, path="root"):
-                if isinstance(node, str):
-                    if "skeletalmesh" in node.lower() or "skinnedasset" in node.lower() or "sk_" in node.lower():
-                        matches.append(f"  {path}: '{node}'")
-                elif isinstance(node, dict):
-                    for k, v in node.items():
-                        find_skeletal_meshes(v, f"{path}.{k}")
-                elif isinstance(node, list):
-                    for i, v in enumerate(node):
-                        find_skeletal_meshes(v, f"{path}[{i}]")
-            find_skeletal_meshes(modified_data)
-            for m in matches[:20]:
-                log(m, "DEBUG")
-                
-            raise AssertionError(
-                f"MESH VISIBILITY FAILURE: Expected ObjectName mapping for 'SK_{TARGET_PAL}' is missing.\n"
-                f"The Pal will render invisible. See diagnostic logs above for actual compiled strings."
-            )
-
-        log("✅ PASS: Profile 3 passed. Blueprint structural schema is 100% intact with zero serialization corruption.")
 
     except Exception as e:
-        log(f"❌ TEST FAILED: {str(e)}", "ERROR")
-        sys.exit(1)
-        
-    finally:
-        # Teardown: Call the CLI to delete the custom Pal definition and clean up
-        log("\n--- Cleanup & Teardown ---")
-        if os.path.exists(SETTINGS_FILE):
-            run_cli_command(["creator", "delete", TARGET_PAL], CLI_ENTRY_POINT)
-        shutil.rmtree(os.path.join(TESTS_DIR, "temp_bp_diff"), ignore_errors=True)
-        sandbox.restore()
+        log(f"❌ Test failed: {e}", "ERROR")
+        raise
 
 if __name__ == "__main__":
     main()

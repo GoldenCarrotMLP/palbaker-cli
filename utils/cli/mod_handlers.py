@@ -486,7 +486,7 @@ def handle_mod_command(args, settings):
         if blender_res.stdout and blender_res.stdout.strip():
             print(blender_res.stdout, flush=True)
 
-        # Resolve source template for clean take prefix stripping
+                # Resolve source template for clean take prefix stripping
         source_pal, is_custom = resolve_source_template(mod_data, settings, base_pal, mod_name)
 
         # Step 2: Ingest FBX takes into Unreal Editor via Remote Execution
@@ -513,65 +513,14 @@ def handle_mod_command(args, settings):
         try: os.remove(cfg_path)
         except OSError: pass
 
-        # Step 3: Pure Python Native Montage Serialization (json_to_uasset)
-        project_dir = os.path.dirname(settings.get("uproject", ""))
-        custom_guid = custom_anims_meta.get("custom_skeleton_guid", "F364245843D36EB42B398F898DDC8313")
-
-        category = mod_data.get("category", "Monster")
-        cat_sanitized = category.replace(" ", "_")
-        cat_rel = category.replace("/", os.sep).replace("\\", os.sep)
-        if base_pal.lower() != mod_name.lower():
-            anims_rel = os.path.join("Pal", "Animation", "Character", cat_rel, base_pal, mod_name)
-            anims_vpath = f"/Game/Pal/Animation/Character/{cat_sanitized}/{base_pal}/{mod_name}"
-        else:
-            anims_rel = os.path.join("Pal", "Animation", "Character", cat_rel, base_pal)
-            anims_vpath = f"/Game/Pal/Animation/Character/{cat_sanitized}/{base_pal}"
-
-        anims_content_dir = os.path.normpath(os.path.join(project_dir, "Content", anims_rel))
-        anims_cooked_dir = os.path.normpath(os.path.join(project_dir, "Saved", "Cooked", "Windows", target_project_name, "Content", anims_rel))
-
-        # FIX: Ensure both destination directories exist before generating or copying assets
-        os.makedirs(anims_content_dir, exist_ok=True)
-        os.makedirs(anims_cooked_dir, exist_ok=True)
-
-        def strict_clean(n: str, b_pal: str, m_name: str) -> str:
-            """Aggressively strips all prefixes from stale sidecar data."""
-            c = n
-            prefixes = sorted([
-                f"AM_{b_pal}_", f"AS_{b_pal}_", f"AM_{m_name}_", f"AS_{m_name}_",
-                f"{b_pal}_", f"{m_name}_", "AM_", "AS_"
-            ], key=len, reverse=True)
-            for _ in range(2):
-                for p in prefixes:
-                    if c.lower().startswith(p.lower()): 
-                        c = c[len(p):]
-            return c
-
-        generated_montages = 0
-        for key, anim in anims_dict.items():
-            raw_track = anim.get("nla_track_name") or key
-            clean_track = strict_clean(raw_track, base_pal, mod_name)
-            if not clean_track: continue
-
-            montage_name = f"AM_{mod_name}_{clean_track}"
-            sequence_name = f"AS_{mod_name}_{clean_track}"
-
-            notifies = anim.get("notifies", [])
-            payload = create_dynamic_montage_payload(montage_name, sequence_name, base_pal, mod_name, custom_guid, notifies, category=category, is_custom_pal=is_custom)
-            dest_content = os.path.join(anims_content_dir, f"{montage_name}.uasset")
-            build_uasset(payload, dest_content)
-
-            dest_cooked = os.path.join(anims_cooked_dir, f"{montage_name}.uasset")
-            shutil.copy2(dest_content, dest_cooked)
-            generated_montages += 1
-
+        anims_vpath = f"/Game/Pal/Animation/Character/{mod_data.get('category', 'Monster').replace(' ', '_')}/{mod_name}"
         sync_cmd = f'import unreal; unreal.EditorUtilityLibrary.sync_browser_to_folders(["{anims_vpath}"]); unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous(["{anims_vpath}"], True)'
         run_remote_command(settings["ue_root"], target_project_name, sync_cmd)
         focus_unreal_window(target_project_name)
 
         json_print({
             "status": "success",
-            "message": f"Successfully imported FBX takes and compiled {generated_montages} AnimMontages natively into Unreal!"
+            "message": f"Successfully imported FBX takes into Unreal! Montages will compile on Cook."
         })
 
     elif action == "set-preserve-materials":

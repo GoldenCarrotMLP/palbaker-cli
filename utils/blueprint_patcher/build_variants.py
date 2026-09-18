@@ -18,6 +18,7 @@ def build_boss_variant(base_json_str: str, template_id: str, pal_id: str, boss_s
         cand_disk = os.path.join(temp_dir, cand)
         if success and os.path.exists(cand_disk):
             temp_boss_json = os.path.join(temp_dir, "boss_blueprint.json")
+            # Unversioned extraction (No usmap) to prevent bytecode corruption
             subprocess.run([uasset_gui, "tojson", cand_disk, temp_boss_json, "VER_UE5_1"], check=True, creationflags=flags)
             
             with open(temp_boss_json, "r", encoding="utf-8") as f:
@@ -57,7 +58,32 @@ def build_boss_variant(base_json_str: str, template_id: str, pal_id: str, boss_s
         synth_data = json.loads(synth_str)
         for exp in synth_data.get("Exports", []):
             if exp.get("ObjectName") == "CharacterMesh0":
-                exp.setdefault("Properties", {})["RelativeScale3D"] = {"X": boss_scale, "Y": boss_scale, "Z": boss_scale}
+                props = exp.setdefault("Properties", {})
+                
+                # Check for NormalExport structured arrays vs RawExport dicts dynamically
+                if isinstance(props, list):
+                    scale_prop = next((p for p in props if p.get("Name") == "RelativeScale3D"), None)
+                    if scale_prop:
+                        val = scale_prop.get("Value", [{}])[0].get("Value", {})
+                        val["X"] = boss_scale
+                        val["Y"] = boss_scale
+                        val["Z"] = boss_scale
+                    else:
+                        props.append({
+                            "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
+                            "StructType": "Vector",
+                            "Name": "RelativeScale3D",
+                            "Value": [
+                                {
+                                    "$type": "UAssetAPI.PropertyTypes.Structs.VectorPropertyData, UAssetAPI",
+                                    "Name": "RelativeScale3D",
+                                    "Value": { "X": boss_scale, "Y": boss_scale, "Z": boss_scale }
+                                }
+                            ]
+                        })
+                else:
+                    props["RelativeScale3D"] = {"X": boss_scale, "Y": boss_scale, "Z": boss_scale}
+                    
         with open(temp_synth_json, "w", encoding="utf-8") as f:
             json.dump(synth_data, f, indent=4)
     except Exception:
@@ -82,6 +108,7 @@ def build_predator_variant(template_id: str, pal_id: str, generate_boss: bool, s
         cand_disk = os.path.join(temp_dir, cand)
         if success and os.path.exists(cand_disk):
             temp_pred_json = os.path.join(temp_dir, "pred_blueprint.json")
+            # Unversioned extraction
             subprocess.run([uasset_gui, "tojson", cand_disk, temp_pred_json, "VER_UE5_1"], check=True, creationflags=flags)
             
             with open(temp_pred_json, "r", encoding="utf-8") as f:
