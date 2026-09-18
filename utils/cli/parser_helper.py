@@ -15,7 +15,12 @@ def create_cli_parser() -> argparse.ArgumentParser:
 
     # mod
     mod_parser = subparsers.add_parser("mod", help="Pipeline execution")
-    mod_parser.add_argument("action", choices=["extract", "create-blend", "push", "cook", "pack", "full", "decompile", "set-icon", "browse-ue", "open-source", "open-ue", "open-pak", "ping", "set-preserve-materials", "refresh-blend", "recursive-cook", "set-push-setting", "set-blacklist"])
+    mod_parser.add_argument("action", choices=[
+        "extract", "create-blend", "push", "cook", "pack", "full", "decompile",
+        "set-icon", "browse-ue", "open-source", "open-ue", "open-pak", "ping",
+        "set-preserve-materials", "refresh-blend", "recursive-cook", "set-push-setting",
+        "set-blacklist", "dump-anims", "push-anims", "save-notifies", "toggle-anims"
+    ])
     mod_parser.add_argument("base_pal", help="Original base Pal (e.g., WeaselDragon)")
     mod_parser.add_argument("mod", help="Unique name of the mod")
     mod_parser.add_argument("--overwrite", action="store_true", help="Overwrite existing .blend files during decompile")
@@ -45,6 +50,12 @@ def create_cli_parser() -> argparse.ArgumentParser:
     # dynamic_pals
     dyn_parser = subparsers.add_parser("dynamic_pals", help="Manage Dynamic Pal variants")
     dyn_subparsers = dyn_parser.add_subparsers(dest="subcommand", required=True)
+
+    # Add inside dyn_subparsers in parser_helper.py:
+    dyn_set_name = dyn_subparsers.add_parser("set-json-name", help="Set custom deployed SwapJSON name")
+    dyn_set_name.add_argument("base_pal", help="Original base Pal")
+    dyn_set_name.add_argument("mod", help="Unique name of the mod")
+    dyn_set_name.add_argument("--name", default="", help="Custom deployed JSON file name")
     
     dyn_toggle = dyn_subparsers.add_parser("toggle", help="Toggle Dynamic Pals framework on/off")
     dyn_toggle.add_argument("base_pal", help="Original base Pal")

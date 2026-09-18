@@ -120,7 +120,16 @@ class ModWorkspace:
             else:
                 self.anims_source_dir = os.path.join(self.project_dir, "Content", "Pal", "Animation", "Character", cat_rel, base_pal)
         
-        self.has_anims = os.path.exists(self.anims_source_dir) if self.anims_source_dir else False
+        # Check custom animations strictly from sidecar manifest, NOT folder presence
+        self.has_anims = False
+        sidecar_path = os.path.join(self.fmodel_dir, f"{mod_name}_blend.json") if self.fmodel_dir else ""
+        if os.path.exists(sidecar_path):
+            try:
+                with open(sidecar_path, "r", encoding="utf-8") as f_side:
+                    s_data = json.load(f_side)
+                    self.has_anims = bool(s_data.get("custom_animations", {}).get("is_active", False))
+            except Exception:
+                pass
         self.custom_shader_raw = os.path.join(self.project_dir, "Content", "CartoonCelShader", "Materials", "CelShader") if self.project_dir else ""
         self.has_custom_shader = os.path.exists(self.custom_shader_raw) if self.custom_shader_raw else False
 
@@ -128,20 +137,23 @@ class ModWorkspace:
         if self.vanilla_parent_folder:
             skel_folder = self.vanilla_parent_folder
         elif "npc" in self.category.lower() or "player" in self.category.lower():
-            # Check if project contains Human or Player skeleton folder
             skel_folder = "Human" if os.path.exists(os.path.join(self.project_dir, "Content", "Pal", "Model", "Character", "Skeleton", "Human")) else "Player"
         else:
             skel_folder = base_pal
 
-        self.skeleton_virtual_path = f"/Game/Pal/Model/Character/Skeleton/{skel_folder}"
-        
-        # Route blueprints and animations under the actual category folder
-        if "npc" in category.lower():
-            self.blueprint_virtual_path = f"/Game/Pal/Blueprint/Character/NPC/{mod_name}"
-        elif "player" in category.lower():
-            self.blueprint_virtual_path = f"/Game/Pal/Blueprint/Character/Player/{mod_name}"
+        # Nest custom skeleton inside parent to isolate it from the vanilla skeleton
+        if self.is_variant and self.has_anims:
+            self.skeleton_virtual_path = f"/Game/Pal/Model/Character/Skeleton/{skel_folder}/{mod_name}"
         else:
-            self.blueprint_virtual_path = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{mod_name}"
+            self.skeleton_virtual_path = f"/Game/Pal/Model/Character/Skeleton/{skel_folder}"
+        
+        # Route blueprints and animations inside parent to mirror variant folder logic
+        if "npc" in category.lower():
+            self.blueprint_virtual_path = f"/Game/Pal/Blueprint/Character/NPC/{base_pal}/{mod_name}" if self.is_variant else f"/Game/Pal/Blueprint/Character/NPC/{mod_name}"
+        elif "player" in category.lower():
+            self.blueprint_virtual_path = f"/Game/Pal/Blueprint/Character/Player/{base_pal}/{mod_name}" if self.is_variant else f"/Game/Pal/Blueprint/Character/Player/{mod_name}"
+        else:
+            self.blueprint_virtual_path = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{base_pal}/{mod_name}" if self.is_variant else f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{mod_name}"
         
         if self.is_variant:
             self.anims_virtual_path = f"/Game/Pal/Animation/Character/{cat_virtual}/{base_pal}/{mod_name}"

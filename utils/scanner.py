@@ -339,6 +339,7 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
         # Check Dynamic Pals status (Only matters for Base Pals)
         is_dynamic_pals_active = False
         dynamic_pal_variants = []
+        custom_json_name = ""
         if not is_variant:
             manifest_path = os.path.join(fmodel_path, f"{mod_name}_dynamic_pals.json") if fmodel_path else ""
             if os.path.exists(manifest_path):
@@ -346,12 +347,14 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
                     with open(manifest_path, "r", encoding="utf-8") as f:
                         man_data = json.load(f)
                         is_dynamic_pals_active = bool(man_data.get("is_dynamic_pals_active", False))
+                        custom_json_name = man_data.get("custom_json_name", "")
                         variants_dict = man_data.get("variants", {})
                         for k, v in variants_dict.items():
                             v["label"] = k
                             dynamic_pal_variants.append(v)
                 except Exception:
                     pass
+
 
         # Check material preservation setting and selective push toggles
         preserve_materials = True
@@ -360,6 +363,7 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
         push_animbp = True
         active_vanilla_replacer = ""
         custom_blacklist = []
+        custom_animations = None 
         sidecar_path = os.path.join(fmodel_path, f"{mod_name}_blend.json") if fmodel_path else ""
         if os.path.exists(sidecar_path):
             try:
@@ -371,6 +375,7 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
                     push_animbp = sidecar_data.get("push_animbp", True)
                     active_vanilla_replacer = sidecar_data.get("active_vanilla_replacer", "")
                     custom_blacklist = sidecar_data.get("custom_blacklist", [])
+                    custom_animations = sidecar_data.get("custom_animations", None)
             except Exception:
                 pass
 
@@ -514,12 +519,14 @@ def get_mod_info(settings: dict, target_mod: str | None = None):
             "audio_overrides": audio_overrides,
             "is_dynamic_pals_active": is_dynamic_pals_active,
             "dynamic_pal_variants": dynamic_pal_variants,
+            "custom_json_name": custom_json_name,
             "preserve_materials": preserve_materials,
             "push_materials": push_materials,
             "push_textures": push_textures,
             "push_animbp": push_animbp,
             "active_vanilla_replacer": active_vanilla_replacer,
             "custom_blacklist": custom_blacklist,
+            "custom_animations": custom_animations, 
             "physical_variants": [],
             "fmodel_path": fmodel_path,
             "ue_path": ue_path

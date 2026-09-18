@@ -9,6 +9,44 @@ from utils.cli.shared import json_print, error_print, system_open_path
 from utils.scanner import get_mod_info
 from utils.audio_helper import apply_custom_audio_worker, clear_audio_worker
 
+def resolve_source_template(mod_data: dict | None, settings: dict, base_pal: str, mod_name: str) -> tuple[str, bool]:
+    """
+    Determines the source Pal template to dump/clone animations from.
+    For standalone custom Pals (e.g. Katress_big_head -> CatMage), returns ('CatMage', True).
+    For standard variants (e.g. Delphox -> GrimGirl), returns (base_pal, False).
+    """
+    fmodel_path = mod_data.get("fmodel_path", "") if mod_data else ""
+    
+    # 1. Check import_config.json
+    if fmodel_path and os.path.exists(fmodel_path):
+        cfg_file = os.path.join(fmodel_path, "import_config.json")
+        if os.path.exists(cfg_file):
+            try:
+                with open(cfg_file, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    t_id = cfg.get("template_id")
+                    is_custom = cfg.get("is_custom_pal", False)
+                    if is_custom and t_id:
+                        return t_id, True
+            except Exception: pass
+
+    # 2. Check Pal Creator JSON
+    fmodel_base = settings.get("fmodel_output", "")
+    if fmodel_base:
+        creator_json = os.path.normpath(os.path.join(
+            fmodel_base, "Exports", "Pal", "Content", "Palbaker", "Creator", f"{mod_name}_creator.json"
+        ))
+        if os.path.exists(creator_json):
+            try:
+                with open(creator_json, "r", encoding="utf-8") as f:
+                    cdata = json.load(f)
+                    t_id = cdata.get("TemplateID")
+                    if t_id:
+                        return t_id, True
+            except Exception: pass
+
+    return base_pal, False
+
 def check_vanilla_collision(mods: list[dict], target_mod_data: dict) -> tuple[bool, str]:
     """Ensures multiple Vanilla mode mods targeting the same BasePal do not overwrite each other."""
     if target_mod_data.get("is_dynamic_pals_active", False):
@@ -183,7 +221,7 @@ def handle_mod_command(args, settings):
         
     if action == "extract":
         is_valid, err_msg = validate_settings(settings, ["fmodel_output", "palworld_exe"])
-    elif action in ["create-blend", "set-icon", "open-source", "set-preserve-materials", "set-push-setting", "set-blacklist"]:
+    elif action in ["create-blend", "set-icon", "open-source", "set-preserve-materials", "set-push-setting", "set-blacklist", "toggle-anims"]:
         is_valid, err_msg = validate_settings(settings, ["fmodel_output"])
     elif action in ["open-ue", "open-pak"]:
         is_valid, err_msg = validate_settings(settings, ["uproject"])
@@ -302,6 +340,239 @@ def handle_mod_command(args, settings):
         except Exception as e:
             error_print(f"Failed to copy icon: {str(e)}")
             sys.exit(1)
+
+    elif action == "toggle-anims":
+        val_str = getattr(args, "path", "true")
+        is_active = str(val_str).lower() in ["true", "on", "1"]
+        sidecar_path = os.path.join(mod_data["fmodel_path"], f"{mod_name}_blend.json")
+        if not os.path.exists(sidecar_path):
+            error_print("Skeletal companion sidecar JSON file not found.")
+            sys.exit(1)
+        try:
+            from utils.sidecar_helper import load_sidecar, save_sidecar
+            sidecar_data = load_sidecar(sidecar_path)
+            sidecar_data.setdefault("custom_animations", {})["is_active"] = is_active
+            save_sidecar(sidecar_path, sidecar_data)
+            json_print({"status": "success", "message": f"Custom animations {'enabled' if is_active else 'disabled'} for {mod_name}."})
+        except Exception as e:
+            error_print(f"Failed to toggle animation setting: {e}")
+            sys.exit(1)
+
+    elif action == "dump-anims":
+        from utils.anim_patcher import harvest_pal_animation_inventory
+        temp_dir = os.path.join(settings["fmodel_output"], ".temp_anim_harvest")
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        os.makedirs(temp_dir, exist_ok=True)
+
+        # Resolve whether this is a standalone custom Pal to harvest from parent template
+        source_pal, is_custom = resolve_source_template(mod_data, settings, base_pal, mod_name)
+        if is_custom:
+            print(f"[PalBaker Anims] Standalone Custom Pal detected: Extracting parent template animations from '{source_pal}'...", flush=True)
+
+        inventory, blend_spaces = harvest_pal_animation_inventory(settings, source_pal, temp_dir)
+        sidecar_path = os.path.join(mod_data["fmodel_path"], f"{mod_name}_blend.json")
+        
+        # Load sidecar and preserve user notifies & rest properties
+        from utils.sidecar_helper import load_sidecar, save_sidecar
+        sidecar_data = load_sidecar(sidecar_path)
+        existing_anims = sidecar_data.get("custom_animations", {}).get("anims", {})
+        
+        for inv_k, inv_v in inventory.items():
+            if inv_k in existing_anims:
+                inv_v["notifies"] = existing_anims[inv_k].get("notifies", [])
+                if "rest_props" in existing_anims[inv_k]:
+                    inv_v["rest_props"] = existing_anims[inv_k]["rest_props"]
+
+        sidecar_data.setdefault("custom_animations", {})["is_active"] = True
+        sidecar_data["custom_animations"]["anims"] = inventory
+        sidecar_data["custom_animations"]["blend_spaces"] = blend_spaces
+        save_sidecar(sidecar_path, sidecar_data)
+
+        # Extract all .psa files from the source Pal's archives
+        psa_dir = os.path.join(temp_dir, "psa")
+        os.makedirs(psa_dir, exist_ok=True)
+        from utils.extractor.core import extract_game_files
+        extract_game_files(settings, [f"*Animation/Character/*/{source_pal}/*"], psa_dir, format_type="auto")
+
+        # Run headless Blender with source_pal to correctly clean track prefixes
+        blend_file = os.path.join(mod_data["fmodel_path"], f"{mod_name}.blend")
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        importer_script = os.path.join(repo_root, "utils", "blender_dump_anims.py")
+        
+        from utils.builder.blender_helper import run_headless_blender
+        result = run_headless_blender(
+            settings["blender"],
+            blend_file,
+            importer_script,
+            ["--blend", blend_file, "--psa-dir", psa_dir, "--sidecar", sidecar_path, "--base-pal", source_pal, "--mod-name", mod_name]
+        )
+        if result.stdout.strip():
+            print(result.stdout, flush=True)
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        # Sync in_nla status back into blend_spaces samples
+        final_sidecar = load_sidecar(sidecar_path)
+        anims_state = final_sidecar.get("custom_animations", {})
+        final_anims = anims_state.get("anims", {})
+        
+        # Auto-disable framework if you deleted all animations from your Blender model
+        has_any_nla = any(a.get("in_nla", False) for a in final_anims.values())
+        anims_state["is_active"] = has_any_nla
+        
+        for bs_key, bs_data in anims_state.get("blend_spaces", {}).items():
+            for sample in bs_data.get("samples", []):
+                matching = final_anims.get(sample["animation"])
+                if matching:
+                    sample["in_nla"] = matching.get("in_nla", False)
+
+        save_sidecar(sidecar_path, final_sidecar)
+        total_mapped = len(final_anims)
+
+        json_print({
+            "status": "success", 
+            "message": f"Successfully dumped and mapped {total_mapped} animations into {mod_name}.blend!",
+            "custom_animations": final_sidecar.get("custom_animations")
+        })
+
+
+    elif action == "save-anims":
+        payload_str = getattr(args, "path", "{}")
+        sidecar_path = os.path.join(mod_data["fmodel_path"], f"{mod_name}_blend.json")
+        try:
+            from utils.sidecar_helper import load_sidecar, save_sidecar
+            sidecar_data = load_sidecar(sidecar_path)
+            sidecar_data["custom_animations"] = json.loads(payload_str)
+            save_sidecar(sidecar_path, sidecar_data)
+            json_print({"status": "success", "message": "Saved animation parameters."})
+        except Exception as e:
+            error_print(f"Failed to save animation properties: {e}")
+            sys.exit(1)
+
+        
+    elif action == "push-anims":
+        from utils.anim_patcher.montage_generator import create_dynamic_montage_payload, build_uasset
+        from utils.sidecar_helper import load_sidecar
+        from utils.builder.unreal_helper import run_remote_command, focus_unreal_window
+        import tempfile
+
+        sidecar_path = os.path.join(mod_data["fmodel_path"], f"{mod_name}_blend.json")
+        sidecar_data = load_sidecar(sidecar_path)
+        custom_anims_meta = sidecar_data.get("custom_animations", {})
+        anims_dict = custom_anims_meta.get("anims", {})
+
+        # Step 1: Export unified FBX with mesh and animations together
+        blend_file = os.path.join(mod_data["fmodel_path"], f"{mod_name}.blend")
+        export_fbx = os.path.join(mod_data["fmodel_path"], f"{mod_name}.fbx")
+
+        # Clean up legacy standalone _Anims.fbx if present
+        legacy_anims_fbx = os.path.join(mod_data["fmodel_path"], f"{mod_name}_Anims.fbx")
+        if os.path.exists(legacy_anims_fbx):
+            try: os.remove(legacy_anims_fbx)
+            except OSError: pass
+
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        exporter_script = os.path.join(repo_root, "utils", "blender_export_anims.py")
+        
+        cmd = [settings["blender"], "-b", blend_file, "--python", exporter_script, "--", "--output-fbx", export_fbx]
+        blender_res = subprocess.run(
+            cmd, 
+            capture_output=True, 
+            text=True, 
+            encoding="utf-8", 
+            errors="replace", 
+            creationflags=0x08000000 if os.name == 'nt' else 0
+        )
+        if blender_res.stdout and blender_res.stdout.strip():
+            print(blender_res.stdout, flush=True)
+
+        # Resolve source template for clean take prefix stripping
+        source_pal, is_custom = resolve_source_template(mod_data, settings, base_pal, mod_name)
+
+        # Step 2: Ingest FBX takes into Unreal Editor via Remote Execution
+        temp_dir = tempfile.gettempdir()
+        cfg_path = os.path.join(temp_dir, "palbaker_anim_import_config.json")
+        with open(cfg_path, "w", encoding="utf-8") as f_cfg:
+            json.dump({
+                "fbx_file": export_fbx,
+                "mod_name": mod_name,
+                "base_pal": base_pal,
+                "template_id": source_pal,
+                "is_custom_pal": is_custom,
+                "category": mod_data.get("category", "Monster")
+            }, f_cfg, indent=4)
+
+        import_script = os.path.join(repo_root, "unreal_scripts", "import_anims.py").replace("\\", "/")
+        target_project_name = os.path.splitext(os.path.basename(settings["uproject"]))[0]
+        cmd_import = f'f = open(r"{import_script}", encoding="utf-8"); exec(f.read()); f.close()'
+        
+        success, ue_msg = run_remote_command(settings["ue_root"], target_project_name, cmd_import)
+        if ue_msg.strip():
+            print(ue_msg, flush=True)
+
+        try: os.remove(cfg_path)
+        except OSError: pass
+
+        # Step 3: Pure Python Native Montage Serialization (json_to_uasset)
+        project_dir = os.path.dirname(settings.get("uproject", ""))
+        custom_guid = custom_anims_meta.get("custom_skeleton_guid", "F364245843D36EB42B398F898DDC8313")
+
+        category = mod_data.get("category", "Monster")
+        cat_sanitized = category.replace(" ", "_")
+        cat_rel = category.replace("/", os.sep).replace("\\", os.sep)
+        if base_pal.lower() != mod_name.lower():
+            anims_rel = os.path.join("Pal", "Animation", "Character", cat_rel, base_pal, mod_name)
+            anims_vpath = f"/Game/Pal/Animation/Character/{cat_sanitized}/{base_pal}/{mod_name}"
+        else:
+            anims_rel = os.path.join("Pal", "Animation", "Character", cat_rel, base_pal)
+            anims_vpath = f"/Game/Pal/Animation/Character/{cat_sanitized}/{base_pal}"
+
+        anims_content_dir = os.path.normpath(os.path.join(project_dir, "Content", anims_rel))
+        anims_cooked_dir = os.path.normpath(os.path.join(project_dir, "Saved", "Cooked", "Windows", target_project_name, "Content", anims_rel))
+
+        # FIX: Ensure both destination directories exist before generating or copying assets
+        os.makedirs(anims_content_dir, exist_ok=True)
+        os.makedirs(anims_cooked_dir, exist_ok=True)
+
+        def strict_clean(n: str, b_pal: str, m_name: str) -> str:
+            """Aggressively strips all prefixes from stale sidecar data."""
+            c = n
+            prefixes = sorted([
+                f"AM_{b_pal}_", f"AS_{b_pal}_", f"AM_{m_name}_", f"AS_{m_name}_",
+                f"{b_pal}_", f"{m_name}_", "AM_", "AS_"
+            ], key=len, reverse=True)
+            for _ in range(2):
+                for p in prefixes:
+                    if c.lower().startswith(p.lower()): 
+                        c = c[len(p):]
+            return c
+
+        generated_montages = 0
+        for key, anim in anims_dict.items():
+            raw_track = anim.get("nla_track_name") or key
+            clean_track = strict_clean(raw_track, base_pal, mod_name)
+            if not clean_track: continue
+
+            montage_name = f"AM_{mod_name}_{clean_track}"
+            sequence_name = f"AS_{mod_name}_{clean_track}"
+
+            notifies = anim.get("notifies", [])
+            payload = create_dynamic_montage_payload(montage_name, sequence_name, base_pal, mod_name, custom_guid, notifies, category=category, is_custom_pal=is_custom)
+            dest_content = os.path.join(anims_content_dir, f"{montage_name}.uasset")
+            build_uasset(payload, dest_content)
+
+            dest_cooked = os.path.join(anims_cooked_dir, f"{montage_name}.uasset")
+            shutil.copy2(dest_content, dest_cooked)
+            generated_montages += 1
+
+        sync_cmd = f'import unreal; unreal.EditorUtilityLibrary.sync_browser_to_folders(["{anims_vpath}"]); unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous(["{anims_vpath}"], True)'
+        run_remote_command(settings["ue_root"], target_project_name, sync_cmd)
+        focus_unreal_window(target_project_name)
+
+        json_print({
+            "status": "success",
+            "message": f"Successfully imported FBX takes and compiled {generated_montages} AnimMontages natively into Unreal!"
+        })
 
     elif action == "set-preserve-materials":
         val_str = getattr(args, "path", "true")

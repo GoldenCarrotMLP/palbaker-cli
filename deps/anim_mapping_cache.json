@@ -1,0 +1,1477 @@
+{
+    "JumpLoop": {
+        "category": "LocomotionSequence",
+        "enum_key": "EPalGeneralAnimSequenceType::JumpLoop",
+        "display_name": "LocomotionSequence: JumpLoop"
+    },
+    "JumpEnd": {
+        "category": "LocomotionSequence",
+        "enum_key": "EPalGeneralAnimSequenceType::JumpEnd",
+        "display_name": "LocomotionSequence: JumpEnd"
+    },
+    "FarSkill_Start": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackReady_Far",
+        "display_name": "General: GeneralAttackReady Far"
+    },
+    "FarSkill_StartLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackReadyLoop_Far",
+        "display_name": "General: GeneralAttackReadyLoop Far"
+    },
+    "FarSkill_Action": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackProcess_Far",
+        "display_name": "General: GeneralAttackProcess Far"
+    },
+    "FarSkill_ActionLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackProcessLoop_Far",
+        "display_name": "General: GeneralAttackProcessLoop Far"
+    },
+    "FarSkill_End": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackAfter_Far",
+        "display_name": "General: GeneralAttackAfter Far"
+    },
+    "SleepStart": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::SleepStart",
+        "display_name": "General: SleepStart"
+    },
+    "SleepLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::SleepLoop",
+        "display_name": "General: SleepLoop"
+    },
+    "SleepEnd": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::SleepEnd",
+        "display_name": "General: SleepEnd"
+    },
+    "Hit": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::DamageAdditive",
+        "display_name": "General: DamageAdditive"
+    },
+    "Carrying_Start": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::BeLiftupStart",
+        "display_name": "General: BeLiftupStart"
+    },
+    "Carrying": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::BeLiftupLoop",
+        "display_name": "General: BeLiftupLoop"
+    },
+    "JumpStart": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::JumpStart",
+        "display_name": "General: JumpStart"
+    },
+    "Encount": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Menace",
+        "display_name": "Action: Menace"
+    },
+    "Eat": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Eat",
+        "display_name": "Action: Eat"
+    },
+    "Damage": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::KnockBack",
+        "display_name": "Action: KnockBack"
+    },
+    "Walk": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::ForwardWalk",
+        "display_name": "Action: ForwardWalk"
+    },
+    "GetUp_RightDown": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::GetupUtubuse_orRight",
+        "display_name": "Action: GetupUtubuse orRight"
+    },
+    "GetUp_LeftDown": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::GetupAomuke_orRight",
+        "display_name": "Action: GetupAomuke orRight"
+    },
+    "Petting": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::PalPetting",
+        "display_name": "Action: PalPetting"
+    },
+    "ElectricShock": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::ElectricShock",
+        "display_name": "Action: ElectricShock"
+    },
+    "Spa": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::IdleInSpa",
+        "display_name": "Action: IdleInSpa"
+    },
+    "Move": {
+        "category": "BlendSpace",
+        "enum_key": "EPalGeneralBlendSpaceType::GeneralMove",
+        "display_name": "BlendSpace: GeneralMove"
+    },
+    "Swim": {
+        "category": "BlendSpace",
+        "enum_key": "EPalGeneralBlendSpaceType::Swim",
+        "display_name": "BlendSpace: Swim"
+    },
+    "Tackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Alpaca_Tackle",
+        "display_name": "UniqueAttack: Unique Alpaca Tackle"
+    },
+    "Cooking": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Cooking",
+        "display_name": "Action: Cooking"
+    },
+    "BackStep": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::BackStep",
+        "display_name": "Action: BackStep"
+    },
+    "Move_Riding": {
+        "category": "BlendSpace",
+        "enum_key": "EPalGeneralBlendSpaceType::RidingMove",
+        "display_name": "BlendSpace: RidingMove"
+    },
+    "FireCharge": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_AmaterasuWolf_FireCharge",
+        "display_name": "UniqueAttack: Unique AmaterasuWolf FireCharge"
+    },
+    "Bite": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_AmaterasuWolf_Bite",
+        "display_name": "UniqueAttack: Unique AmaterasuWolf Bite"
+    },
+    "BiteV2": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_AmaterasuWolf_BiteV2",
+        "display_name": "UniqueAttack: Unique AmaterasuWolf BiteV2"
+    },
+    "Dark_Bite": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_AmaterasuWolf_Dark_Bite",
+        "display_name": "UniqueAttack: Unique AmaterasuWolf Dark Bite"
+    },
+    "Dark_BiteV2": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_AmaterasuWolf_Dark_BiteV2",
+        "display_name": "UniqueAttack: Unique AmaterasuWolf Dark BiteV2"
+    },
+    "Farskill_Start": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackReady_Far",
+        "display_name": "General: GeneralAttackReady Far"
+    },
+    "Farskill_StartLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackReadyLoop_Far",
+        "display_name": "General: GeneralAttackReadyLoop Far"
+    },
+    "Farskill_Action": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackProcess_Far",
+        "display_name": "General: GeneralAttackProcess Far"
+    },
+    "Farskill_ActionLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackProcessLoop_Far",
+        "display_name": "General: GeneralAttackProcessLoop Far"
+    },
+    "Farskill_End": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackAfter_Far",
+        "display_name": "General: GeneralAttackAfter Far"
+    },
+    "Nearskill_StartLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackReadyLoop_Near",
+        "display_name": "General: GeneralAttackReadyLoop Near"
+    },
+    "Nearskill_Start": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackReady_Near",
+        "display_name": "General: GeneralAttackReady Near"
+    },
+    "Nearskill_Action": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackProcess_Near",
+        "display_name": "General: GeneralAttackProcess Near"
+    },
+    "Nearskill_ActionLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackProcessLoop_Near",
+        "display_name": "General: GeneralAttackProcessLoop Near"
+    },
+    "Nearskill_End": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackAfter_Near",
+        "display_name": "General: GeneralAttackAfter Near"
+    },
+    "Dodge_Right": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::Step_Right",
+        "display_name": "General: Step Right"
+    },
+    "Dodge_Left": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::Step_Left",
+        "display_name": "General: Step Left"
+    },
+    "Architecture": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Architecture",
+        "display_name": "Action: Architecture"
+    },
+    "Mining": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Mining",
+        "display_name": "Action: Mining"
+    },
+    "Getup_FrontDown": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::GetupUtubuse_orRight",
+        "display_name": "Action: GetupUtubuse orRight"
+    },
+    "Getup_BackDown": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::GetupAomuke_orRight",
+        "display_name": "Action: GetupAomuke orRight"
+    },
+    "CommonWork": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::CommonWork",
+        "display_name": "Action: CommonWork"
+    },
+    "Gunner": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::DefenseGunner",
+        "display_name": "Action: DefenseGunner"
+    },
+    "Stun": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Stan",
+        "display_name": "Action: Stan"
+    },
+    "Transport": {
+        "category": "BlendSpace",
+        "enum_key": "EPalGeneralBlendSpaceType::TransportingObjectMove",
+        "display_name": "BlendSpace: TransportingObjectMove"
+    },
+    "LowRoundKick": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Anubis_LowRoundKick",
+        "display_name": "UniqueAttack: Unique Anubis LowRoundKick"
+    },
+    "GroundPunch": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Anubis_GroundPunch",
+        "display_name": "UniqueAttack: Unique Anubis GroundPunch"
+    },
+    "Cooling": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Cool",
+        "display_name": "Action: Cool"
+    },
+    "Rest02": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::FishPond",
+        "display_name": "Action: FishPond"
+    },
+    "GetUp_FrontDown": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::GetupUtubuse_orRight",
+        "display_name": "Action: GetupUtubuse orRight"
+    },
+    "Deforest": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Deforest",
+        "display_name": "Action: Deforest"
+    },
+    "SideStep_Left": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::SideStep_Left",
+        "display_name": "Action: SideStep Left"
+    },
+    "SideStep_Right": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::SideStep_Right",
+        "display_name": "Action: SideStep Right"
+    },
+    "NearSkill_StartLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackReadyLoop_Near",
+        "display_name": "General: GeneralAttackReadyLoop Near"
+    },
+    "NearSkill_Start": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackReady_Near",
+        "display_name": "General: GeneralAttackReady Near"
+    },
+    "NearSkill_Action": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackProcess_Near",
+        "display_name": "General: GeneralAttackProcess Near"
+    },
+    "NearSkill_ActionLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackProcessLoop_Near",
+        "display_name": "General: GeneralAttackProcessLoop Near"
+    },
+    "NearSkill_End": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackAfter_Near",
+        "display_name": "General: GeneralAttackAfter Near"
+    },
+    "FishPond": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::FishPond",
+        "display_name": "Action: FishPond"
+    },
+    "SwallowKite": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Baphomet_SwallowKite",
+        "display_name": "UniqueAttack: Unique Baphomet SwallowKite"
+    },
+    "Planting": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Feeding",
+        "display_name": "Action: Feeding"
+    },
+    "Ragdoll": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::Ragdoll",
+        "display_name": "General: Ragdoll"
+    },
+    "Move_FlyingRiding": {
+        "category": "BlendSpace",
+        "enum_key": "EPalGeneralBlendSpaceType::FlyingRidingMove",
+        "display_name": "BlendSpace: FlyingRidingMove"
+    },
+    "BP_Action_UniqueBirdDragon_FireBreath": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_BirdDragon_FireBreath",
+        "display_name": "UniqueAttack: Unique BirdDragon FireBreath"
+    },
+    "IceBreath": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_BirdDragon_Ice_IceBreath",
+        "display_name": "UniqueAttack: Unique BirdDragon Ice IceBreath"
+    },
+    "BP_ActionUnique_BlackCentaur_Tackle_New": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_BlackCentaur_TwoSpearRushes",
+        "display_name": "UniqueAttack: Unique BlackCentaur TwoSpearRushes"
+    },
+    "BP_ActionUnique_BlackGriffon_Tackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_BlackGriffon_TackleLaser",
+        "display_name": "UniqueAttack: Unique BlackGriffon TackleLaser"
+    },
+    "BP_ActionUnique_BlackGriffon_Tackle2": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_BlackGriffon_TackleLaser2",
+        "display_name": "UniqueAttack: Unique BlackGriffon TackleLaser2"
+    },
+    "BP_ActionUnique_BlackMetalDragon_FirePunch": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_BlackMetalDragon_FirePunch",
+        "display_name": "UniqueAttack: Unique BlackMetalDragon FirePunch"
+    },
+    "Commonwork": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::CommonWork",
+        "display_name": "Action: CommonWork"
+    },
+    "Backstep": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::BackStep",
+        "display_name": "Action: BackStep"
+    },
+    "FishingCaught": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::FishingCaught",
+        "display_name": "Action: FishingCaught"
+    },
+    "Watering": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Watering",
+        "display_name": "Action: Watering"
+    },
+    "Rest01": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::FishPond",
+        "display_name": "Action: FishPond"
+    },
+    "Tramsport": {
+        "category": "BlendSpace",
+        "enum_key": "EPalGeneralBlendSpaceType::TransportingObjectMove",
+        "display_name": "BlendSpace: TransportingObjectMove"
+    },
+    "Toboggan": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_BluePlatypus_Toboggan",
+        "display_name": "UniqueAttack: Unique BluePlatypus Toboggan"
+    },
+    "Tossin": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_BlueSkyDragon_Tossin",
+        "display_name": "UniqueAttack: Unique BlueSkyDragon Tossin"
+    },
+    "SweepBreath": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_BlueSkyDragon_SweepBreath",
+        "display_name": "UniqueAttack: Unique BlueSkyDragon SweepBreath"
+    },
+    "DrainStorm": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_BlueSkyDragon_DrainStorm",
+        "display_name": "UniqueAttack: Unique BlueSkyDragon DrainStorm"
+    },
+    "FlashDash": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_BlueThunderHorse_FlashDash",
+        "display_name": "UniqueAttack: Unique BlueThunderHorse FlashDash"
+    },
+    "GetUp_BackDown": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::GetupAomuke_orRight",
+        "display_name": "Action: GetupAomuke orRight"
+    },
+    "BodySlide": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_CaptainPenguin_BodySlide",
+        "display_name": "UniqueAttack: Unique CaptainPenguin BodySlide"
+    },
+    "Jump_Loop": {
+        "category": "LocomotionSequence",
+        "enum_key": "EPalGeneralAnimSequenceType::JumpLoop",
+        "display_name": "LocomotionSequence: JumpLoop"
+    },
+    "Jump_End": {
+        "category": "LocomotionSequence",
+        "enum_key": "EPalGeneralAnimSequenceType::JumpEnd",
+        "display_name": "LocomotionSequence: JumpEnd"
+    },
+    "Step": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::Step_Forward",
+        "display_name": "General: Step Forward"
+    },
+    "ChickenPeck": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ChickenPal_ChickenPeck",
+        "display_name": "UniqueAttack: Unique ChickenPal ChickenPeck"
+    },
+    "TrickShow": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ClownRabbit_TrickShow",
+        "display_name": "UniqueAttack: Unique ClownRabbit TrickShow"
+    },
+    "Idle": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::BeLiftupStart",
+        "display_name": "General: BeLiftupStart"
+    },
+    "MimicLoop": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Mimicry",
+        "display_name": "Action: Mimicry"
+    },
+    "CubePress": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_CubeTurtle_CubePress",
+        "display_name": "UniqueAttack: Unique CubeTurtle CubePress"
+    },
+    "HolyPress": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_CubeTurtle_Neutral_HolyPress",
+        "display_name": "UniqueAttack: Unique CubeTurtle Neutral HolyPress"
+    },
+    "Rest03": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::FishPond",
+        "display_name": "Action: FishPond"
+    },
+    "DiggingAttack": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_CuteMole_DiggingAttack",
+        "display_name": "UniqueAttack: Unique CuteMole DiggingAttack"
+    },
+    "FarSKill_Start": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackReady_Far",
+        "display_name": "General: GeneralAttackReady Far"
+    },
+    "FarSKill_StartLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackReadyLoop_Far",
+        "display_name": "General: GeneralAttackReadyLoop Far"
+    },
+    "FarSKill_Action": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackProcess_Far",
+        "display_name": "General: GeneralAttackProcess Far"
+    },
+    "FarSKill_ActionLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackProcessLoop_Far",
+        "display_name": "General: GeneralAttackProcessLoop Far"
+    },
+    "FarSKill_End": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::GeneralAttackAfter_Far",
+        "display_name": "General: GeneralAttackAfter Far"
+    },
+    "BP_ActionUnique_DarkAlien_JumpScratch": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_DarkAlien_JumpScractch",
+        "display_name": "UniqueAttack: Unique DarkAlien JumpScractch"
+    },
+    "BP_Action_UniqueSkill_DarkCrow_TelePoke": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_DarkCrow_TelePoke",
+        "display_name": "UniqueAttack: Unique DarkCrow TelePoke"
+    },
+    "LargeDownStart": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::LargeDown_Start",
+        "display_name": "General: LargeDown Start"
+    },
+    "LargeDownLoop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::LargeDown_Loop",
+        "display_name": "General: LargeDown Loop"
+    },
+    "LargeDownEnd": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::LargeDown_End",
+        "display_name": "General: LargeDown End"
+    },
+    "SetFunnel": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_DarkMechaDragon_SetFunnel",
+        "display_name": "UniqueAttack: Unique DarkMechaDragon SetFunnel"
+    },
+    "FunnelLaser": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_DarkMechaDragon_FunnelLaser",
+        "display_name": "UniqueAttack: Unique DarkMechaDragon FunnelLaser"
+    },
+    "ConvergentBeam": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_DarkMechaDragon_ConvergentBeam",
+        "display_name": "UniqueAttack: Unique DarkMechaDragon ConvergentBeam"
+    },
+    "BeamSlash": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_DarkMechaDragon_BeamSlash",
+        "display_name": "UniqueAttack: Unique DarkMechaDragon BeamSlash"
+    },
+    "WarpComet2": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_DarkMechaDragon_WarpComet",
+        "display_name": "UniqueAttack: Unique DarkMechaDragon WarpComet"
+    },
+    "Pierce": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_DarkScorpion_Pierce",
+        "display_name": "UniqueAttack: Unique DarkScorpion Pierce"
+    },
+    "ExplosiveMissile": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_DomeArmorDragon_ExplosiveMissile",
+        "display_name": "UniqueAttack: Unique DomeArmorDragon ExplosiveMissile"
+    },
+    "ShellAttack": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_DrillGame_ShellAttack",
+        "display_name": "UniqueAttack: Unique DrillGame ShellAttack"
+    },
+    "BP_Action_ElecPanda_ElecScratch": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ElecPanda_ElecScratch",
+        "display_name": "UniqueAttack: Unique ElecPanda ElecScratch"
+    },
+    "BP_ActionUnique_ElecPanda_GatlingAttack": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ElecPanda_GatlingAttack",
+        "display_name": "UniqueAttack: Unique ElecPanda GatlingAttack"
+    },
+    "ShellCharge": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ElecSnail_ShellCharge",
+        "display_name": "UniqueAttack: Unique ElecSnail ShellCharge"
+    },
+    "BP_Action_FairyDragon_FairyTornado": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_FairyDragon_FairyTornado",
+        "display_name": "UniqueAttack: Unique FairyDragon FairyTornado"
+    },
+    "walk": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::ForwardWalk",
+        "display_name": "Action: ForwardWalk"
+    },
+    "CarryingStart": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::BeLiftupStart",
+        "display_name": "General: BeLiftupStart"
+    },
+    "Tackle_New": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_FireKirin_Tackle",
+        "display_name": "UniqueAttack: Unique FireKirin Tackle"
+    },
+    "Dark_Tackle_New": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_FireKirin_Dark_DarkTossin",
+        "display_name": "UniqueAttack: Unique FireKirin Dark DarkTossin"
+    },
+    "FlameHorn": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_FlameBuffalo_FlameHorn",
+        "display_name": "UniqueAttack: Unique FlameBuffalo FlameHorn"
+    },
+    "Whip": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_FlowerDinosaur_Whip",
+        "display_name": "UniqueAttack: Unique FlowerDinosaur Whip"
+    },
+    "PoisonGasDance": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_FlowerPrince_PoisonGasDance",
+        "display_name": "UniqueAttack: Unique FlowerPrince PoisonGasDance"
+    },
+    "PoisonGasTackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_FlowerPrince_PoisonGasTackle",
+        "display_name": "UniqueAttack: Unique FlowerPrince PoisonGasTackle"
+    },
+    "FlyingTackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WeaselDragon_FlyingTackle",
+        "display_name": "UniqueAttack: Unique WeaselDragon FlyingTackle"
+    },
+    "GetUp_RighttDown": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::GetupUtubuse_orRight",
+        "display_name": "Action: GetupUtubuse orRight"
+    },
+    "SweepBait": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GhostAnglerfish_SweepBait",
+        "display_name": "UniqueAttack: Unique GhostAnglerfish SweepBait"
+    },
+    "Rest04": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::FishPond",
+        "display_name": "Action: FishPond"
+    },
+    "TailSlash": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GhostDragon_TailSlash",
+        "display_name": "UniqueAttack: Unique GhostDragon TailSlash"
+    },
+    "PhosphorousBeam": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GhostDragon_PhosphorousBeam",
+        "display_name": "UniqueAttack: Unique GhostDragon PhosphorousBeam"
+    },
+    "Electricshock": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::ElectricShock",
+        "display_name": "Action: ElectricShock"
+    },
+    "StoneDash": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GoldenHorse_StoneDash",
+        "display_name": "UniqueAttack: Unique GoldenHorse StoneDash"
+    },
+    "Mimicry_Loop": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Mimicry",
+        "display_name": "Action: Mimicry"
+    },
+    "Mimicry_End": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::MimicryEncount",
+        "display_name": "Action: MimicryEncount"
+    },
+    "ArmCannon": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GrassGolem_ArmCannon",
+        "display_name": "UniqueAttack: Unique GrassGolem ArmCannon"
+    },
+    "RocketPunch": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GrassGolem_RocketPunch",
+        "display_name": "UniqueAttack: Unique GrassGolem RocketPunch"
+    },
+    "DarkArmCannon": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GrassGolem_Dark_DarkArmCannon",
+        "display_name": "UniqueAttack: Unique GrassGolem Dark DarkArmCannon"
+    },
+    "Earthquake": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Grassmammoth_Earthquake",
+        "display_name": "UniqueAttack: Unique Grassmammoth Earthquake"
+    },
+    "BullRush": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GrassMinotaur_BullRush",
+        "display_name": "UniqueAttack: Unique GrassMinotaur BullRush"
+    },
+    "BullRush_Ice": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GrassMinotaur_Ice_BullRush",
+        "display_name": "UniqueAttack: Unique GrassMinotaur Ice BullRush"
+    },
+    "BullRush_lower": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GrassMinotaur_BullRush_Lower",
+        "display_name": "UniqueAttack: Unique GrassMinotaur BullRush Lower"
+    },
+    "BullRush_Ice_Lower": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GrassMinotaur_Ice_BullRush_Lower",
+        "display_name": "UniqueAttack: Unique GrassMinotaur Ice BullRush Lower"
+    },
+    "MusclePunch": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GrassPanda_MusclePunch",
+        "display_name": "UniqueAttack: Unique GrassPanda MusclePunch"
+    },
+    "BP_ActionUnique_GrassRabbitMan_GrassRoundKick": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GrassRabbitMan_GrassRoundKick",
+        "display_name": "UniqueAttack: Unique GrassRabbitMan GrassRoundKick"
+    },
+    "BrutalMachete": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_GrimGirl_BrutalMachete",
+        "display_name": "UniqueAttack: Unique GrimGirl BrutalMachete"
+    },
+    "AM_HadesBirdElectricShock": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::ElectricShock",
+        "display_name": "Action: ElectricShock"
+    },
+    "Storm": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_HawkBird_Storm",
+        "display_name": "UniqueAttack: Unique HawkBird Storm"
+    },
+    "BeetleTackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_HerculesBeetle_BeetleTackle",
+        "display_name": "UniqueAttack: Unique HerculesBeetle BeetleTackle"
+    },
+    "Flarestorm": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Anubis_Tackle",
+        "display_name": "UniqueAttack: Unique Anubis Tackle"
+    },
+    "PerfectStorm": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Horus_PerfectStorm",
+        "display_name": "UniqueAttack: Unique Horus PerfectStorm"
+    },
+    "SpitAttack": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_IceCrocodile_SpitAttack",
+        "display_name": "UniqueAttack: Unique IceCrocodile SpitAttack"
+    },
+    "RoundStep_Left": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::RoundStep_Left",
+        "display_name": "Action: RoundStep Left"
+    },
+    "RoundStep_Right": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::RoundStep_Right",
+        "display_name": "Action: RoundStep Right"
+    },
+    "IceHorn": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_IceDeer_IceHorn",
+        "display_name": "UniqueAttack: Unique IceDeer IceHorn"
+    },
+    "IceBladeAttack_New": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_IceHorse_IceBladeAttack",
+        "display_name": "UniqueAttack: Unique IceHorse IceBladeAttack"
+    },
+    "Dark_DarkBladeAttack_New": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_IceHorse_Dark_DarkBladeAttack",
+        "display_name": "UniqueAttack: Unique IceHorse Dark DarkBladeAttack"
+    },
+    "JumpingHorn": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_IceNarwhal_JumpingHorn",
+        "display_name": "UniqueAttack: Unique IceNarwhal JumpingHorn"
+    },
+    "BP_ActionUnique_JetDragon_JumpBeam": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_JetDragon_JumpBeam",
+        "display_name": "UniqueAttack: Unique JetDragon JumpBeam"
+    },
+    "ElectricSock": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::ElectricShock",
+        "display_name": "Action: ElectricShock"
+    },
+    "BodyPress": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingAlpaca_BodyPress",
+        "display_name": "UniqueAttack: Unique KingAlpaca BodyPress"
+    },
+    "Ice_IcePress": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingAlpaca_Ice_IcePress",
+        "display_name": "UniqueAttack: Unique KingAlpaca Ice IcePress"
+    },
+    "AirCrash_Start": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::BeLiftupStart",
+        "display_name": "General: BeLiftupStart"
+    },
+    "BP_ActionUnique_KingBahamut_AirCrash": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingBahamut_AirCrash",
+        "display_name": "UniqueAttack: Unique KingBahamut AirCrash"
+    },
+    "BP_ActionUnique_KingBahamut_ArmSmash": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingBahamut_ArmSmash",
+        "display_name": "UniqueAttack: Unique KingBahamut ArmSmash"
+    },
+    "BP_ActionRipTide_KingWhale": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::RipTide",
+        "display_name": "UniqueAttack: RipTide"
+    },
+    "BP_Action_WallSplash_KingWhale": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::WallSplash",
+        "display_name": "UniqueAttack: WallSplash"
+    },
+    "BP_Action_RadiantBarrage_KingWhale": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::RadiantBarrage",
+        "display_name": "UniqueAttack: RadiantBarrage"
+    },
+    "MaelStorm": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingWhale_Maelstrom",
+        "display_name": "UniqueAttack: Unique KingWhale Maelstrom"
+    },
+    "HomingBubble": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingWhale_HomingBubble",
+        "display_name": "UniqueAttack: Unique KingWhale HomingBubble"
+    },
+    "AquaTornado2_Otomo": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingWhale_AquaTornado",
+        "display_name": "UniqueAttack: Unique KingWhale AquaTornado"
+    },
+    "TidalBore2": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingWhale_TidalBore",
+        "display_name": "UniqueAttack: Unique KingWhale TidalBore"
+    },
+    "WaveTackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingWhale_WaveTackle",
+        "display_name": "UniqueAttack: Unique KingWhale WaveTackle"
+    },
+    "Breaching": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingWhale_Breaching",
+        "display_name": "UniqueAttack: Unique KingWhale Breaching"
+    },
+    "AquaBlade": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingWhale_AquaBlade",
+        "display_name": "UniqueAttack: Unique KingWhale AquaBlade"
+    },
+    "BP_Action_CreepingBubble_KingWhale": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::CreepingBubble",
+        "display_name": "UniqueAttack: CreepingBubble"
+    },
+    "Breaching_Phase3": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_KingWhale_Breaching_P3",
+        "display_name": "UniqueAttack: Unique KingWhale Breaching P3"
+    },
+    "LightningTackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Kirin_LightningTackle",
+        "display_name": "UniqueAttack: Unique Kirin LightningTackle"
+    },
+    "Ice_IceTackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Kirin_Ice_IceTackle",
+        "display_name": "UniqueAttack: Unique Kirin Ice IceTackle"
+    },
+    "LanternFlame": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_LanternButler_LanternFlame",
+        "display_name": "UniqueAttack: Unique LanternButler LanternFlame"
+    },
+    "SomerSault": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_LeafMomonga_SomerSault",
+        "display_name": "UniqueAttack: Unique LeafMomonga SomerSault"
+    },
+    "WarpPillarBurst": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_LegendDeer_WarpPillarBurst",
+        "display_name": "UniqueAttack: Unique LegendDeer WarpPillarBurst"
+    },
+    "RadiantWingRush": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_LegendDeer_RadiantWingRush",
+        "display_name": "UniqueAttack: Unique LegendDeer RadiantWingRush"
+    },
+    "RadiantPurge_Otomo": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_LegendDeer_RadiantPurge_Otomo",
+        "display_name": "UniqueAttack: Unique LegendDeer RadiantPurge Otomo"
+    },
+    "BP_ActionUnique_LilyQueen_SelfHeal_Otomo": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_LilyQueen_LilyHealing",
+        "display_name": "UniqueAttack: Unique LilyQueen LilyHealing"
+    },
+    "BP_ActionUnique_LilyQueen_WindBarrier": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_LilyQueen_WindBarrier",
+        "display_name": "UniqueAttack: Unique LilyQueen WindBarrier"
+    },
+    "BP_ActionUnique_LilyQueen_SelfHeal": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_LilyQueen_LilyHealing_Boss",
+        "display_name": "UniqueAttack: Unique LilyQueen LilyHealing Boss"
+    },
+    "Sleeploop": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::SleepLoop",
+        "display_name": "General: SleepLoop"
+    },
+    "Transtport": {
+        "category": "BlendSpace",
+        "enum_key": "EPalGeneralBlendSpaceType::TransportingObjectMove",
+        "display_name": "BlendSpace: TransportingObjectMove"
+    },
+    "LotusBloom": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_LotusDragon_LotusBloom",
+        "display_name": "UniqueAttack: Unique LotusDragon LotusBloom"
+    },
+    "InfernoStrike": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Manticore_InfernoStrike",
+        "display_name": "UniqueAttack: Unique Manticore InfernoStrike"
+    },
+    "MimicryEncount": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::MimicryEncount",
+        "display_name": "Action: MimicryEncount"
+    },
+    "JumpEmd": {
+        "category": "LocomotionSequence",
+        "enum_key": "EPalGeneralAnimSequenceType::JumpEnd",
+        "display_name": "LocomotionSequence: JumpEnd"
+    },
+    "BalletJump": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_MonochromeQueen_BalletJump",
+        "display_name": "UniqueAttack: Unique MonochromeQueen BalletJump"
+    },
+    "BP_ActionUnique_MoonQueen_MoonBeam": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_MoonQueen_MoonBeam",
+        "display_name": "UniqueAttack: Unique MoonQueen MoonBeam"
+    },
+    "MoonBlade": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_MoonQueen_MoonBlade",
+        "display_name": "UniqueAttack: Unique MoonQueen MoonBlade"
+    },
+    "IceMoonBlade": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_MoonQueen_IceMoonBlade",
+        "display_name": "UniqueAttack: Unique MoonQueen IceMoonBlade"
+    },
+    "GymAct": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_MoonQueen_GYM_Hard_Act",
+        "display_name": "UniqueAttack: Unique MoonQueen GYM Hard Act"
+    },
+    "GiantSpore": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Mothman_GiantSpore",
+        "display_name": "UniqueAttack: Unique Mothman GiantSpore"
+    },
+    "SporeScatter": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Mothman_SporeScatter",
+        "display_name": "UniqueAttack: Unique Mothman SporeScatter"
+    },
+    "MummyAttack": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_MummyPal_MummyAttack",
+        "display_name": "UniqueAttack: Unique MummyPal MummyAttack"
+    },
+    "LifeSteal": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_MysteryMask_LifeSteal",
+        "display_name": "UniqueAttack: Unique MysteryMask LifeSteal"
+    },
+    "CatPress": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_NaughtyCat_CatPress",
+        "display_name": "UniqueAttack: Unique NaughtyCat CatPress"
+    },
+    "BP_ActionUnique_NightBlueHorse_DeathStep": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_NightBlueHorse_DeathStep",
+        "display_name": "UniqueAttack: Unique NightBlueHorse DeathStep"
+    },
+    "BP_ActionUnique_NightBlueHorse_Neutral_AirStep": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_NightBlueHorse_Neutral_AirStep",
+        "display_name": "UniqueAttack: Unique NightBlueHorse Neutral AirStep"
+    },
+    "Neutral_Tossin": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_NightBlueHorse_Neutral_Tossin",
+        "display_name": "UniqueAttack: Unique NightBlueHorse Neutral Tossin"
+    },
+    "WarpBeam": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_NightLady_WarpBeam",
+        "display_name": "UniqueAttack: Unique NightLady WarpBeam"
+    },
+    "NightmareFlame": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_NightLady_FlameNightmare",
+        "display_name": "UniqueAttack: Unique NightLady FlameNightmare"
+    },
+    "WarpBeam_Straight": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_NightLady_WarpBeam_Straight",
+        "display_name": "UniqueAttack: Unique NightLady WarpBeam Straight"
+    },
+    "InkJet": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_OctopursGirl_InkJet",
+        "display_name": "UniqueAttack: Unique OctopursGirl InkJet"
+    },
+    "RapidKick": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_PandaGirl_RapidKick",
+        "display_name": "UniqueAttack: Unique PandaGirl RapidKick"
+    },
+    "CatPunch": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_PinkCat_CatPunch",
+        "display_name": "UniqueAttack: Unique PinkCat CatPunch"
+    },
+    "LongBreath": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Plesiosaur_LongBreath",
+        "display_name": "UniqueAttack: Unique Plesiosaur LongBreath"
+    },
+    "TorrentLaser": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_PoseidonOrca_TorrentLaser",
+        "display_name": "UniqueAttack: Unique PoseidonOrca TorrentLaser"
+    },
+    "SpiderAttack": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_PurpleSpider_SpiderRaid",
+        "display_name": "UniqueAttack: Unique PurpleSpider SpiderRaid"
+    },
+    "SpinLance": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_QueenBee_SpinLance",
+        "display_name": "UniqueAttack: Unique QueenBee SpinLance"
+    },
+    "SleepStar": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::SleepStart",
+        "display_name": "General: SleepStart"
+    },
+    "RidingMove": {
+        "category": "BlendSpace",
+        "enum_key": "EPalGeneralBlendSpaceType::RidingMove",
+        "display_name": "BlendSpace: RidingMove"
+    },
+    "Pecking": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_RedArmorBird_TriplePeck",
+        "display_name": "UniqueAttack: Unique RedArmorBird TriplePeck"
+    },
+    "JumpKick": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_RedFlowerBird_JumpKick",
+        "display_name": "UniqueAttack: Unique RedFlowerBird JumpKick"
+    },
+    "Snipe": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_RobinHood_BowSnipe",
+        "display_name": "UniqueAttack: Unique RobinHood BowSnipe"
+    },
+    "RockHorn": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_RockBeast_RockHorn",
+        "display_name": "UniqueAttack: Unique RockBeast RockHorn"
+    },
+    "Ice_IceHorn": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_RockBeast_Ice_IceHorn",
+        "display_name": "UniqueAttack: Unique RockBeast Ice IceHorn"
+    },
+    "BP_Action_UniqueSkill_Ronin_Iai": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Ronin_Iai",
+        "display_name": "UniqueAttack: Unique Ronin Iai"
+    },
+    "BP_Action_PartnerSkill_Ronin_Iai": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Ronin_Iai_PartnerSkill",
+        "display_name": "UniqueAttack: Unique Ronin Iai PartnerSkill"
+    },
+    "BP_ActionUnique_SaintCentaur_OneSpearRushes_New": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_SaintCentaur_OneSpearRushes",
+        "display_name": "UniqueAttack: Unique SaintCentaur OneSpearRushes"
+    },
+    "SideTackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_SakuraSaurus_SideTackle",
+        "display_name": "UniqueAttack: Unique SakuraSaurus SideTackle"
+    },
+    "DashSlash": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_SamuraiDog_DashSlash",
+        "display_name": "UniqueAttack: Unique SamuraiDog DashSlash"
+    },
+    "Uppercut": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ScorpionMan_Uppercut",
+        "display_name": "UniqueAttack: Unique ScorpionMan Uppercut"
+    },
+    "Electric_UpperThunder": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ScorpionMan_Erectric_UpperThunder",
+        "display_name": "UniqueAttack: Unique ScorpionMan Erectric UpperThunder"
+    },
+    "SomersaultScratch": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Sekhmet_SomersaultScratch",
+        "display_name": "UniqueAttack: Unique Sekhmet SomersaultScratch"
+    },
+    "RollingScratch": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Sekhmet_RollingScratch",
+        "display_name": "UniqueAttack: Unique Sekhmet RollingScratch"
+    },
+    "Counter": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_SifuDog_Counter",
+        "display_name": "UniqueAttack: Unique SifuDog Counter"
+    },
+    "SnakeShot": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_SnakeGirl_SnakeShot",
+        "display_name": "UniqueAttack: Unique SnakeGirl SnakeShot"
+    },
+    "SnowImpact": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_SnowTigerBeastman_SnowImpact",
+        "display_name": "UniqueAttack: Unique SnowTigerBeastman SnowImpact"
+    },
+    "TrampleSlash": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_SnowTigerBeastman_TrampleSlash",
+        "display_name": "UniqueAttack: Unique SnowTigerBeastman TrampleSlash"
+    },
+    "BP_Action_SelfDestruct": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::SelfDestruct_Bee",
+        "display_name": "UniqueAttack: SelfDestruct Bee"
+    },
+    "NeedleLance": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_SoldierBee_NeedleLance",
+        "display_name": "UniqueAttack: Unique SoldierBee NeedleLance"
+    },
+    "HiddenWeapon": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_StuffedShark_HiddenWeapon",
+        "display_name": "UniqueAttack: Unique StuffedShark HiddenWeapon"
+    },
+    "SumoStomp": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_SumoDog_SumoStomp",
+        "display_name": "UniqueAttack: Unique SumoDog SumoStomp"
+    },
+    "Katana_Idle_Start": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::TransformToCoopWeapon",
+        "display_name": "Action: TransformToCoopWeapon"
+    },
+    "HydroSpin": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_TentacleTurtle_HydroSpin",
+        "display_name": "UniqueAttack: Unique TentacleTurtle HydroSpin"
+    },
+    "ThunderStorm": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ThunderBird_ThunderStorm",
+        "display_name": "UniqueAttack: Unique ThunderBird ThunderStorm"
+    },
+    "SnowStorm": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ThunderBird_Ice_SnowStrom",
+        "display_name": "UniqueAttack: Unique ThunderBird Ice SnowStrom"
+    },
+    "InazumaShorai": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ThunderDog_InazumaShorai",
+        "display_name": "UniqueAttack: Unique ThunderDog InazumaShorai"
+    },
+    "Ice_KoriShorai": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ThunderDog_Ice_KoriShorai",
+        "display_name": "UniqueAttack: Unique ThunderDog Ice KoriShorai"
+    },
+    "Ice_Bite": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ThunderDog_Ice_Bite",
+        "display_name": "UniqueAttack: Unique ThunderDog Ice Bite"
+    },
+    "Ice_BiteV2": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ThunderDog_Ice_BiteV2",
+        "display_name": "UniqueAttack: Unique ThunderDog Ice BiteV2"
+    },
+    "BP_ActionUnique_ThunderDragonMan_ThunderSwordAttack": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ThunderDragonMan_ThunderSwordAttack",
+        "display_name": "UniqueAttack: Unique ThunderDragonMan ThunderSwordAttack"
+    },
+    "BP_ActionUnique_ThunderDragonMan_NumerousSwordAttack": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_ThunderDragonMan_NumerousSwordAttack",
+        "display_name": "UniqueAttack: Unique ThunderDragonMan NumerousSwordAttack"
+    },
+    "DashKick": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_TropicalOstrich_DashKick",
+        "display_name": "UniqueAttack: Unique TropicalOstrich DashKick"
+    },
+    "WindingTackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Umihebi_WindingTackle",
+        "display_name": "UniqueAttack: Unique Umihebi WindingTackle"
+    },
+    "Fire_FireWindingTackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Umihebi_Fire_FireWindingTackle",
+        "display_name": "UniqueAttack: Unique Umihebi Fire FireWindingTackle"
+    },
+    "Plannting": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Feeding",
+        "display_name": "Action: Feeding"
+    },
+    "MagmaAttack": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_VolcanicMonster_MagmaAttack",
+        "display_name": "UniqueAttack: Unique VolcanicMonster MagmaAttack"
+    },
+    "IcicleSpit": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_VolcanoDragon_Ice_IcicleSpit",
+        "display_name": "UniqueAttack: Unique VolcanoDragon Ice IcicleSpit"
+    },
+    "IceLaser": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_VolcanoDragon_Ice_IceLaser",
+        "display_name": "UniqueAttack: Unique VolcanoDragon Ice IceLaser"
+    },
+    "VolcanicLaser": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_VolcanoDragon_VolcanicLaser",
+        "display_name": "UniqueAttack: Unique VolcanoDragon VolcanicLaser"
+    },
+    "MagmaSpit": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_VolcanoDragon_MagmaSpit",
+        "display_name": "UniqueAttack: Unique VolcanoDragon MagmaSpit"
+    },
+    "BP_Action_UniqueSkill_WereWolf_Scratch": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Werewolf_Scratch",
+        "display_name": "UniqueAttack: Unique Werewolf Scratch"
+    },
+    "HolyPillar": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WhiteDeer_HolyPillar",
+        "display_name": "UniqueAttack: Unique WhiteDeer HolyPillar"
+    },
+    "DarkPillar": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WhiteDeer_Dark_DarkPillar",
+        "display_name": "UniqueAttack: Unique WhiteDeer Dark DarkPillar"
+    },
+    "ShieldTackle": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WhiteShieldDragon_ShieldTackle",
+        "display_name": "UniqueAttack: Unique WhiteShieldDragon ShieldTackle"
+    },
+    "Minig": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::Mining",
+        "display_name": "Action: Mining"
+    },
+    "SleepLoopTogether": {
+        "category": "ActionMontage",
+        "enum_key": "EPalActionType::FishPond",
+        "display_name": "Action: FishPond"
+    },
+    "RoundCutter": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WingGolem_RoundCutter",
+        "display_name": "UniqueAttack: Unique WingGolem RoundCutter"
+    },
+    "FlameCutter": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WingGolem_Fire_FlameCutter",
+        "display_name": "UniqueAttack: Unique WingGolem Fire FlameCutter"
+    },
+    "BP_ActionPsychokinesis_WorldTreeDragon": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Psychokinesis",
+        "display_name": "UniqueAttack: Psychokinesis"
+    },
+    "PaldiumShot": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WorldTreeDragon_PaldiumShot",
+        "display_name": "UniqueAttack: Unique WorldTreeDragon PaldiumShot"
+    },
+    "PaldiumCannon": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WorldTreeDragon_PaldiumCannon",
+        "display_name": "UniqueAttack: Unique WorldTreeDragon PaldiumCannon"
+    },
+    "PaldiumExplosion": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WorldTreeDragon_PaldiumExplosion",
+        "display_name": "UniqueAttack: Unique WorldTreeDragon PaldiumExplosion"
+    },
+    "HaloBeam": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WorldTreeDragon_HaloBeam",
+        "display_name": "UniqueAttack: Unique WorldTreeDragon HaloBeam"
+    },
+    "BigBang": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WorldTreeDragon_BigBang",
+        "display_name": "UniqueAttack: Unique WorldTreeDragon BigBang"
+    },
+    "Supernova": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WorldTreeDragon_Supernova",
+        "display_name": "UniqueAttack: Unique WorldTreeDragon Supernova"
+    },
+    "PaldiumRain": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WorldTreeDragon_PaldiumRain",
+        "display_name": "UniqueAttack: Unique WorldTreeDragon PaldiumRain"
+    },
+    "HaloCutter": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WorldTreeDragon_HaloCutter",
+        "display_name": "UniqueAttack: Unique WorldTreeDragon HaloCutter"
+    },
+    "LaserGliding2": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_WorldTreeDragon_LaserGliding",
+        "display_name": "UniqueAttack: Unique WorldTreeDragon LaserGliding"
+    },
+    "EyeTossin": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Yakushima_EyeTossin",
+        "display_name": "UniqueAttack: Unique Yakushima EyeTossin"
+    },
+    "SummonServant": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Yakushima_SummonServant",
+        "display_name": "UniqueAttack: Unique Yakushima SummonServant"
+    },
+    "MouthTossin": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Yakushima_MouthTossin",
+        "display_name": "UniqueAttack: Unique Yakushima MouthTossin"
+    },
+    "Green_PhantasmalEye": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_YakushimaBoss001_Green_PhantasmalEye",
+        "display_name": "UniqueAttack: Unique YakushimaBoss001 Green PhantasmalEye"
+    },
+    "Green_PhantasmalSphere": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_YakushimaBoss001_Green_PhantasmalSphere",
+        "display_name": "UniqueAttack: Unique YakushimaBoss001 Green PhantasmalSphere"
+    },
+    "Green_PhantasmalDeathray": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_YakushimaBoss001_Green_PhantasmalDeathray",
+        "display_name": "UniqueAttack: Unique YakushimaBoss001 Green PhantasmalDeathray"
+    },
+    "Green_PhantasmalBolt": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_YakushimaBoss001_Green_PhantasmalBolt",
+        "display_name": "UniqueAttack: Unique YakushimaBoss001 Green PhantasmalBolt"
+    },
+    "SwordCharge": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_YakushimaMonster002_SwordCharge",
+        "display_name": "UniqueAttack: Unique YakushimaMonster002 SwordCharge"
+    },
+    "BatCharge_Start": {
+        "category": "GeneralMontage",
+        "enum_key": "EPalGeneralMontageType::BeLiftupStart",
+        "display_name": "General: BeLiftupStart"
+    },
+    "BatCharge": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_YakushimaMonster003_BatCharge",
+        "display_name": "UniqueAttack: Unique YakushimaMonster003 BatCharge"
+    },
+    "BP_ActionUnique_Yeti_SnowBall": {
+        "category": "UniqueAttack",
+        "enum_key": "EPalWazaID::Unique_Yeti_SnowBall",
+        "display_name": "UniqueAttack: Unique Yeti SnowBall"
+    }
+}

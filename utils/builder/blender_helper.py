@@ -190,7 +190,12 @@ def run_headless_blender(blender_path: str, blend_file: str | None, script_path:
 
     # RULE CHECK: Only run pre-install and load addons if we are actually importing/reconstructing a PSK!
     # This prevents loading or downloading any classes during simple "Refresh Layout" operations.
-    is_psk_task = "blender_reconstruct.py" in script_path or any(".psk" in str(arg).lower() for arg in args)
+    # Ensure PSK/PSA tasks include dump_anims and .psa files
+    is_psk_task = (
+        "blender_reconstruct.py" in script_path or 
+        "blender_dump_anims.py" in script_path or 
+        any(".psk" in str(arg).lower() or ".psa" in str(arg).lower() for arg in args)
+    )
 
     cmd = [blender_path, "-b"]
     

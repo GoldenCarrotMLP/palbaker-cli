@@ -144,6 +144,39 @@ def handle_dynamic_pals_command(args, settings):
             error_print(f"Failed to save Dynamic Pal variant: {str(e)}")
             sys.exit(1)
 
+    
+    elif subcommand == "set-json-name":
+        custom_name = getattr(args, "name", "").strip()
+        mc.refresh_mods(target_mod=mod_name, base_pal=base_pal)
+        if not mc.raw_mods:
+            error_print(f"Mod {mod_name} was not found on disk.")
+            sys.exit(1)
+            
+        fmodel_dir = mc.raw_mods[0]["fmodel_path"]
+        controller = DynamicPalsController(mc)
+        manifest_path = controller.manifest.get_manifest_path(base_pal, fmodel_dir)
+        manifest_data = controller.manifest.load_manifest(manifest_path)
+
+        old_custom_name = manifest_data.get("custom_json_name", "")
+        manifest_data["custom_json_name"] = custom_name
+        controller.manifest.save_manifest(manifest_path, manifest_data)
+
+        # REDIRECTOR / CLEANUP: Clean up previous file if name changed!
+        palworld_exe = settings.get("palworld_exe", "")
+        if palworld_exe and os.path.exists(palworld_exe):
+            swap_json_dir = os.path.join(os.path.dirname(palworld_exe), "Pal", "Content", "Paks", "~Mods", "SwapJSON")
+            from utils.dynamic_pals_helper import sanitize_json_filename, compile_unified_dynamic_pals_json
+            
+            old_filename = sanitize_json_filename(old_custom_name, f"palbaker-{base_pal}")
+            old_path = os.path.join(swap_json_dir, f"{old_filename}.json")
+            if os.path.exists(old_path):
+                try: os.remove(old_path)
+                except OSError: pass
+
+            compile_unified_dynamic_pals_json(base_pal, fmodel_dir, swap_json_dir)
+
+        json_print({"status": "success", "message": f"Updated deployed JSON name to '{custom_name or f'palbaker-{base_pal}'}.json'"})
+
     elif subcommand == "sidecar":
         blend_name = args.blend_name
         if blend_name == "base":

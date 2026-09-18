@@ -82,7 +82,8 @@ def get_addon_name_v4_2() -> str:
 
 @translator.register("get_addons_list", (4, 2))
 def get_addons_list_v4_2() -> str:
-    return "bl_ext.system.io_scene_psk_psa"
+    return "bl_ext.system.io_scene_psk_psa,bl_ext.user_default.io_scene_psk_psa,bl_ext.blender_org.io_scene_psk_psa,io_scene_psk_psa"
+    
 
 @translator.register("get_download_url", (4, 2))
 def get_download_url_v4_2(version_str: str = "4.2") -> str:

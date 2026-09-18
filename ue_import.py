@@ -30,13 +30,23 @@ def run_pipeline():
     target_mesh_name = config.get("target_mesh_name", f"SK_{folder_name}")
     redirect_folder = config.get("redirect_folder", "")
     
+    # Resolve category early so clear_cache can clean up orphaned animation/skeleton folders
+    parts = ue_path.replace("\\", "/").split("/")
+    category = "Monster"
+    if "Character" in parts:
+        idx = parts.index("Character")
+        if idx + 1 < len(parts):
+            category = parts[idx + 1]
+
     template_id = config.get("template_id")
     is_custom_pal = config.get("is_custom_pal", False)
     preserve_materials = config.get("preserve_materials", True)
     push_materials = config.get("push_materials", True)
     push_textures = config.get("push_textures", True)
     push_animbp = config.get("push_animbp", True)
-    
+
+    has_custom_anims = config.get("has_custom_anims", False)
+
     # Handle backward compatibility or single-mesh payloads gracefully
     models = config.get("models", [])
     if not models and config.get("fbx_file"):
@@ -52,7 +62,8 @@ def run_pipeline():
         if preserve_materials:
             harvested_materials = harvest_materials(ue_path, target_mesh_name)
         
-        clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal)
+        # Scrub old physics assets AND delete orphaned variant animation/skeleton folders when disabled
+        clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal, has_custom_anims, base_pal, folder_name, category)
         
         # Resolve target material compilation folder dynamically based on active category
         material_target_ue_path = ue_path
@@ -61,8 +72,10 @@ def run_pipeline():
 
        # Import FBX mesh directly (only importing textures if push_textures is True)
         target_asset_path, target_phys_path = import_assets(
-            ue_path, config["textures"], fbx_file, import_name, base_pal, template_id, is_custom_pal, import_tex=push_textures
-        )
+        ue_path, config["textures"], fbx_file, import_name, base_pal, 
+        template_id, is_custom_pal, import_tex=push_textures, 
+        has_custom_anims=has_custom_anims  # <-- PASS THIS
+    )
         
         # Ensure Physics Asset is linked regardless of material push status
         if target_asset_path and target_phys_path:

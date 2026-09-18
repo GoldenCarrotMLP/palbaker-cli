@@ -53,3 +53,4 @@ deps/pal_drop_item_cache.json
 temp_bp_extract
 deps/partner_skill_params_cache.json
 deps/monster_parameter_cache.json
+enum_to_anims.json

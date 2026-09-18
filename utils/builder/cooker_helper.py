@@ -191,16 +191,18 @@ def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[
 
     if hasattr(workspace, 'cooked_bp_dir') and os.path.exists(workspace.cooked_bp_dir):
         bp_parts_found = False
-        for cooked_file in glob.glob(os.path.join(workspace.cooked_bp_dir, "BP_*.*")):
-            filename = os.path.basename(cooked_file)
-            virtual_rel_path = workspace.blueprint_virtual_path.replace('/Game/', '')
-            virtual_file = f"{virtual_rel_path}/{filename}"
-            
-            if not is_path_blacklisted(f"/Game/{virtual_file}", blacklist):
-                folders_to_pack.append((cooked_file, virtual_file))
-                bp_parts_found = True
+        # Pack Actor Blueprints (BP_), Animation Blueprints (ABP_), and BlendSpaces (BS_)
+        for cooked_file in glob.glob(os.path.join(workspace.cooked_bp_dir, "*.*")):
+            if cooked_file.endswith((".uasset", ".uexp", ".ubulk")):
+                filename = os.path.basename(cooked_file)
+                virtual_rel_path = workspace.blueprint_virtual_path.replace('/Game/', '')
+                virtual_file = f"{virtual_rel_path}/{filename}"
+                
+                if not is_path_blacklisted(f"/Game/{virtual_file}", blacklist):
+                    folders_to_pack.append((cooked_file, virtual_file))
+                    bp_parts_found = True
         if bp_parts_found:
-            print(f"  -> Standalone Blueprint detected: Packing {workspace.blueprint_virtual_path} files.", flush=True)
+            print(f"  -> Blueprint Stack detected: Packing {workspace.blueprint_virtual_path} (BP, ABP, BS)...", flush=True)
 
     # 3. Pack any custom weapon and player animation blueprints
     blueprint_cooked_root = os.path.join(

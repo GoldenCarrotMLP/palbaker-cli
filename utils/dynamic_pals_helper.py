@@ -71,6 +71,15 @@ def get_all_blend_files_for_workspace(fmodel_root: str, category: str = "Monster
     # Sort keys and lists alphabetically
     return {k: sorted(result[k]) for k in sorted(result.keys())}
 
+def sanitize_json_filename(name: str, default_name: str) -> str:
+    """Cleans user input to be a safe, valid Windows filename without redundant .json extension."""
+    if not name or not name.strip():
+        return default_name
+    clean = name.strip()
+    if clean.lower().endswith(".json"):
+        clean = clean[:-5]
+    clean = re.sub(r'[\\/*?:"<>|]', '_', clean).strip()
+    return clean or default_name
 
 
 def get_available_materials_for_context(fmodel_root: str, fmodel_dir: str | None, character_id: str, category: str = "Monster") -> list[str]:
@@ -481,20 +490,24 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
         except Exception as e:
             print(f"Dynamic Pals Mod Builder Warning: Skipping variant compilation: {e}", flush=True)
 
+    default_filename = f"palbaker-{monster_name}"
+    custom_name = manifest_data.get("custom_json_name", "")
+    final_filename = sanitize_json_filename(custom_name, default_filename)
+
     output_structure = {
-        "ModelPack": f"PalBaker-{monster_name} Replacer Pack",
+        "ModelPack": manifest_data.get("model_pack_name", f"PalBaker-{monster_name} Replacer Pack"),
         "SkinList": {
             final_character_id: skin_map
         }
     }
 
     os.makedirs(swap_json_dir, exist_ok=True)
-    target_path = os.path.join(swap_json_dir, f"palbaker-{monster_name}.json")
+    target_path = os.path.join(swap_json_dir, f"{final_filename}.json")
 
     try:
         with open(target_path, "w", encoding="utf-8") as f:
             json.dump(output_structure, f, indent=4)
-        return True, f"SUCCESS: Compiled and deployed Dynamic Pals V2 config to {target_path}"
+        return True, f"SUCCESS: Compiled and deployed Dynamic Pals V2 config to {os.path.basename(target_path)}"
     except Exception as e:
         return False, f"Failed to write deployment JSON: {e}"
 

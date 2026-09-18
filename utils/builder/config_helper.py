@@ -1,6 +1,19 @@
 # utils/builder/config_helper.py
 import os
 import shutil
+import time
+
+def safe_copy_file(src: str, dst: str, retries: int = 10, delay: float = 0.3) -> bool:
+    """Copies file with retries to gracefully handle momentary Windows file locks (WinError 32)."""
+    for i in range(retries):
+        try:
+            shutil.copy2(src, dst)
+            return True
+        except (PermissionError, OSError):
+            time.sleep(delay)
+    # Final attempt
+    shutil.copy2(src, dst)
+    return True
 
 def restore_palbaker_backup(uproject_path: str):
     if not uproject_path or not os.path.exists(uproject_path):
@@ -9,11 +22,13 @@ def restore_palbaker_backup(uproject_path: str):
     ini_path = os.path.join(project_dir, "Config", "DefaultGame.ini")
     backup_path = ini_path + ".palbaker.bak"
     if os.path.exists(backup_path):
-        try:
-            shutil.copy2(backup_path, ini_path)
-            os.remove(backup_path)
-        except Exception:
-            pass
+        for _ in range(5):
+            try:
+                shutil.copy2(backup_path, ini_path)
+                os.remove(backup_path)
+                break
+            except (PermissionError, OSError):
+                time.sleep(0.3)
 
 def inject_packaging_settings(ini_path: str, ue_virtual_path: str, skeleton_virtual_path: str, anims_virtual_path: str, has_anims: bool, extra_paths: list | None = None):
     if not os.path.exists(ini_path):
@@ -97,7 +112,7 @@ class GameIniCookContext:
             os.makedirs(self.workspace.config_dir, exist_ok=True)
 
         if os.path.exists(self.workspace.ini_path):
-            shutil.copy2(self.workspace.ini_path, self.workspace.ini_backup)
+            safe_copy_file(self.workspace.ini_path, self.workspace.ini_backup)
             
             actual_extra_paths = list(self.extra_paths)
             
@@ -150,4 +165,9 @@ class GameIniCookContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if os.path.exists(self.workspace.ini_backup):
-            shutil.move(self.workspace.ini_backup, self.workspace.ini_path)
+            for _ in range(10):
+                try:
+                    shutil.move(self.workspace.ini_backup, self.workspace.ini_path)
+                    break
+                except (PermissionError, OSError):
+                    time.sleep(0.3)

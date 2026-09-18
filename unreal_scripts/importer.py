@@ -16,7 +16,7 @@ def harvest_materials(ue_path, target_mesh_name):
                     harvested[str(i)] = mat.material_interface
     return harvested
 
-def clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal=False):
+def clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal=False, has_custom_anims=False, base_pal="", mod_name="", category="Monster"):
     if fbx_file and os.path.exists(fbx_file):
         clean_mesh_name = target_mesh_name.replace("SK_", "")
         paths_to_delete = [
@@ -31,14 +31,29 @@ def clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal=False):
                 try: unreal.EditorAssetLibrary.delete_asset(path)
                 except Exception as e: print(f"[PalBaker] Warning: Failed to delete physics asset: {e}")
 
-        if is_custom_pal:
+        # Only clear rogue custom skeleton if custom animations are NOT active!
+        if is_custom_pal and not has_custom_anims:
             rogue_skeleton = f"/Game/Pal/Model/Character/Skeleton/{target_mesh_name}/SK_{target_mesh_name}_Skeleton"
             if unreal.EditorAssetLibrary.does_asset_exist(rogue_skeleton):
-                print(f"[PalBaker] Clearing rogue custom skeleton: {rogue_skeleton}")
+                print(f"[PalBaker] Custom anims inactive: Clearing rogue custom skeleton: {rogue_skeleton}")
                 try: unreal.EditorAssetLibrary.delete_asset(rogue_skeleton)
                 except Exception: pass
 
-def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, template_id=None, is_custom_pal=False, import_tex=True):
+        # If custom animations are disabled, strictly scrub out orphaned variant skeletons and animation BPs!
+        if not has_custom_anims and base_pal and mod_name and base_pal.lower() != mod_name.lower():
+            cat_sanitized = category.replace(" ", "_")
+            folders_to_scrub = [
+                f"/Game/Pal/Model/Character/Skeleton/{base_pal}/{mod_name}",
+                f"/Game/Pal/Animation/Character/{cat_sanitized}/{base_pal}/{mod_name}",
+                f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{base_pal}/{mod_name}"
+            ]
+            for folder in folders_to_scrub:
+                if unreal.EditorAssetLibrary.does_directory_exist(folder):
+                    print(f"[PalBaker] Custom anims inactive: Cleaning up orphaned folder {folder}...")
+                    try: unreal.EditorAssetLibrary.delete_directory(folder)
+                    except Exception as e: print(f"[PalBaker] Warning: Failed to delete {folder}: {e}")
+
+def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, template_id=None, is_custom_pal=False, import_tex=True, has_custom_anims=False):
     # 1. Textures Import (Forced Overwrite)
     if import_tex and textures:
         print(f"[PalBaker] Importing {len(textures)} textures with forced overwrite...", flush=True)
@@ -46,16 +61,12 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         for png in textures:
             if os.path.exists(png):
                 clean_png = os.path.normpath(png).replace("\\", "/")
-                
                 tex_name = os.path.basename(clean_png)
                 while "." in tex_name:
                     tex_name = os.path.splitext(tex_name)[0]
-                # Sanitize spaces to prevent invalid asset path errors
                 tex_name = tex_name.replace(" ", "_")
-                    
                 tex_asset_path = f"{ue_path}/{tex_name}"
 
-                # Silently delete existing asset to prevent memory locking
                 try:
                     loaded = unreal.EditorAssetLibrary.load_asset(tex_asset_path)
                     if loaded:
@@ -87,6 +98,7 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         print(f"[PalBaker] Importing Skeletal FBX: {fbx_filename}")
         
         target_asset_path = f"{ue_path}/{target_mesh_name}"
+        clean_mesh_name = target_mesh_name.replace("SK_", "")
         
         parts = ue_path.replace("\\", "/").split("/")
         category = "Monster"
@@ -97,16 +109,12 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
 
         base_ue_path = f"/Game/Pal/Model/Character/{category}/{base_pal}"
         shared_phys_path = f"{base_ue_path}/PA_{base_pal}_PhysicsAsset"
-        
         phys_exists = unreal.EditorAssetLibrary.does_asset_exist(shared_phys_path)
 
-        clean_mesh_name = target_mesh_name.replace("SK_", "")
-        candidate_phys_paths = [
-            f"{ue_path}/{target_mesh_name}_PhysicsAsset",
-            f"{ue_path}/PA_{clean_mesh_name}_PhysicsAsset",
-            f"{ue_path}/PA_{target_mesh_name}_PhysicsAsset",
-            f"{ue_path}/{clean_mesh_name}_PhysicsAsset"
-        ]
+        if phys_exists:
+            print(f"[PalBaker] Using shared parent PhysicsAsset: {shared_phys_path}")
+        else:
+            print(f"[PalBaker] No parent PhysicsAsset found. Will generate and move to: {shared_phys_path}")
 
         task = unreal.AssetImportTask()
         task.set_editor_property('filename', fbx_file.replace("\\", "/"))
@@ -122,109 +130,85 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         import_ui.set_editor_property('import_materials', False)
         import_ui.set_editor_property('import_textures', False)
         import_ui.set_editor_property('import_animations', False)
-        
-        if phys_exists:
-            print(f"[PalBaker] Centralized physics asset detected at {shared_phys_path}. Skipping automatic compilation and binding mesh to it.")
-            import_ui.set_editor_property('create_physics_asset', False)
-        else:
-            print(f"[PalBaker] Centralized physics asset missing. Enabling automatic compilation to generate base asset...")
-            import_ui.set_editor_property('create_physics_asset', True)
+        import_ui.set_editor_property('create_physics_asset', not phys_exists)
         
         skel_data = import_ui.skeletal_mesh_import_data
         skel_data.set_editor_property('import_mesh_lo_ds', False)
         skel_data.set_editor_property('import_morph_targets', True)
         skel_data.set_editor_property('use_t0_as_ref_pose', True)
-        # Preserve Blender custom split/weighted normals instead of recomputing
         skel_data.set_editor_property('normal_import_method', unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
         
-        target_skeleton_name = template_id if (is_custom_pal and template_id) else base_pal
-        clean_skel_name = target_skeleton_name[3:] if target_skeleton_name.startswith("SK_") else target_skeleton_name
-
-        is_humanoid = (
-            "npc" in category.lower() or 
-            "player" in category.lower() or 
-            base_pal.lower().startswith("sk_npc") or 
-            base_pal.lower().startswith("sk_player") or
-            "human" in base_pal.lower()
-        )
-
-        if is_humanoid:
-            # NPCs and Players share standardized Human skeletons in Palworld
-            candidate_skeletons = [
-                "/Game/Pal/Model/Character/Skeleton/Human/SK_PalHuman_Skeleton",
-                "/Game/Pal/Model/Character/Skeleton/Human/SK_PalHuman_Female_Skeleton",
-                "/Game/Pal/Model/Character/Skeleton/Human/SK_PalHuman_Male_Skeleton",
-                "/Game/Pal/Model/Character/Skeleton/Player/SK_PalHuman_Skeleton"
-            ]
-            skeleton_path = candidate_skeletons[0]
-            for cand in candidate_skeletons:
-                if unreal.EditorAssetLibrary.does_asset_exist(cand):
-                    skeleton_path = cand
-                    break
-            print(f"[PalBaker] Humanoid NPC/Player detected. Target skeleton routed to: {skeleton_path}")
+        # Skeleton routing: nest variant skeleton inside base pal folder
+        skel_folder = f"{base_pal}/{clean_mesh_name}" if (has_custom_anims and base_pal.lower() != clean_mesh_name.lower()) else base_pal
+        if has_custom_anims:
+            expected_skeleton_path = f"/Game/Pal/Model/Character/Skeleton/{skel_folder}/SK_{clean_mesh_name}_Skeleton"
+            print(f"[PalBaker] Custom Animations Active: Targeting dedicated nested skeleton at {expected_skeleton_path}")
+            existing_skeleton = unreal.EditorAssetLibrary.load_asset(expected_skeleton_path)
+            if existing_skeleton:
+                import_ui.set_editor_property('skeleton', existing_skeleton)
+            else:
+                import_ui.set_editor_property('skeleton', None)
         else:
-            skeleton_path = f"/Game/Pal/Model/Character/Skeleton/{clean_skel_name}/SK_{clean_skel_name}_Skeleton"
-        
-        existing_skeleton = unreal.EditorAssetLibrary.load_asset(skeleton_path)
-        if existing_skeleton:
-            print(f"[PalBaker] Existing skeleton found at {skeleton_path}. Merging and updating bone container...")
-            import_ui.set_editor_property('skeleton', existing_skeleton)
-        else:
-            print(f"[PalBaker] No existing skeleton found at {skeleton_path}. Unreal will generate a new skeleton.")
+            target_skeleton_name = template_id if (is_custom_pal and template_id) else base_pal
+            clean_skel_name = target_skeleton_name[3:] if target_skeleton_name.startswith("SK_") else target_skeleton_name
+            expected_skeleton_path = f"/Game/Pal/Model/Character/Skeleton/{clean_skel_name}/SK_{clean_skel_name}_Skeleton"
+            existing_skeleton = unreal.EditorAssetLibrary.load_asset(expected_skeleton_path)
+            if existing_skeleton:
+                import_ui.set_editor_property('skeleton', existing_skeleton)
 
         task.set_editor_property('options', import_ui)
         unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
         
-        imported_asset = unreal.EditorAssetLibrary.load_asset(target_asset_path)
-        if imported_asset:
-            asset_class = imported_asset.get_class().get_name()
-            if asset_class == "StaticMesh":
-                raise Exception(
-                    f"\n[!] FATAL ERROR: Unreal Engine imported '{fbx_filename}' as a StaticMesh instead of a SkeletalMesh!\n"
-                    f"Please open your .blend file, ensure your mesh is parented to the 'Armature' object, and try again."
-                )
-
-        print(f"[PalBaker] Successfully imported skeletal mesh to: {target_asset_path}")
-
-        expected_skeleton_path = skeleton_path
-        skeleton_relocated = False
-
         imported_paths = list(task.get_editor_property('imported_object_paths'))
+
+        # 1. PhysicsAsset Relocation & Deduplication
+        for imp_path in imported_paths:
+            asset = unreal.EditorAssetLibrary.load_asset(imp_path)
+            if not asset: continue
+            if asset.get_class().get_name() == "PhysicsAsset":
+                if phys_exists:
+                    # Parent already has a shared PhysicsAsset; delete the local duplicate from the variant folder
+                    print(f"[PalBaker] Removing redundant duplicate PhysicsAsset from variant folder: {imp_path}")
+                    unreal.EditorAssetLibrary.delete_asset(imp_path)
+                else:
+                    # Move & rename the generated PhysicsAsset to the parent root directory
+                    unreal.EditorAssetLibrary.make_directory(base_ue_path)
+                    if imp_path != shared_phys_path:
+                        print(f"[PalBaker] Relocating generated PhysicsAsset to root parent: {shared_phys_path}")
+                        unreal.EditorAssetLibrary.rename_asset(imp_path, shared_phys_path)
+                    phys_exists = True
+
+        # Fallback check if Unreal named the physics asset outside imported_object_paths
+        if not phys_exists:
+            for cand in [
+                f"{ue_path}/{target_mesh_name}_PhysicsAsset",
+                f"{ue_path}/{clean_mesh_name}_PhysicsAsset",
+                f"{ue_path}/PA_{target_mesh_name}_PhysicsAsset",
+                f"{ue_path}/PA_{clean_mesh_name}_PhysicsAsset"
+            ]:
+                if unreal.EditorAssetLibrary.does_asset_exist(cand):
+                    unreal.EditorAssetLibrary.make_directory(base_ue_path)
+                    print(f"[PalBaker] Relocating fallback PhysicsAsset to root parent: {shared_phys_path}")
+                    unreal.EditorAssetLibrary.rename_asset(cand, shared_phys_path)
+                    phys_exists = True
+                    break
+
+        # 2. Skeleton routing
+        skeleton_relocated = False
         for imported_path in imported_paths:
             asset = unreal.EditorAssetLibrary.load_asset(imported_path)
             if not asset: continue
-            
-            asset_class = asset.get_class().get_name()
-            if asset_class == "Skeleton":
-                if is_humanoid:
-                    # Clean up rogue generated skeleton for humanoids and bind mesh to master human skeleton
-                    if existing_skeleton and asset != existing_skeleton:
-                        print(f"[PalBaker] Master skeleton active. Deleting rogue generated skeleton: {imported_path}")
-                        unreal.EditorAssetLibrary.delete_asset(imported_path)
-                else:
-                    if imported_path != expected_skeleton_path:
-                        unreal.EditorAssetLibrary.make_directory(f"/Game/Pal/Model/Character/Skeleton/{clean_skel_name}")
-                        unreal.EditorAssetLibrary.rename_asset(imported_path, expected_skeleton_path)
+            if asset.get_class().get_name() == "Skeleton":
+                if imported_path != expected_skeleton_path:
+                    unreal.EditorAssetLibrary.make_directory(f"/Game/Pal/Model/Character/Skeleton/{skel_folder}")
+                    unreal.EditorAssetLibrary.rename_asset(imported_path, expected_skeleton_path)
                 skeleton_relocated = True
 
-        if not skeleton_relocated and not is_humanoid:
+        if not skeleton_relocated:
             generated_skeleton_path = f"{ue_path}/{target_mesh_name}_Skeleton"
             if unreal.EditorAssetLibrary.does_asset_exist(generated_skeleton_path) and generated_skeleton_path != expected_skeleton_path:
-                unreal.EditorAssetLibrary.make_directory(f"/Game/Pal/Model/Character/Skeleton/{clean_skel_name}")
+                unreal.EditorAssetLibrary.make_directory(f"/Game/Pal/Model/Character/Skeleton/{skel_folder}")
                 unreal.EditorAssetLibrary.rename_asset(generated_skeleton_path, expected_skeleton_path)
-
-        if not phys_exists:
-            found_generated = False
-            for cand in candidate_phys_paths:
-                if unreal.EditorAssetLibrary.does_asset_exist(cand):
-                    print(f"[PalBaker] Discovered auto-generated physics asset at: '{cand}'. Relocating to base folder shared path: '{shared_phys_path}'")
-                    unreal.EditorAssetLibrary.make_directory(base_ue_path)
-                    if unreal.EditorAssetLibrary.rename_asset(cand, shared_phys_path):
-                        print("[PalBaker] Centralization successfully completed!")
-                        found_generated = True
-                        break
-            if not found_generated:
-                print("[PalBaker Warning] Physics asset generation was enabled, but no candidate auto-generated files could be mapped.")
 
         return target_asset_path, shared_phys_path
 

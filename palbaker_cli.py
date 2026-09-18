@@ -1,6 +1,12 @@
 # palbaker_cli.py
 import sys
 
+# Force UTF-8 on Windows stdout/stderr to prevent charmap crashes with emojis/symbols
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    getattr(sys.stdout, "reconfigure")(encoding='utf-8', errors='replace')
+if sys.platform == "win32" and hasattr(sys.stderr, "reconfigure"):
+    getattr(sys.stderr, "reconfigure")(encoding='utf-8', errors='replace')
+
 # Standard library dummy imports to force PyInstaller to bundle dependencies
 # required by Unreal Engine's out-of-process remote_execution.py script
 import uuid

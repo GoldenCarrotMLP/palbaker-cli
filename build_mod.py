@@ -13,6 +13,7 @@ from utils.builder.unreal_helper import run_remote_import
 from utils.builder.cooker_helper import clean_cook_environment, resolve_packaging_manifest, run_and_stream, pack_cooked_assets, is_path_blacklisted
 from utils.state import save_push_state
 from utils.blueprint_patcher import patch_actor_blueprint
+from utils.sidecar_helper import load_sidecar
 
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     getattr(sys.stdout, "reconfigure")(encoding='utf-8')
@@ -35,18 +36,29 @@ def main():
     workspace = ModWorkspace(BASE_PAL, MOD_NAME, CATEGORY, settings)
     custom_blacklist = getattr(workspace, "custom_blacklist", [])
 
+    # -------------------------------------------------------------
+    # DETECT CUSTOM ANIMATIONS IN SIDECAR
+    # -------------------------------------------------------------
+    sidecar_path = os.path.join(workspace.fmodel_dir, f"{MOD_NAME}_blend.json")
+    sidecar_data = load_sidecar(sidecar_path)
+    
+    is_anim_active = bool(sidecar_data.get("custom_animations", {}).get("is_active", False))
+    workspace.has_anims = is_anim_active
+    if is_anim_active:
+        print(f"[PalBaker Anims] Custom animations are active for {MOD_NAME}: Safe skeleton stripping disabled & anim cooking enabled.", flush=True)
+    else:
+        print(f"[PalBaker] Custom animations inactive for {MOD_NAME}: Using shared vanilla skeleton.", flush=True)
+
     # 1. READ VANILLA REDIRECT OPTION
     redirect_folder = ""
     if not workspace.is_variant:
-        from utils.sidecar_helper import load_sidecar
-        sidecar_path = os.path.join(workspace.fmodel_dir, f"{workspace.base_pal}_blend.json")
-        sidecar_data = load_sidecar(sidecar_path)
-        redirect_folder = sidecar_data.get("active_vanilla_replacer", "")
+        base_sidecar_path = os.path.join(workspace.fmodel_dir, f"{workspace.base_pal}_blend.json")
+        base_sidecar_data = load_sidecar(base_sidecar_path)
+        redirect_folder = base_sidecar_data.get("active_vanilla_replacer", "")
 
     # If redirection is active, shift local files lookup directory to the variant folder!
     if redirect_folder:
         print(f"[Redirect] Base mesh SK_{BASE_PAL} will bake using {redirect_folder}'s .blend geometry...", flush=True)
-        # Shift workspace lookup folder, but let ue_virtual_path remain as /Game/.../{base_pal}
         workspace.fmodel_dir = os.path.join(workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", CATEGORY, BASE_PAL, redirect_folder)
 
     # -------------------------------------------------------------
@@ -67,7 +79,6 @@ def main():
         psk_files.sort()
         processed_bases = set()
         
-        # Filter for the specific PSK matching this mod
         target_psks = [p for p in psk_files if os.path.splitext(os.path.basename(p))[0].lower() in [f"sk_{MOD_NAME.lower()}", MOD_NAME.lower()]]
         if target_psks:
             psk_files = target_psks
@@ -130,7 +141,7 @@ def main():
             print("ERROR: No raw model sources found in workspaces to push.", flush=True)
             sys.exit(1)
 
-        from utils.dynamic_pals_helper import compile_unified_dynamic_pals_json, sync_sidecar_metadata
+        from utils.dynamic_pals_helper import sync_sidecar_metadata
 
         for target_dir, _ in import_targets:
             blend_files = glob.glob(os.path.join(target_dir, "*.blend"))
@@ -174,20 +185,18 @@ def main():
                     "import_name": import_name
                 })
 
-            from utils.sidecar_helper import load_sidecar
-            preserve_materials = True 
             sidecar_path = os.path.join(target_dir, f"{MOD_NAME}_blend.json")
-            sidecar_data = load_sidecar(sidecar_path)
-            preserve_materials = bool(sidecar_data.get("preserve_materials", True))
+            target_sidecar_data = load_sidecar(sidecar_path)
+            preserve_materials = bool(target_sidecar_data.get("preserve_materials", True))
                     
             if "--preserve-materials" in sys.argv:
                 preserve_materials = True
             elif "--overwrite-materials" in sys.argv:
                 preserve_materials = False
 
-            push_materials = bool(sidecar_data.get("push_materials", True))
-            push_textures = bool(sidecar_data.get("push_textures", True))
-            push_animbp = bool(sidecar_data.get("push_animbp", True))
+            push_materials = bool(target_sidecar_data.get("push_materials", True))
+            push_textures = bool(target_sidecar_data.get("push_textures", True))
+            push_animbp = bool(target_sidecar_data.get("push_animbp", True))
 
             config = {
                 "ue_target_path": virtual_path,
@@ -201,6 +210,7 @@ def main():
                 "push_materials": push_materials,
                 "push_textures": push_textures,
                 "push_animbp": push_animbp,
+                "has_custom_anims": workspace.has_anims,
                 "base_pal": BASE_PAL,
                 "target_mesh_name": workspace.target_mesh_name,
                 "redirect_folder": redirect_folder
@@ -222,7 +232,6 @@ def main():
 
         ue_abs_path = os.path.join(workspace.project_dir, "Content", workspace.ue_virtual_path.replace("/Game/", ""))
         save_push_state(workspace.fmodel_dir, ue_abs_path)
-
 
     # -------------------------------------------------------------
     # PHASE 1.5: REFRESH BLEND (Sync layouts on the spot)
@@ -258,7 +267,7 @@ def main():
             
         print("SUCCESS! Staged layout sync completed.", flush=True)
 
-   # -------------------------------------------------------------
+    # -------------------------------------------------------------
     # PHASE 2: COOK (Compile only)
     # -------------------------------------------------------------
     external_dependency_packages = []
@@ -292,6 +301,16 @@ def main():
                         extra_cook_paths.append(variant_vpath)
                         print(f"  [Cook Queue] Added variant directory to cook: {variant_vpath}", flush=True)
 
+        # Ensure custom animations, skeletons, and unique attack actions are cooked
+        if workspace.has_anims:
+            if workspace.anims_virtual_path not in extra_cook_paths:
+                extra_cook_paths.append(workspace.anims_virtual_path)
+            if workspace.skeleton_virtual_path not in extra_cook_paths:
+                extra_cook_paths.append(workspace.skeleton_virtual_path)
+            waza_virtual_dir = f"/Game/Pal/Blueprint/Action/Waza/{MOD_NAME}"
+            if waza_virtual_dir not in extra_cook_paths:
+                extra_cook_paths.append(waza_virtual_dir)
+
         if workspace.has_custom_shader and not is_path_blacklisted("/Game/CartoonCelShader/Materials/CelShader", workspace.custom_blacklist):
             extra_cook_paths.append("/Game/CartoonCelShader/Materials/CelShader")
         if workspace.has_icon and not is_path_blacklisted(workspace.icon_virtual_path, workspace.custom_blacklist):
@@ -318,7 +337,6 @@ def main():
             print("Cooking Target Folders...", flush=True)
             from utils.builder.cooker_helper import run_and_stream
             
-            # Construct command and explicitly force target directories via -cookdir
             cook_cmd = [
                 workspace.ue_cmd_path, 
                 workspace.uproject_path, 
@@ -335,14 +353,23 @@ def main():
             else:
                 print("COOK SUCCESS: Compilation completed successfully.", flush=True)
 
-
     # -------------------------------------------------------------
     # PHASE 3: PACK (Package only)
     # -------------------------------------------------------------
     if ACTION in ["cook", "full", "pack", "pack_only", "recursive_cook"]:
-        if workspace.is_custom_pal:
-            print(f"Custom Pal detected. Auto-generating patched standalone cooked blueprint...", flush=True)
-            patch_actor_blueprint(settings, MOD_NAME, workspace.template_id)
+        # Single Unified Blueprint Orchestration (Actor BP, AnimBP, BlendSpaces, Weapons, Bosses)
+        if workspace.is_custom_pal or workspace.has_anims:
+            print(f"[PalBaker Blueprints] Auto-generating unified blueprint stack (Actor BP, AnimBP, BlendSpaces)...", flush=True)
+            from utils.blueprint_patcher import patch_actor_blueprint
+            source_template = workspace.template_id if workspace.is_custom_pal else workspace.base_pal
+            patch_actor_blueprint(
+                settings,
+                MOD_NAME,
+                source_template,
+                has_anims=workspace.has_anims,
+                category=CATEGORY,
+                base_pal=BASE_PAL
+            )
 
         final_pak_path = workspace.output_pak_clean
         print(f"Preparing Pak (Target: {os.path.basename(final_pak_path)})...", flush=True)
@@ -381,28 +408,31 @@ def main():
             swap_json_dir = os.path.join(os.path.dirname(workspace.palworld_exe), "Pal", "Content", "Paks", "~Mods", "SwapJSON")
         
         if swap_json_dir:
-            target_deployed_json = os.path.join(swap_json_dir, f"palbaker-{workspace.base_pal}.json")
-            
             base_fmodel_dir = os.path.normpath(os.path.join(
                 workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
                 workspace.category, workspace.base_pal
             ))
             manifest_path = os.path.join(base_fmodel_dir, f"{workspace.base_pal}_dynamic_pals.json")
 
-            # Only delete if Dynamic Pals is EXPLICITLY disabled in the base Pal's manifest
+            custom_name = ""
+            if os.path.exists(manifest_path):
+                try:
+                    with open(manifest_path, "r", encoding="utf-8") as f:
+                        custom_name = json.load(f).get("custom_json_name", "")
+                except Exception:
+                    pass
+
+            from utils.dynamic_pals_helper import sanitize_json_filename, compile_unified_dynamic_pals_json
+            final_filename = sanitize_json_filename(custom_name, f"palbaker-{workspace.base_pal}")
+            target_deployed_json = os.path.join(swap_json_dir, f"{final_filename}.json")
+
             if not workspace.is_dynamic_pals_active:
-                if os.path.exists(target_deployed_json):
-                    try:
-                        os.remove(target_deployed_json)
-                        print(f"[Dynamic Pals] Cleaned up disabled Dynamic Pals config from game: {os.path.basename(target_deployed_json)}", flush=True)
-                    except OSError:
-                        pass
+                for p in [target_deployed_json, os.path.join(swap_json_dir, f"palbaker-{workspace.base_pal}.json")]:
+                    if os.path.exists(p):
+                        try: os.remove(p)
+                        except OSError: pass
             else:
-                # FIXED: As long as the manifest exists, compile and deploy it directly!
-                # No longer requires physical subfolders on disk (supports cross-pal models & reskins).
                 if os.path.exists(manifest_path):
-                    from utils.dynamic_pals_helper import compile_unified_dynamic_pals_json
-                    print(f"[Dynamic Pals] Compiling and updating deployed variants registration config for {workspace.base_pal}...", flush=True)
                     success, msg = compile_unified_dynamic_pals_json(workspace.base_pal, base_fmodel_dir, swap_json_dir)
                     print(msg, flush=True)
 
