@@ -13,7 +13,7 @@ from utils.builder.unreal_helper import run_remote_import
 from utils.builder.cooker_helper import clean_cook_environment, resolve_packaging_manifest, run_and_stream, pack_cooked_assets, is_path_blacklisted
 from utils.state import save_push_state
 from utils.blueprint_patcher import patch_actor_blueprint
-from utils.sidecar_helper import load_sidecar
+from utils.sidecar_helper import load_sidecar, save_sidecar
 
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     getattr(sys.stdout, "reconfigure")(encoding='utf-8')
@@ -96,18 +96,41 @@ def main():
             blend_file = os.path.join(workspace.fmodel_dir, f"{MOD_NAME}.blend")
             psk_file_clean = psk_file.replace("\\", "/")
             blend_file_clean = blend_file.replace("\\", "/")
+            output_json = os.path.join(workspace.fmodel_dir, f"{MOD_NAME}_blend.json")
+
+            # --- 1. SEED SIDECAR WITH REPLICATED ABP NODES BEFORE BLENDER RUNS ---
+            from utils.abp_parser import identify_abp_json, parse_abp_nodes
+            detected_abp = identify_abp_json(workspace.fmodel_dir)
+            if detected_abp:
+                abp_payload = parse_abp_nodes(detected_abp)
+                sidecar_data = load_sidecar(output_json)
+                sidecar_data.update(abp_payload)
+                sidecar_data["has_replicated_abp"] = True
+                save_sidecar(output_json, sidecar_data)
+                print(
+                    f"[PalBaker] Ingesting replicated AnimBlueprint ({len(abp_payload['jiggle_bones'])} springs, "
+                    f"{len(abp_payload['lookat_bones'])} lookats, {len(abp_payload['copy_bones'])} copies)...",
+                    flush=True
+                )
+            # ---------------------------------------------------------------------
             
             print(f"Launching headless Blender to reconstruct .blend workspace from {os.path.basename(psk_file)}...", flush=True)
             result = run_headless_blender(
                 workspace.blender_path, 
                 None, 
                 reconstructor_script, 
-                ["--fbx", psk_file_clean, "--output", blend_file_clean]
+                ["--fbx", psk_file_clean, "--output", blend_file_clean, "--sidecar", output_json.replace("\\", "/")]
             )
             
+            # --- PRINT BLENDER'S INTERNAL LOGS TO UI CONSOLE ---
+            if result.stdout.strip():
+                print(result.stdout, flush=True)
+            if result.stderr.strip():
+                print(result.stderr, flush=True)
+            # ----------------------------------------------------
+
             if os.path.exists(blend_file):
                 print(f"SUCCESS! .blend file generated at: {blend_file}", flush=True)
-                output_json = os.path.join(workspace.fmodel_dir, f"{MOD_NAME}_blend.json")
                 
                 print(f"Generating companion sidecar layout for {MOD_NAME}...", flush=True)
                 result_sidecar = run_headless_blender(

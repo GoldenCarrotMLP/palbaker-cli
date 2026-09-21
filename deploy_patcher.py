@@ -123,7 +123,7 @@ def main():
     target_uasset_path = os.path.join(target_cooked_dir, f"AM_{target_pal}_Eat.uasset")
 
     recompile_proc = subprocess.run(
-        [uasset_gui_exe, "fromjson", patched_json_path, target_uasset_path],
+        [uasset_gui_exe, "fromjson", patched_json_path, target_uasset_path, usmap_path],
         capture_output=True,
         text=True,
         creationflags=flags

@@ -31,11 +31,47 @@ def decode_extras_to_guid(extras_b64: str) -> str:
     except Exception:
         return ""
 
+def fix_untyped_arrays(node):
+    """Recursively resolves missing ArrayType and DummyStruct metadata on empty arrays."""
+    if isinstance(node, dict):
+        if node.get("$type", "").endswith("ArrayPropertyData, UAssetAPI"):
+            if node.get("ArrayType") is None:
+                if node.get("Name") == "ChangedPropertyList":
+                    node["ArrayType"] = "StructProperty"
+                    node["DummyStruct"] = {
+                        "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
+                        "StructType": "BlueprintComponentChangedPropertyInfo",
+                        "Name": "ChangedPropertyList",
+                        "Value": []
+                    }
+                elif node.get("Name") == "Metadata":
+                    node["ArrayType"] = "ObjectProperty"
+                elif node.get("DummyStruct"):
+                    node["ArrayType"] = "StructProperty"
+                elif node.get("Value") and len(node["Value"]) > 0:
+                    first_item = node["Value"][0]
+                    if isinstance(first_item, dict):
+                        item_type = first_item.get("$type", "")
+                        if "StructPropertyData" in item_type:
+                            node["ArrayType"] = "StructProperty"
+                        elif "ObjectPropertyData" in item_type:
+                            node["ArrayType"] = "ObjectProperty"
+                        elif "NamePropertyData" in item_type:
+                            node["ArrayType"] = "NameProperty"
+                else:
+                    node["ArrayType"] = "StructProperty"
+        for v in node.values():
+            fix_untyped_arrays(v)
+    elif isinstance(node, list):
+        for item in node:
+            fix_untyped_arrays(item)
+
 def sync_namemap(data: dict):
     """
     Recursively scans the AST for any FNames (NamePropertyData, ObjectName, SerializedType, etc.)
     and ensures they exist in data['NameMap'], reconciles DependsMap length, and updates Generation counts.
     """
+    fix_untyped_arrays(data)
     name_map = data.setdefault("NameMap", [])
     existing = set(name_map)
 
@@ -44,14 +80,31 @@ def sync_namemap(data: dict):
             name_map.append(val)
             existing.add(val)
 
+    # Pre-seed standard Unreal Engine property types so UAssetAPI never attempts
+    # to register missing type names during serialization (preventing InvalidOperationException)
+    STANDARD_UE_TYPES = [
+        "ByteProperty", "BoolProperty", "IntProperty", "FloatProperty", "ObjectProperty",
+        "NameProperty", "DelegateProperty", "DoubleProperty", "ArrayProperty", "StructProperty",
+        "StrProperty", "TextProperty", "InterfaceProperty", "MulticastDelegateProperty",
+        "WeakObjectProperty", "LazyObjectProperty", "AssetObjectProperty", "SoftObjectProperty",
+        "UInt64Property", "UInt32Property", "UInt16Property", "Int64Property", "Int16Property",
+        "Int8Property", "MapProperty", "SetProperty", "EnumProperty", "FieldPathProperty",
+        "OptionalProperty", "Utf8StrProperty", "AnsiStrProperty",
+        # Pre-seed common implicit inner struct types to prevent serialization lock crashes
+        "BlueprintComponentChangedPropertyInfo", "Guid", "Vector", "Rotator", "Vector2D", 
+        "Transform", "LinearColor", "Color", "Quat", "SoftObjectPath"
+    ]
+    for t in STANDARD_UE_TYPES:
+        add_name(t)
+
     # Keys in UAssetAPI JSON that strictly hold FName strings
     fname_keys = {
         "Name", "ObjectName", "ClassName", "ClassPackage", "PackageName",
         "StructType", "EnumType", "InnerType", "ArrayType", "PropertyTypeName",
         "SerializedType", "ClassConfigName", "RepNotifyFunc", "AssetName",
-        "VirtualFunctionName", "DelegateName"
+        "VirtualFunctionName", "DelegateName", "KeyType", "ValueType",
+        "PropertyType", "SubPathString", "ClassWithin", "DummyStruct"
     }
-
     def scan(node):
         if isinstance(node, dict):
             typ = node.get("$type", "")

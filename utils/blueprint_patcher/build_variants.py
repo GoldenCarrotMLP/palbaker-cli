@@ -5,7 +5,7 @@ import json
 import subprocess
 from utils.extractor.core import extract_game_files
 
-def build_boss_variant(base_json_str: str, template_id: str, pal_id: str, boss_scale: float, settings: dict, temp_dir: str, cooked_dir: str, uasset_gui: str, flags: int, log) -> bool:
+def build_boss_variant(base_json_str: str, template_id: str, pal_id: str, boss_scale: float, settings: dict, temp_dir: str, cooked_dir: str, uasset_gui: str, flags: int, log, usmap_path: str = None) -> bool:
     """Builds BP_{pal_id}_BOSS from official template or synthesizes one by scaling CharacterMesh0."""
     log(f"  [Action: Variant] Generating Alpha Boss blueprint: BP_{pal_id}_BOSS...", "standard")
     boss_candidates = [
@@ -13,13 +13,14 @@ def build_boss_variant(base_json_str: str, template_id: str, pal_id: str, boss_s
         f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}_MiddleBoss.uasset"
     ]
     
+    from utils.uasset_helper import decompile_uasset, compile_uasset, sync_namemap
+
     for cand in boss_candidates:
         success, _ = extract_game_files(settings, [cand, cand.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
         cand_disk = os.path.join(temp_dir, cand)
         if success and os.path.exists(cand_disk):
             temp_boss_json = os.path.join(temp_dir, "boss_blueprint.json")
-            # Unversioned extraction (No usmap) to prevent bytecode corruption
-            subprocess.run([uasset_gui, "tojson", cand_disk, temp_boss_json, "VER_UE5_1"], check=True, creationflags=flags)
+            decompile_uasset(uasset_gui, cand_disk, temp_boss_json, usmap_path)
             
             with open(temp_boss_json, "r", encoding="utf-8") as f:
                 boss_str = f.read()
@@ -38,11 +39,17 @@ def build_boss_variant(base_json_str: str, template_id: str, pal_id: str, boss_s
             boss_str = re.sub(rf"(?<![a-zA-Z0-9_]){cand_name}(?![a-zA-Z0-9_])", f"BP_{pal_id}_BOSS", boss_str)
             boss_str = re.sub(rf"(?<![a-zA-Z0-9_])BP_{template_id}_C(?![a-zA-Z0-9_])", f"BP_{pal_id}_C", boss_str)
 
-            with open(temp_boss_json, "w", encoding="utf-8") as f:
-                f.write(boss_str)
+            try:
+                boss_data = json.loads(boss_str)
+                sync_namemap(boss_data)
+                with open(temp_boss_json, "w", encoding="utf-8") as f:
+                    json.dump(boss_data, f, indent=4)
+            except Exception:
+                with open(temp_boss_json, "w", encoding="utf-8") as f:
+                    f.write(boss_str)
 
             dest_boss_uasset = os.path.join(cooked_dir, f"BP_{pal_id}_BOSS.uasset")
-            subprocess.run([uasset_gui, "fromjson", temp_boss_json, dest_boss_uasset], check=True, creationflags=flags)
+            compile_uasset(uasset_gui, temp_boss_json, dest_boss_uasset, usmap_path)
             log(f"  ✓ Compiled official Alpha Boss blueprint: BP_{pal_id}_BOSS.uasset", "success")
             return True
 
@@ -56,6 +63,13 @@ def build_boss_variant(base_json_str: str, template_id: str, pal_id: str, boss_s
 
     try:
         synth_data = json.loads(synth_str)
+        synth_data["IsUnversioned"] = False
+        flags_str = synth_data.get("PackageFlags", "")
+        if "PKG_UnversionedProperties" in flags_str:
+            flags_list = [f.strip() for f in flags_str.split(",")]
+            flags_list = [f for f in flags_list if f != "PKG_UnversionedProperties"]
+            synth_data["PackageFlags"] = ", ".join(flags_list)
+
         for exp in synth_data.get("Exports", []):
             if exp.get("ObjectName") == "CharacterMesh0":
                 props = exp.setdefault("Properties", {})
@@ -72,11 +86,27 @@ def build_boss_variant(base_json_str: str, template_id: str, pal_id: str, boss_s
                         props.append({
                             "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
                             "StructType": "Vector",
+                            "SerializeNone": True,
+                            "StructGUID": "{00000000-0000-0000-0000-000000000000}",
+                            "SerializationControl": "NoExtension",
+                            "Operation": "None",
                             "Name": "RelativeScale3D",
+                            "ArrayIndex": 0,
+                            "PropertyGuid": None,
+                            "IsZero": False,
+                            "PropertyTagFlags": "None",
+                            "PropertyTypeName": None,
+                            "PropertyTagExtensions": "NoExtension",
                             "Value": [
                                 {
                                     "$type": "UAssetAPI.PropertyTypes.Structs.VectorPropertyData, UAssetAPI",
                                     "Name": "RelativeScale3D",
+                                    "ArrayIndex": 0,
+                                    "PropertyGuid": None,
+                                    "IsZero": False,
+                                    "PropertyTagFlags": "None",
+                                    "PropertyTypeName": None,
+                                    "PropertyTagExtensions": "NoExtension",
                                     "Value": { "X": boss_scale, "Y": boss_scale, "Z": boss_scale }
                                 }
                             ]
@@ -84,6 +114,7 @@ def build_boss_variant(base_json_str: str, template_id: str, pal_id: str, boss_s
                 else:
                     props["RelativeScale3D"] = {"X": boss_scale, "Y": boss_scale, "Z": boss_scale}
                     
+        sync_namemap(synth_data)
         with open(temp_synth_json, "w", encoding="utf-8") as f:
             json.dump(synth_data, f, indent=4)
     except Exception:
@@ -91,11 +122,11 @@ def build_boss_variant(base_json_str: str, template_id: str, pal_id: str, boss_s
             f.write(synth_str)
 
     dest_boss_uasset = os.path.join(cooked_dir, f"BP_{pal_id}_BOSS.uasset")
-    subprocess.run([uasset_gui, "fromjson", temp_synth_json, dest_boss_uasset], check=True, creationflags=flags)
+    compile_uasset(uasset_gui, temp_synth_json, dest_boss_uasset, usmap_path)
     log(f"  ✓ Synthesized Alpha Boss blueprint: BP_{pal_id}_BOSS.uasset", "success")
     return True
 
-def build_predator_variant(template_id: str, pal_id: str, generate_boss: bool, settings: dict, temp_dir: str, cooked_dir: str, uasset_gui: str, flags: int, log) -> bool:
+def build_predator_variant(template_id: str, pal_id: str, generate_boss: bool, settings: dict, temp_dir: str, cooked_dir: str, uasset_gui: str, flags: int, log, usmap_path: str = None) -> bool:
     """Builds BP_{pal_id}_PREDATOR by retargeting template or the universal Niagara Predator template."""
     log(f"  [Action: Variant] Generating Rampaging Predator blueprint: BP_{pal_id}_PREDATOR...", "standard")
     pred_candidates = [
@@ -103,13 +134,14 @@ def build_predator_variant(template_id: str, pal_id: str, generate_boss: bool, s
         f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}_Predator.uasset"
     ]
     
+    from utils.uasset_helper import decompile_uasset, compile_uasset, sync_namemap
+
     for cand in pred_candidates:
         success, _ = extract_game_files(settings, [cand, cand.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
         cand_disk = os.path.join(temp_dir, cand)
         if success and os.path.exists(cand_disk):
             temp_pred_json = os.path.join(temp_dir, "pred_blueprint.json")
-            # Unversioned extraction
-            subprocess.run([uasset_gui, "tojson", cand_disk, temp_pred_json, "VER_UE5_1"], check=True, creationflags=flags)
+            decompile_uasset(uasset_gui, cand_disk, temp_pred_json, usmap_path)
             
             with open(temp_pred_json, "r", encoding="utf-8") as f:
                 pred_str = f.read()
@@ -127,11 +159,17 @@ def build_predator_variant(template_id: str, pal_id: str, generate_boss: bool, s
             pred_str = re.sub(rf"(?<![a-zA-Z0-9_]){cand_name}(?![a-zA-Z0-9_])", f"BP_{pal_id}_PREDATOR", pred_str)
             pred_str = re.sub(rf"(?<![a-zA-Z0-9_])BP_{template_id}_C(?![a-zA-Z0-9_])", f"BP_{pal_id}_C", pred_str)
 
-            with open(temp_pred_json, "w", encoding="utf-8") as f:
-                f.write(pred_str)
+            try:
+                pred_data = json.loads(pred_str)
+                sync_namemap(pred_data)
+                with open(temp_pred_json, "w", encoding="utf-8") as f:
+                    json.dump(pred_data, f, indent=4)
+            except Exception:
+                with open(temp_pred_json, "w", encoding="utf-8") as f:
+                    f.write(pred_str)
 
             dest_pred_uasset = os.path.join(cooked_dir, f"BP_{pal_id}_PREDATOR.uasset")
-            subprocess.run([uasset_gui, "fromjson", temp_pred_json, dest_pred_uasset], check=True, creationflags=flags)
+            compile_uasset(uasset_gui, temp_pred_json, dest_pred_uasset, usmap_path)
             log(f"  ✓ Compiled official Predator blueprint: BP_{pal_id}_PREDATOR.uasset", "success")
             return True
 
@@ -143,7 +181,7 @@ def build_predator_variant(template_id: str, pal_id: str, generate_boss: bool, s
     univ_disk = os.path.join(temp_dir, univ_rel)
     if os.path.exists(univ_disk):
         temp_univ_json = os.path.join(temp_dir, "universal_pred.json")
-        subprocess.run([uasset_gui, "tojson", univ_disk, temp_univ_json, "VER_UE5_1"], check=True, creationflags=flags)
+        decompile_uasset(uasset_gui, univ_disk, temp_univ_json, usmap_path)
         
         with open(temp_univ_json, "r", encoding="utf-8") as f:
             univ_str = f.read()
@@ -158,11 +196,17 @@ def build_predator_variant(template_id: str, pal_id: str, generate_boss: bool, s
         univ_str = univ_str.replace("PA_Baphomet", f"PA_{pal_id}")
         univ_str = univ_str.replace("SK_Baphomet_Skeleton", f"SK_{template_id}_Skeleton")
 
-        with open(temp_univ_json, "w", encoding="utf-8") as f:
-            f.write(univ_str)
+        try:
+            univ_data = json.loads(univ_str)
+            sync_namemap(univ_data)
+            with open(temp_univ_json, "w", encoding="utf-8") as f:
+                json.dump(univ_data, f, indent=4)
+        except Exception:
+            with open(temp_univ_json, "w", encoding="utf-8") as f:
+                f.write(univ_str)
 
         dest_pred_uasset = os.path.join(cooked_dir, f"BP_{pal_id}_PREDATOR.uasset")
-        subprocess.run([uasset_gui, "fromjson", temp_univ_json, dest_pred_uasset], check=True, creationflags=flags)
+        compile_uasset(uasset_gui, temp_univ_json, dest_pred_uasset, usmap_path)
         log(f"  ✓ Compiled Rampaging Predator blueprint: BP_{pal_id}_PREDATOR.uasset", "success")
         return True
 

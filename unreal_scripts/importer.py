@@ -111,6 +111,23 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         shared_phys_path = f"{base_ue_path}/PA_{base_pal}_PhysicsAsset"
         phys_exists = unreal.EditorAssetLibrary.does_asset_exist(shared_phys_path)
 
+        if not phys_exists and is_custom_pal and template_id:
+            template_pa_path = f"/Game/Pal/Model/Character/{category}/{template_id}/PA_{template_id}_PhysicsAsset"
+            if unreal.EditorAssetLibrary.does_asset_exist(template_pa_path):
+                print(f"[PalBaker] Custom Pal detected without PhysicsAsset. Duplicating from template: {template_pa_path} -> {shared_phys_path}")
+                unreal.EditorAssetLibrary.duplicate_asset(template_pa_path, shared_phys_path)
+                phys_exists = True
+            else:
+                ar = unreal.AssetRegistryHelpers.get_asset_registry()
+                assets = ar.get_assets_by_path(f"/Game/Pal/Model/Character/{category}", recursive=True)
+                for a in assets:
+                    if str(a.asset_class_path.asset_name) == "PhysicsAsset" and f"PA_{template_id}" in str(a.asset_name):
+                        template_pa_path = str(a.package_name)
+                        print(f"[PalBaker] Found fallback template PA: {template_pa_path}")
+                        unreal.EditorAssetLibrary.duplicate_asset(template_pa_path, shared_phys_path)
+                        phys_exists = True
+                        break
+
         if phys_exists:
             print(f"[PalBaker] Using shared parent PhysicsAsset: {shared_phys_path}")
         else:

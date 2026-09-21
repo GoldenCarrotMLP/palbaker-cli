@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 from utils.extractor.core import extract_game_files
+from utils.uasset_helper import compile_uasset
 
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     getattr(sys.stdout, "reconfigure")(encoding='utf-8', errors='replace')
@@ -17,6 +18,7 @@ def execute_animation_stack_clone(settings: dict, base_pal: str, mod_name: str, 
 
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     uasset_gui = os.path.normpath(os.path.join(repo_root, "deps", "UAssetGUI.exe"))
+    usmap_path = os.path.normpath(os.path.join(repo_root, "deps", "Mappings.usmap"))
     creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 
     log(f"Extracting vanilla animation stack and blueprints for {base_pal}...", "standard")
@@ -199,7 +201,7 @@ def execute_animation_stack_clone(settings: dict, base_pal: str, mod_name: str, 
         else:
             dest_cooked = os.path.join(bp_cooked_dir, target_name)
 
-        subprocess.run([uasset_gui, "fromjson", json_path, dest_cooked], check=True, creationflags=creation_flags)
+        compile_uasset(uasset_gui, json_path, dest_cooked, usmap_path)
 
     log("[SUCCESS] Animation stack (BP, ABP, BS) retargeted and staged in Cooked directory!", "success")
     return True

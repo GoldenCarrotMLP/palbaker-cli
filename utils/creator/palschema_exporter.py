@@ -82,7 +82,7 @@ class PalSchemaExporter:
                     pass
 
 
-    def generate_custom_actor_blueprint(self, p: dict) -> bool:
+    def generate_custom_actor_blueprint(self, p: dict, keep_temp: bool = False) -> bool:
         """Proxies standalone blueprint compilation cleanly to the centralized patching engine."""
         pal_id = p["CharacterID"]
         template_id = p["TemplateID"]
@@ -90,8 +90,7 @@ class PalSchemaExporter:
         def log_bridge(msg, category):
             self.c.view.write_log(msg, category)
 
-        return patch_actor_blueprint(self.c.settings, pal_id, template_id, log_callback=log_bridge)
-
+        return patch_actor_blueprint(self.c.settings, pal_id, template_id, log_callback=log_bridge, keep_temp=keep_temp)
     def export_to_palschema(self, p: dict):
         # In utils/creator/palschema_exporter.py
 
@@ -147,6 +146,8 @@ class PalSchemaExporter:
         mod_name = f"PalBaker_Custom_{pal_id}"
         
         mod_root = os.path.join(creator_dir, "PalSchema", mod_name)
+        if os.path.exists(mod_root):
+            shutil.rmtree(mod_root, ignore_errors=True)
         os.makedirs(mod_root, exist_ok=True)
         
         base_properties = self.c.templates_cache.get(template_id, {})
@@ -233,6 +234,13 @@ class PalSchemaExporter:
         for k in p.keys():
             if k.startswith("WorkSuitability_"):
                 new_monster_props[k] = int(p[k])
+
+        # Support modern nested WorkSuitabilities dictionary mapping
+        for s_key, s_data in p.get("WorkSuitabilities", {}).items():
+            lvl = s_data.get("Level", 0) if isinstance(s_data, dict) else int(s_data)
+            if lvl > 0:
+                pref = s_key if s_key.startswith("WorkSuitability_") else f"WorkSuitability_{s_key}"
+                new_monster_props[pref] = lvl
 
         # 2. Build Multi-Row Pals Dictionary (Standard, Boss, and Predator)
         pals_payload = {
@@ -627,8 +635,11 @@ class PalSchemaExporter:
                 json.dump(bp_payload, f_bp, indent=4)
 
         # 10b. Player Weapon Animation & Gender Changer Registration
+        # Only inject weapon shooter anime mappings if CoopWeapon is actually enabled in features!
+        coop_weapon_enabled = p.get("Features", {}).get("CoopWeapon", {}).get("Enabled", False)
         lookup_key = partner_skill_id if partner_skill_id in KNOWN_PARTNER_WEAPONS else template_id
-        if lookup_key in KNOWN_PARTNER_WEAPONS:
+
+        if coop_weapon_enabled and lookup_key in KNOWN_PARTNER_WEAPONS:
             wp_info = KNOWN_PARTNER_WEAPONS[lookup_key]
             wp_class_name = f"BP_{pal_id}_{wp_info['weapon_suffix']}"
             wp_class_path = f"/Game/Pal/Blueprint/Weapon/{wp_class_name}.{wp_class_name}_C"
@@ -829,16 +840,7 @@ class PalSchemaExporter:
         if game_mods_dir:
             game_mod_root = os.path.join(game_mods_dir, mod_name)
             if os.path.exists(game_mod_root):
-                for root, dirs, files in os.walk(game_mod_root, topdown=False):
-                    for file in files:
-                        try: os.remove(os.path.join(root, file))
-                        except OSError: pass
-                    for directory in dirs:
-                        try: os.rmdir(os.path.join(root, directory))
-                        except OSError: pass
-                try:
-                    os.rmdir(game_mod_root)
-                except OSError: pass
+                shutil.rmtree(game_mod_root, ignore_errors=True)
             
             try:
                 shutil.copytree(mod_root, game_mod_root, dirs_exist_ok=True)
@@ -847,14 +849,18 @@ class PalSchemaExporter:
                 self.c.view.write_log(f"Failed to deploy PalSchema config to game: {e}", "error")
                 raise RuntimeError(f"Deployment failed: {e}")
                 
-            # --- NEW: Deploy interactive map spawners directly into the CustomPalSpawners folder! ---
+            # Deploy or clean up interactive map spawners in CustomPalSpawners
+            cps_spawns_dir = os.path.join(game_mods_dir, "CustomPalSpawners", "spawns")
+            dest_json = os.path.join(cps_spawns_dir, f"palbaker_{pal_id}.json")
             if field_boss_spawns:
-                cps_spawns_dir = os.path.join(game_mods_dir, "CustomPalSpawners", "spawns")
                 os.makedirs(cps_spawns_dir, exist_ok=True)
                 src_json = os.path.join(spawners_dir, f"{pal_id}_Spawns.json")
-                dest_json = os.path.join(cps_spawns_dir, f"palbaker_{pal_id}.json")
                 if os.path.exists(src_json):
                     shutil.copy2(src_json, dest_json)
                     self.c.view.write_log(f"Deployed interactive spawns to CustomPalSpawners: palbaker_{pal_id}.json", "success")
+            else:
+                if os.path.exists(dest_json):
+                    try: os.remove(dest_json)
+                    except OSError: pass
         else:
             self.c.view.write_log("Game PalSchema directory not found. Saved schemas locally in workspace.", "warning")

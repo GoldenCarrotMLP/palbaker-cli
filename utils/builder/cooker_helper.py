@@ -84,8 +84,19 @@ def clean_cook_environment(workspace):
     if os.path.exists(workspace.cooked_anims_dir): 
         shutil.rmtree(workspace.cooked_anims_dir, ignore_errors=True)
     if os.path.exists(workspace.cooked_bp_dir): 
-        if not workspace.is_custom_pal:
-            shutil.rmtree(workspace.cooked_bp_dir, ignore_errors=True)
+        shutil.rmtree(workspace.cooked_bp_dir, ignore_errors=True)
+
+    # Clean stale custom blueprints (weapons, funnels) in Saved/Cooked for this mod
+    if workspace.project_dir:
+        cooked_pal_bp = os.path.join(workspace.project_dir, "Saved", "Cooked", "Windows", workspace.target_project_name, "Content", "Pal", "Blueprint")
+        if os.path.exists(cooked_pal_bp):
+            for sub in ["Character/Funnel", "Weapon"]:
+                d = os.path.join(cooked_pal_bp, os.path.normpath(sub))
+                if os.path.exists(d):
+                    for f in os.listdir(d):
+                        if workspace.mod_name.lower() in f.lower() and f.endswith((".uasset", ".uexp", ".ubulk")):
+                            try: os.remove(os.path.join(d, f))
+                            except OSError: pass
 
 def is_path_blacklisted(game_virtual_path: str, custom_blacklist: list[str] | None) -> bool:
     """
@@ -291,7 +302,7 @@ def pack_cooked_assets(unrealpak_path: str, response_file: str, output_pak: str,
                                 # Standalone Custom Pals MUST package their physics assets to ragdoll properly
                                 if "PhysicsAsset" in file and not is_custom_pal:
                                     continue
-                                if "Skeleton" in file and not has_anims and not is_custom_pal:
+                                if "Skeleton" in file and not has_anims:
                                     continue
                                     
                                 abs_path = os.path.join(root, file)

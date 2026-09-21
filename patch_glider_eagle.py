@@ -226,7 +226,7 @@ def main():
         
         compiled_uasset = os.path.join(cooked_dest_dir, f"{glider['name']}.uasset")
         
-        cmd_from_json = [uasset_gui_exe, "fromjson", temp_json, compiled_uasset, "VER_UE5_1"]
+        cmd_from_json = [uasset_gui_exe, "fromjson", temp_json, compiled_uasset, usmap_path]
         
         result = subprocess.run(cmd_from_json, capture_output=True, text=True, creationflags=creation_flags)
         if result.returncode != 0:

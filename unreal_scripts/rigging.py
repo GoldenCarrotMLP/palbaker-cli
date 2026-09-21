@@ -73,6 +73,19 @@ def apply_rigging(working_dir, ue_path, import_name, folder_name, target_asset_p
         print(f"ERROR: Cannot create Animation Blueprint because skeleton {skeleton_path} is missing.")
             
     if anim_bp:
+        # --- NEW DETECTION LOGIC ---
+        try:
+            import json
+            with open(json_path, "r", encoding="utf-8") as f_meta:
+                meta_data = json.load(f_meta)
+            
+            # If the sidecar contains lookat_bones AND copy_bones, it's the procedural leg/boob chain!
+            if meta_data.get("lookat_bones") and meta_data.get("copy_bones"):
+                print(f"[PalBaker] Detected procedural Spring-to-LookAt physics chain for {import_name}. Generating complex AnimGraph...", flush=True)
+        except Exception:
+            pass
+        # ---------------------------
+
         print(f"Applying PalBaker rigging setup to: {anim_bp.get_name()}")
         try:
             success = unreal.AnimScriptingLibrary.apply_pal_baker_rigging(anim_bp, json_path)

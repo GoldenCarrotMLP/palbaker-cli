@@ -408,7 +408,7 @@ def main():
         os.makedirs(cooked_dest_dir, exist_ok=True)
         dest_uasset = os.path.join(cooked_dest_dir, target_name)
 
-        cmd_compile = [uasset_gui_exe, "fromjson", json_path, dest_uasset]
+        cmd_compile = [uasset_gui_exe, "fromjson", json_path, dest_uasset, usmap_path]
         
         result = subprocess.run(cmd_compile, capture_output=True, text=True, creationflags=creation_flags)
         if result.returncode != 0:

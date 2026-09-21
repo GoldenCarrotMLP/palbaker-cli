@@ -441,6 +441,7 @@ def export_fbx_base(fbx_path: str, armature_name: str = "Armature"):
     bpy.ops.export_scene.fbx(
         filepath=os.path.abspath(fbx_path),
         use_selection=False,
+        object_types={'ARMATURE', 'MESH'},
         add_leaf_bones=False,
         mesh_smooth_type='FACE',
         armature_nodetype='ROOT',

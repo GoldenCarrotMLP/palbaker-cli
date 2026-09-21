@@ -133,6 +133,8 @@ def handle_creator_command(args, settings):
             error_print(f"Failed to update standalone Pal: {str(e)}")
             sys.exit(1)
 
+    # utils/cli/creator_handlers.py (Excerpt)
+
     elif subcommand == "refresh-bp":
         if not pal_id:
             error_print("Missing required parameter: <pal_id>")
@@ -144,9 +146,37 @@ def handle_creator_command(args, settings):
                 error_print(f"Custom Pal {pal_id} configuration not found on disk.")
                 sys.exit(1)
 
-            success = controller.exporter.generate_custom_actor_blueprint(pal_data)
-            if success:
-                json_print({"status": "success", "message": f"Successfully refreshed standalone Actor Blueprint for {pal_id}!"})
+            # === DEPENDENCY & ATTACHMENT VALIDATION GATEKEEPER ===
+            from utils.validator import FeatureDependencyValidator
+            from utils.sidecar_helper import load_sidecar
+            
+            repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            category = "Monster" # Custom Pals are currently always generated inside the Monster category
+            fmodel_path = os.path.normpath(os.path.join(settings["fmodel_output"], "Exports", "Pal", "Content", "Pal", "Model", "Character", category, pal_id))
+            sidecar_path = os.path.join(fmodel_path, f"{pal_id}_blend.json")
+            
+            sidecar_data = load_sidecar(sidecar_path) if os.path.exists(sidecar_path) else {}
+            validator = FeatureDependencyValidator(repo_root)
+            missing_deps = validator.validate_dependencies(pal_data, sidecar_data)
+            
+            # Only block compilation on hard errors (attachments, conflicts, missing anims/notifies)
+            blocking_errors = [d for d in missing_deps if d.get("missing_type") not in ("notice", "warning")]
+            if blocking_errors:
+                json_print({
+                    "status": "validation_failed",
+                    "message": "Compilation aborted due to invalid attachments or missing animation dependencies.",
+                    "missing_dependencies": blocking_errors
+                })
+                sys.exit(1)
+
+            # Log informative notices without halting execution
+            for notice in [d for d in missing_deps if d.get("missing_type") == "notice"]:
+                json_print({"type": "log", "level": "standard", "message": f"ℹ️ {notice.get('message')}"})
+            # =====================================================            # =====================================================
+
+            keep_temp = getattr(args, "keep_temp", False)
+            success = controller.exporter.generate_custom_actor_blueprint(pal_data, keep_temp=keep_temp)
+            if success:                json_print({"status": "success", "message": f"Successfully refreshed standalone Actor Blueprint for {pal_id}!"})
             else:
                 error_print(f"Failed to compile custom Actor Blueprint for {pal_id}.")
                 sys.exit(1)

@@ -15,6 +15,8 @@
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "AnimGraphNode_LookAt.h"
+
 
 bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const FString& JsonPath)
 {
@@ -187,6 +189,55 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
         }
     }
 
+    
+    // --- Inject LookAt Bones (Track To) ---
+    const TArray<TSharedPtr<FJsonValue>>* LookAtBones;
+    if (JsonObj->TryGetArrayField(TEXT("lookat_bones"), LookAtBones))
+    {
+        for (const auto& Val : *LookAtBones)
+        {
+            TSharedPtr<FJsonObject> BoneObj = Val->AsObject();
+            if (!BoneObj.IsValid()) continue;
+
+            UAnimGraphNode_LookAt* LookAtNode = NewObject<UAnimGraphNode_LookAt>(AnimGraph);
+            AnimGraph->AddNode(LookAtNode);
+            LookAtNode->CreateNewGuid();
+            LookAtNode->AllocateDefaultPins();
+            LookAtNode->NodePosX = NodeX;
+            LookAtNode->NodePosY = NodeY;
+            NodeX += 300;
+
+            // Set up Core Properties
+            LookAtNode->Node.BoneToModify.BoneName = FName(*BoneObj->GetStringField(TEXT("bone_name")));
+            LookAtNode->Node.LookAtTarget.BoneReference.BoneName = FName(*BoneObj->GetStringField(TEXT("target_bone")));
+            LookAtNode->Node.LookAtLocation = FVector::ZeroVector;
+            
+            if (BoneObj->HasField(TEXT("clamp"))) {
+                LookAtNode->Node.LookAtClamp = BoneObj->GetNumberField(TEXT("clamp"));
+            }
+            if (BoneObj->HasField(TEXT("alpha"))) {
+                LookAtNode->Node.Alpha = BoneObj->GetNumberField(TEXT("alpha"));
+            }
+
+            // Map Blender axes to Unreal
+            const TSharedPtr<FJsonObject>* LookAtAxisObj;
+            if (BoneObj->TryGetObjectField(TEXT("look_at_axis"), LookAtAxisObj)) {
+                LookAtNode->Node.LookAt_Axis.Axis = FVector((*LookAtAxisObj)->GetNumberField(TEXT("X")), (*LookAtAxisObj)->GetNumberField(TEXT("Y")), (*LookAtAxisObj)->GetNumberField(TEXT("Z")));
+                LookAtNode->Node.LookAt_Axis.bInLocalSpace = true;
+            }
+
+            const TSharedPtr<FJsonObject>* LookUpAxisObj;
+            if (BoneObj->TryGetObjectField(TEXT("look_up_axis"), LookUpAxisObj)) {
+                LookAtNode->Node.LookUp_Axis.Axis = FVector((*LookUpAxisObj)->GetNumberField(TEXT("X")), (*LookUpAxisObj)->GetNumberField(TEXT("Y")), (*LookUpAxisObj)->GetNumberField(TEXT("Z")));
+                LookAtNode->Node.LookUp_Axis.bInLocalSpace = true;
+            }
+
+            // Wire it into the Graph
+            LookAtNode->FindPin(TEXT("ComponentPose"))->MakeLinkTo(CurrentOutputPin);
+            CurrentOutputPin = LookAtNode->FindPin(TEXT("Pose"));
+        }
+    }
+    
     // --- Inject Copy Bones (CopyBone) ---
     const TArray<TSharedPtr<FJsonValue>>* CopyBones;
     if (JsonObj->TryGetArrayField(TEXT("copy_bones"), CopyBones))

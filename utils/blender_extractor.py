@@ -274,7 +274,10 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
     working_dir = os.path.dirname(output_path)
     base_name = os.path.splitext(os.path.basename(output_path))[0].replace("_blend", "")
     
+    # 1. Base bones and transforms
     bones_info = translator.get_pose_bones_info("Armature")
+    all_bones = [b["bone_name"] for b in bones_info]
+    
     jiggle_bones = []
     offset_bones = []
 
@@ -284,15 +287,18 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
         if bone["transform_data"]:
             offset_bones.append({"bone_name": bone["bone_name"], **bone["transform_data"]})
 
-    # Harvest Bone Constraints
+    # 2. Harvest Constraints from Pose Bones
     arm_obj = bpy.data.objects.get("Armature")
     copy_bones = []
+    lookat_bones = []
+
     if arm_obj and arm_obj.type == 'ARMATURE' and arm_obj.pose:
         copy_map = {}
         for p_bone in arm_obj.pose.bones:
             target_name = p_bone.name.replace('.', '_')
             for c in p_bone.constraints:
                 if getattr(c, "mute", False): continue
+
                 if c.type in ['COPY_LOCATION', 'COPY_ROTATION', 'COPY_SCALE']:
                     source_subtarget = getattr(c, "subtarget", "").strip()
                     if not source_subtarget or (c.target and c.target != arm_obj): continue
@@ -308,8 +314,22 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
                     elif c.type == 'COPY_ROTATION': copy_map[key]["copy_rotation"] = True
                     elif c.type == 'COPY_SCALE': copy_map[key]["copy_scale"] = True
 
+                elif c.type in ['DAMPED_TRACK', 'TRACK_TO']:
+                    source_subtarget = getattr(c, "subtarget", "").strip()
+                    if source_subtarget and (not c.target or c.target == arm_obj):
+                        source_name = source_subtarget.replace('.', '_')
+                        lookat_bones.append({
+                            "bone_name": target_name,
+                            "target_bone": source_name,
+                            "clamp": 50.0,
+                            "alpha": float(getattr(c, "influence", 1.0)),
+                            "look_at_axis": {"X": 0.0, "Y": -1.0, "Z": 0.0},
+                            "look_up_axis": {"X": 1.0, "Y": 0.0, "Z": 0.0}
+                        })
+
         copy_bones = list(copy_map.values())
 
+    # 3. Material Harvesting
     slots_in_order = translator.get_skeletal_mesh_material_slots()
     materials_compile = {}
 
@@ -328,6 +348,7 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
             
         materials_compile[mat_name] = { "parent_class": parent_class, "textures": extracted_textures }
 
+    # 4. Load Existing Sidecar for Merging
     existing_data = load_sidecar(output_path)
     old_materials = existing_data.get("materials", {})
     merged_materials = {}
@@ -344,6 +365,67 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
         else:
             merged_materials[k] = v
 
+    # 5. Protected Per-Bone Delta Merging for ABP Nodes
+    merged_jiggle_bones = []
+    merged_lookat_bones = []
+    merged_copy_bones = []
+    merged_offset_bones = []
+
+    existing_jiggle_map = {b["bone_name"]: b for b in existing_data.get("jiggle_bones", [])}
+    existing_lookat_map = {b["bone_name"]: b for b in existing_data.get("lookat_bones", [])}
+    existing_copy_map   = {(b["target_bone"], b["source_bone"]): b for b in existing_data.get("copy_bones", [])}
+    existing_offset_map = {b["bone_name"]: b for b in existing_data.get("offset_bones", [])}
+
+    for fresh_bone in jiggle_bones:
+        b_name = fresh_bone["bone_name"]
+        if b_name in existing_jiggle_map and existing_jiggle_map[b_name].get("abp_replicated"):
+            merged_jiggle_bones.append(existing_jiggle_map[b_name])
+        else:
+            merged_jiggle_bones.append(fresh_bone)
+
+    for b_name, old_bone in existing_jiggle_map.items():
+        if old_bone.get("abp_replicated") and not any(b["bone_name"] == b_name for b in merged_jiggle_bones):
+            if b_name in all_bones:
+                merged_jiggle_bones.append(old_bone)
+
+    for fresh_offset in offset_bones:
+        b_name = fresh_offset["bone_name"]
+        if b_name in existing_offset_map and existing_offset_map[b_name].get("abp_replicated"):
+            merged_offset_bones.append(existing_offset_map[b_name])
+        else:
+            merged_offset_bones.append(fresh_offset)
+
+    for b_name, old_offset in existing_offset_map.items():
+        if old_offset.get("abp_replicated") and not any(b["bone_name"] == b_name for b in merged_offset_bones):
+            if b_name in all_bones:
+                merged_offset_bones.append(old_offset)
+
+
+    for fresh_look in lookat_bones:
+        b_name = fresh_look["bone_name"]
+        if b_name in existing_lookat_map and existing_lookat_map[b_name].get("abp_replicated"):
+            merged_lookat_bones.append(existing_lookat_map[b_name])
+        else:
+            merged_lookat_bones.append(fresh_look)
+
+    for b_name, old_look in existing_lookat_map.items():
+        if old_look.get("abp_replicated") and not any(b["bone_name"] == b_name for b in merged_lookat_bones):
+            if b_name in all_bones:
+                merged_lookat_bones.append(old_look)
+
+    for fresh_copy in copy_bones:
+        key = (fresh_copy["target_bone"], fresh_copy["source_bone"])
+        if key in existing_copy_map and existing_copy_map[key].get("abp_replicated"):
+            merged_copy_bones.append(existing_copy_map[key])
+        else:
+            merged_copy_bones.append(fresh_copy)
+
+    for key, old_copy in existing_copy_map.items():
+        if old_copy.get("abp_replicated") and not any((b["target_bone"], b["source_bone"]) == key for b in merged_copy_bones):
+            if key[0] in all_bones and key[1] in all_bones:
+                merged_copy_bones.append(old_copy)
+
+    # 6. Default ShapeKeys
     default_shapekeys = []
     for obj in [o for o in bpy.data.objects if o.type == 'MESH']:
         if obj.data and getattr(obj.data, "shape_keys", None) and obj.data.shape_keys.key_blocks:
@@ -351,7 +433,7 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
                 if kb.name != "Basis" and kb.name.lower().startswith("default") and kb.name not in default_shapekeys:
                     default_shapekeys.append(kb.name)
 
-    # Resolve base_pal from folder hierarchy (.../Character/Monster/<base_pal>/<mod_name>)
+    # 7. Animation Extraction
     parts = output_path.replace("\\", "/").split("/")
     detected_base_pal = base_name
     if "Character" in parts:
@@ -359,16 +441,20 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
         if c_idx + 2 < len(parts):
             detected_base_pal = parts[c_idx + 2]
 
-    # Auto-harvest custom animations directly from NLA tracks
     custom_anims_data = harvest_nla_animations(arm_obj, base_name, existing_data, detected_base_pal)
 
+    # 8. Assemble Final Layout
     layout_data = {
-        "jiggle_bones": jiggle_bones,
+        "all_bones": all_bones,
+        "jiggle_bones": merged_jiggle_bones,
+        "lookat_bones": merged_lookat_bones,
+        "copy_bones": merged_copy_bones,
+        "offset_bones": merged_offset_bones,
         "offset_bones": offset_bones,
-        "copy_bones": copy_bones,
         "materials": merged_materials,
         "morph_targets": [],
-        "default_shapekeys": default_shapekeys
+        "default_shapekeys": default_shapekeys,
+        "has_replicated_abp": existing_data.get("has_replicated_abp", False)
     }
 
     if custom_anims_data:
@@ -386,6 +472,15 @@ def extract_metadata(output_path: str, fbx_path: str | None = None):
         translator.export_fbx(fbx_path, "Armature")
         
     print("[PalBaker Extractor] Extraction routine complete!\n", flush=True)
+
+if __name__ == "__main__":
+    try:
+        out_json, fbx_out = parse_args()
+        extract_metadata(out_json, fbx_out)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == "__main__":
     try:

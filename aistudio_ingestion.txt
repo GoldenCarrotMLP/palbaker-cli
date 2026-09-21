@@ -1,0 +1,54 @@
+## Target File: `utils/blueprint_patcher/feature_manager/saddle.py`
+
+search:
+```python
+        preset = self.RIDE_MARKER_PRESETS.get(marker_type, self.RIDE_MARKER_PRESETS["Saddle"])
+        var_name = preset["var_name"]
+        comp_pkg = preset["pkg"]
+        comp_class = preset["class_name"]
+        pos_type = ride_position_type or preset["default_position"]
+
+        template_props = [
+            {
+                "$type": "UAssetAPI.PropertyTypes.Objects.EnumPropertyData, UAssetAPI",
+                "EnumType": "EPalRidePositionType",
+                "InnerType": "ByteProperty",
+                "Name": "RidePositionType",
+                "ArrayIndex": 0,
+                "PropertyGuid": None,
+                "IsZero": False,
+                "PropertyTagFlags": "None",
+                "PropertyTypeName": None,
+                "PropertyTagExtensions": "NoExtension",
+                "Value": pos_type if "::" in pos_type else f"EPalRidePositionType::{pos_type}"
+            }
+        ]
+```
+
+replace:
+```python
+        preset = self.RIDE_MARKER_PRESETS.get(marker_type, self.RIDE_MARKER_PRESETS["Saddle"])
+        var_name = preset["var_name"]
+        comp_pkg = preset["pkg"]
+        comp_class = preset["class_name"]
+        pos_type = ride_position_type or preset["default_position"]
+        bare_pos = pos_type.split("::")[-1] if "::" in pos_type else pos_type
+
+        template_props = [
+            {
+                "$type": "UAssetAPI.PropertyTypes.Objects.EnumPropertyData, UAssetAPI",
+                "EnumType": "EPalRidePositionType",
+                "InnerType": "ByteProperty",
+                "Name": "RidePositionType",
+                "ArrayIndex": 0,
+                "PropertyGuid": None,
+                "IsZero": False,
+                "PropertyTagFlags": "None",
+                "PropertyTypeName": None,
+                "PropertyTagExtensions": "NoExtension",
+                "Value": bare_pos
+            }
+        ]
+```
+
+---

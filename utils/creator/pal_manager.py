@@ -4,6 +4,190 @@ import json
 import re
 import threading
 
+FLYING_TEMPLATES = {
+    "JetDragon", "Horus", "Suzaku", "Suzaku_Water", "HadesBird",
+    "ThunderBird", "ThunderBird_Ice", "BirdDragon", "BirdDragon_Ice",
+    "Eagle", "FairyDragon", "FairyDragon_Water", "GhostDragon",
+    "BlackGriffon", "WhiteShieldDragon", "BlueSkyDragon", "CuteButterfly",
+    "DreamDemon"
+}
+
+BIG_MOUNT_TEMPLATES = {
+    "Grassmammoth", "Grassmammoth_Ice", "KingAlpaca", "KingAlpaca_Ice",
+    "ElecPanda", "GrassPanda", "GrassPanda_Electric", "Gorilla",
+    "Baphomet", "Baphomet_Dark", "AmaterasuWolf", "AmaterasuWolf_Dark",
+    "Deer", "IceDeer", "Boar", "ThunderDog", "ThunderDog_Ice",
+    "Garm", "Umihebi", "Umihebi_Fire", "SakuraSaurus", "SakuraSaurus_Water",
+    "Manticore", "Manticore_Dark", "FireKirin", "FireKirin_Dark",
+    "Kirin", "Kirin_Ice", "JetDragon", "BlueSkyDragon", "SaintCentaur",
+    "BlackCentaur", "FengyunDeeper", "RaijinDaughter"
+}
+
+SIT_MOUNT_TEMPLATES = {
+    "KingAlpaca", "KingAlpaca_Ice", "ElecPanda", "GrassPanda", "GrassPanda_Electric", "Gorilla"
+}
+
+TRAMPLE_TEMPLATES = {
+    "Boar", "Deer", "IceDeer", "KingAlpaca", "KingAlpaca_Ice",
+    "Grassmammoth", "Grassmammoth_Ice", "FeatherOstrich", "TropicalOstrich",
+    "NightBlueHorse", "NightBlueHorse_Neutral"
+}
+
+MOUNTED_SHOOTER_TEMPLATES = {
+    "Deer", "IceDeer", "Boar", "AmaterasuWolf", "AmaterasuWolf_Dark",
+    "Kirin", "Kirin_Ice", "FireKirin", "FireKirin_Dark",
+    "ThunderDog", "ThunderDog_Ice", "BlueThunderHorse", "Garm"
+}
+
+WEAPON_PARTNER_TEMPLATES = {
+    "Kitsunebi": { "Mode": "Flamethrower", "Element": "EPalElementType::Fire", "Effect": "EPalAdditionalEffectType::Burn", "Niagara": "Pal/Content/Pal/Effect/Skill/FlameThrower/NS_CommonSkill_Flamethrower" },
+    "Kitsunebi_Ice": { "Mode": "Flamethrower", "Element": "EPalElementType::Ice", "Effect": "EPalAdditionalEffectType::Freeze", "Niagara": "Pal/Content/Pal/Effect/Skill/FrostBreath/NS_CommonSkill_FrostBreath" },
+    "Penguin": { "Mode": "Launcher", "Element": "EPalElementType::Water", "Effect": "EPalAdditionalEffectType::None", "Niagara": "Pal/Content/Pal/Effect/Skill/BlastCanon/NS_CommonSkill_BlastCannon_Impact" },
+    "Monkey": { "Mode": "AssaultRifle", "Element": "EPalElementType::Leaf", "Effect": "EPalAdditionalEffectType::None", "Niagara": "Pal/Content/Pal/Effect/Skill/SeedMachinegun/NS_CommonSkill_SeedMachinegun" },
+    "Carbunclo": { "Mode": "OnHeadSubmachineGun", "Element": "EPalElementType::Leaf", "Effect": "EPalAdditionalEffectType::None" },
+    "Grizzbolt": { "Mode": "Minigun", "Element": "EPalElementType::Electricity", "Effect": "EPalAdditionalEffectType::Electrical" },
+}
+
+FUNNEL_TEMPLATES = {
+    "DreamDemon": { "Preset": "DreamDemon", "TargetingAction": "ShadowBall", "CustomWazaID": "EPalWazaID::Funnel_DreamDemon" },
+    "Daedream": { "Preset": "DreamDemon", "TargetingAction": "ShadowBall", "CustomWazaID": "EPalWazaID::Funnel_DreamDemon" },
+    "RaijinDaughter": { "Preset": "Dazzi", "TargetingAction": "Thunderbolt", "CustomWazaID": "EPalWazaID::Funnel_RaijinDaughter" },
+    "Dazzi": { "Preset": "Dazzi", "TargetingAction": "Thunderbolt", "CustomWazaID": "EPalWazaID::Funnel_RaijinDaughter" },
+    "FlowerRabbit": { "Preset": "Flopie", "TargetingAction": "SeedMachinegun", "CustomWazaID": "None" },
+    "Flopie": { "Preset": "Flopie", "TargetingAction": "SeedMachinegun", "CustomWazaID": "None" },
+}
+
+SHIELD_TEMPLATES = {
+    "SheepBall": { "Radius": 90.0, "AttachSocket": "lowerarm_l", "RelativeLocation": { "X": 0.0, "Y": 0.0, "Z": 62.5 } },
+    "Lamball": { "Radius": 90.0, "AttachSocket": "lowerarm_l", "RelativeLocation": { "X": 0.0, "Y": 0.0, "Z": 62.5 } },
+    "SaintCentaur": { "Radius": 140.0, "AttachSocket": "lowerarm_l" },
+    "Paladius": { "Radius": 140.0, "AttachSocket": "lowerarm_l" },
+}
+
+EVASION_TEMPLATES = {
+    "Anubis": { "SideMoveStyle": "Teleport", "LeaveStyle": "BackStep" },
+    "DarkScorpion": { "SideMoveStyle": "RoundStep", "LeaveStyle": "BackStep" },
+    "AmaterasuWolf": { "SideMoveStyle": "DashTurn", "LeaveStyle": "TurnRun" },
+    "AmaterasuWolf_Dark": { "SideMoveStyle": "DashTurn", "LeaveStyle": "TurnRun" },
+    "Ronin": { "SideMoveStyle": "SideStep", "LeaveStyle": "BackStep" },
+}
+
+UTILITY_TEMPLATES = {
+    "LilyQueen": "HealLilyQueen",
+    "LilyQueen_Dark": "HealLilyQueen",
+    "Lyleen": "HealLilyQueen",
+    "Lyleen_Noct": "HealLilyQueen",
+    "FairyCat": "Heal",
+    "Petallia": "Heal",
+    "FeatherOstrich": "ReturnToCamp",
+    "Mallow": "OpenTreasure"
+}
+
+LIGHT_TEMPLATES = {
+    "Kitsunebi", "Foxcicle", "DreamDemon", "Daedream", "RaijinDaughter",
+    "Dazzi", "Rayhound", "ThunderDog", "VolcanicMonster", "DarkScorpion"
+}
+
+def infer_template_features(template_id: str, base_props: dict, parent_params: dict, saddle_item: str, partner_skill: str) -> dict:
+    features = {
+        "Riding": { "Enabled": False },
+        "Flight": { "Enabled": False },
+        "CoopWeapon": { "Enabled": False },
+        "Funnel": { "Enabled": False },
+        "Shield": { "Enabled": False },
+        "CombatEvasion": { "SideMoveStyle": "None", "LeaveStyle": "None" },
+        "CoopUtility": { "SkillType": "None" },
+        "VFX": [],
+        "LocomotionLeaning": {},
+        "TimerPointLight": { "Enabled": False }
+    }
+
+    # 1. Riding
+    is_weapon_or_funnel = (template_id in WEAPON_PARTNER_TEMPLATES or template_id in FUNNEL_TEMPLATES)
+    is_rideable = (
+        not is_weapon_or_funnel and (
+            template_id in BIG_MOUNT_TEMPLATES or 
+            template_id in SIT_MOUNT_TEMPLATES or 
+            "Ride" in partner_skill or
+            "Saddle" in saddle_item
+        )
+    )
+    if is_rideable:
+        marker_type = "Sit" if template_id in SIT_MOUNT_TEMPLATES else ("BiggerHorse" if (template_id in BIG_MOUNT_TEMPLATES or base_props.get("Size") in ["EPalSizeType::L", "EPalSizeType::XL"]) else "Saddle")
+        ride_pos = "Sit" if marker_type == "Sit" else ("BiggerHorseRide" if marker_type == "BiggerHorse" else "HorseRide")
+        
+        # Vanilla mount skeletons have dedicated 'PlayerRideMarker' sockets.
+        # Non-mountable Pals (like Kitsunebi, SheepBall, CatMage) do NOT have this socket;
+        # attaching to non-existent sockets causes bone index -1 -> NaN transforms -> D3D11 buffer crash.
+        has_dedicated_marker = (
+            template_id in BIG_MOUNT_TEMPLATES or 
+            template_id in SIT_MOUNT_TEMPLATES or 
+            template_id in FLYING_TEMPLATES
+        )
+        attach_socket = "PlayerRideMarker" if has_dedicated_marker else "pelvis"
+        pitch_rot = 90.0 if has_dedicated_marker else 0.0
+        z_offset = 10.0 if has_dedicated_marker else 40.0
+
+        features["Riding"] = {
+            "Enabled": True,
+            "MarkerType": marker_type,
+            "RidePosition": ride_pos,
+            "AttachSocket": attach_socket,
+            "WithSpeedCollision": template_id in TRAMPLE_TEMPLATES,
+            "WithMountedShooter": template_id in MOUNTED_SHOOTER_TEMPLATES,
+            "RelativeRotation": { "Pitch": pitch_rot, "Yaw": 0.0, "Roll": 0.0 },
+            "RelativeLocation": { "X": 0.0, "Y": 0.0, "Z": z_offset }
+        }
+
+    # 2. Flight
+    if template_id in FLYING_TEMPLATES:
+        features["Flight"] = { "Enabled": True }
+
+    # 3. Weapons
+    if template_id in WEAPON_PARTNER_TEMPLATES:
+        wp_cfg = WEAPON_PARTNER_TEMPLATES[template_id]
+        features["CoopWeapon"] = {
+            "Enabled": True,
+            "Mode": wp_cfg.get("Mode", "AssaultRifle"),
+            "Element": wp_cfg.get("Element", "EPalElementType::Fire"),
+            "Effect": wp_cfg.get("Effect", "EPalAdditionalEffectType::Burn"),
+            "Niagara": wp_cfg.get("Niagara", "")
+        }
+
+    # 4. Funnels
+    if template_id in FUNNEL_TEMPLATES:
+        fn_cfg = FUNNEL_TEMPLATES[template_id]
+        features["Funnel"] = {
+            "Enabled": True,
+            "Preset": fn_cfg["Preset"],
+            "TargetingAction": fn_cfg["TargetingAction"],
+            "CustomWazaID": fn_cfg["CustomWazaID"]
+        }
+
+    # 5. Shields
+    if template_id in SHIELD_TEMPLATES:
+        sh_cfg = SHIELD_TEMPLATES[template_id]
+        features["Shield"] = {
+            "Enabled": True,
+            "Radius": sh_cfg.get("Radius", 90.0),
+            "AttachSocket": sh_cfg.get("AttachSocket", "lowerarm_l"),
+            "RelativeLocation": sh_cfg.get("RelativeLocation")
+        }
+
+    # 6. Evasion
+    if template_id in EVASION_TEMPLATES:
+        features["CombatEvasion"] = dict(EVASION_TEMPLATES[template_id])
+
+    # 7. Utility
+    if template_id in UTILITY_TEMPLATES:
+        features["CoopUtility"] = { "SkillType": UTILITY_TEMPLATES[template_id] }
+
+    # 8. Point Light
+    if template_id in LIGHT_TEMPLATES:
+        features["TimerPointLight"] = { "Enabled": True }
+
+    return features
+
 class PalManager:
     def __init__(self, controller):
         self.c = controller
@@ -170,10 +354,30 @@ class PalManager:
                 "PaldexType": "Species"
             }
             
-            # FIXED: Safely loop over base_properties keys instead of undefined 'p'
+            # Initialize WorkSuitabilities map & legacy keys
+            new_suits = {}
+            default_anim_map = {
+                "EmitFlame": "Cooking", "Watering": "WaterGun", "Seeding": "Seeding",
+                "GenerateElectricity": "GenerateElectricity", "Handcraft": "CommonWork",
+                "Collection": "CommonWork", "Deforest": "Deforest", "Mining": "Mining",
+                "OilExtraction": "CommonWork", "ProductMedicine": "ProductMedicine",
+                "Cool": "Cool", "Transport": "Transport", "MonsterFarm": "CommonWork"
+            }
             for k in base_properties.keys():
                 if k.startswith("WorkSuitability_"):
-                    new_pal_data[k] = base_properties[k]
+                    lvl = int(base_properties[k])
+                    new_pal_data[k] = lvl
+                    if lvl > 0:
+                        s_name = k.replace("WorkSuitability_", "")
+                        new_suits[s_name] = {
+                            "Level": lvl,
+                            "Animation": default_anim_map.get(s_name, "CommonWork")
+                        }
+
+            new_pal_data["WorkSuitabilities"] = new_suits
+            new_pal_data["Features"] = infer_template_features(
+                template_id, base_properties, parent_params, resolved_saddle, resolved_partner_skill
+            )
 
             target_file = os.path.join(creator_dir, f"{clean_id}_creator.json")
             try:

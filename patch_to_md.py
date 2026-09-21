@@ -4,7 +4,7 @@ AI Studio / Gemini Patch to Markdown Converter
 ------------------------------------------------
 Reads JSON tool-call payloads (from file, clipboard, or pipe),
 decodes all escaped characters into their actual representations,
-and writes a cleanly formatted .md file with code blocks.
+and writes a cleanly formatted .txt file with code blocks.
 """
 
 import os
@@ -12,35 +12,73 @@ import sys
 import json
 import re
 import argparse
+import subprocess
 from typing import List, Dict, Any, Tuple, Optional
 
 
 def extract_json_blocks(raw_text: str) -> List[Dict[str, Any]]:
     """
-    Extracts all JSON objects and lists from raw text,
-    ignoring markdown wrappers and separator words.
+    Extracts all JSON objects and lists from raw text, recursively unwrapping
+    nested stringified JSON (like Gemini's 'queries' format) and comma-separated objects.
     """
     results = []
-    decoder = json.JSONDecoder()
-    idx = 0
-    n = len(raw_text)
 
-    while idx < n:
-        char = raw_text[idx]
-        if char in ('{', '['):
+    def _scan_raw_string(text: str) -> List[Any]:
+        found = []
+        decoder = json.JSONDecoder()
+        idx = 0
+        n = len(text)
+        while idx < n:
+            if text[idx] in ('{', '['):
+                try:
+                    obj, end_idx = decoder.raw_decode(text, idx)
+                    found.append(obj)
+                    idx = end_idx
+                    continue
+                except json.JSONDecodeError:
+                    pass
+            idx += 1
+        return found
+
+    def _extract_recursive(data: Any):
+        if isinstance(data, str):
+            s = data.strip()
+            if not s:
+                return
             try:
-                obj, end_idx = decoder.raw_decode(raw_text, idx)
-                if isinstance(obj, dict):
-                    results.append(obj)
-                elif isinstance(obj, list):
-                    for item in obj:
-                        if isinstance(item, dict):
-                            results.append(item)
-                idx = end_idx
-                continue
-            except json.JSONDecodeError:
+                parsed = json.loads(s)
+                _extract_recursive(parsed)
+                return
+            except (json.JSONDecodeError, TypeError):
                 pass
-        idx += 1
+
+            try:
+                parsed = json.loads(f"[{s}]")
+                _extract_recursive(parsed)
+                return
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+            for b in _scan_raw_string(s):
+                _extract_recursive(b)
+
+        elif isinstance(data, dict):
+            is_patch_or_tool = (
+                any(k in data for k in ("filepath", "path", "file", "filename")) and
+                any(k in data for k in ("search", "find", "old_str", "replace", "new_str", "content", "file_content"))
+            )
+            if is_patch_or_tool:
+                results.append(data)
+            else:
+                for v in data.values():
+                    _extract_recursive(v)
+
+        elif isinstance(data, list):
+            for item in data:
+                _extract_recursive(item)
+
+    for initial_obj in _scan_raw_string(raw_text):
+        _extract_recursive(initial_obj)
 
     return results
 
@@ -50,8 +88,10 @@ def detect_language(filepath: str) -> str:
     ext = os.path.splitext(filepath)[1].lower()
     lang_map = {
         ".py": "python",
-        ".js": "javascript",
         ".ts": "typescript",
+        ".tsx": "tsx",
+        ".js": "javascript",
+        ".jsx": "jsx",
         ".json": "json",
         ".cpp": "cpp",
         ".c": "c",
@@ -69,23 +109,21 @@ def detect_language(filepath: str) -> str:
         ".ini": "ini",
         ".yaml": "yaml",
         ".yml": "yaml",
-        ".md": "markdown",
+        ".txt": "markdown",
     }
     return lang_map.get(ext, "")
 
 
 def format_code_block(text: str, lang: str = "") -> str:
     """
-    Wraps actual text into a safe markdown code fence.
-    If the text contains backticks (```), expands fence size (````) to avoid syntax breaks.
+    Wraps unescaped actual text into a safe markdown code fence.
+    If the text contains backticks (```), expands fence size to avoid breaking Markdown formatting.
     """
-    # Find longest sequence of consecutive backticks inside the text
     backticks = re.findall(r"`+", text)
     max_len = max([len(b) for b in backticks], default=0)
     fence_len = max(3, max_len + 1)
     fence = "`" * fence_len
 
-    # Ensure text ends cleanly before closing fence
     clean_text = text.rstrip("\r\n")
     return f"{fence}{lang}\n{clean_text}\n{fence}"
 
@@ -116,7 +154,7 @@ def generate_markdown(
 
         md_lines.append(f"## Target File: `{filepath}`\n")
 
-        # Case 1: Search and Replace
+        # Search and Replace
         if search_str is not None and replace_str is not None:
             md_lines.append("search:")
             md_lines.append(format_code_block(search_str, lang))
@@ -132,7 +170,7 @@ def generate_markdown(
                 "replace_lines": len(replace_str.splitlines()),
             })
 
-        # Case 2: Whole File Write / Create
+        # Whole File Write
         elif content_str is not None:
             md_lines.append("content:")
             md_lines.append(format_code_block(content_str, lang))
@@ -146,7 +184,7 @@ def generate_markdown(
                 "replace_lines": len(content_str.splitlines()),
             })
 
-        # Case 3: Other / Unknown tool format
+        # Other JSON structure
         else:
             raw_pretty = json.dumps(patch, indent=2)
             md_lines.append("payload:")
@@ -173,21 +211,18 @@ def read_clipboard() -> str:
         pass
 
     if sys.platform == "win32":
-        import subprocess
         try:
             return subprocess.check_output(["powershell", "-command", "Get-Clipboard"], text=True)
         except Exception:
             pass
 
     if sys.platform == "darwin":
-        import subprocess
         try:
             return subprocess.check_output(["pbpaste"], text=True)
         except Exception:
             pass
 
     if sys.platform.startswith("linux"):
-        import subprocess
         try:
             return subprocess.check_output(["xclip", "-selection", "clipboard", "-o"], text=True)
         except Exception:
@@ -214,7 +249,7 @@ def main():
     )
     parser.add_argument(
         "-o", "--output", 
-        help="Path for the output .md file (default: matches input filename or 'gemini_patches.md')."
+        help="Path for the output .txt file (default: matches input filename or 'gemini_patches.txt')."
     )
     parser.add_argument("-c", "--clipboard", action="store_true", help="Read input from clipboard.")
     parser.add_argument("--stdout", action="store_true", help="Print Markdown to stdout instead of saving to disk.")
@@ -222,7 +257,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Determine input
     target_files = list(args.files) + list(args.flag_files)
     raw_inputs = []
     primary_source_name = "clipboard"
@@ -261,16 +295,13 @@ def main():
         print("[!] Error: Input content is empty.", file=sys.stderr)
         sys.exit(1)
 
-    # Extract JSON objects
     patches = extract_json_blocks(combined_input)
     if not patches:
         print("[!] Error: No valid JSON tool blocks were found in the input.", file=sys.stderr)
         sys.exit(1)
 
-    # Convert to Markdown
     md_content, summary = generate_markdown(patches, include_lang=not args.no_lang)
 
-    # Determine output filename
     if args.output:
         out_path = args.output
     elif target_files:
@@ -279,14 +310,12 @@ def main():
     else:
         out_path = "gemini_patches.txt"
 
-    # Write or print
     if args.stdout:
         print(md_content)
     else:
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(md_content)
 
-    # Output Summary Report
     print("\n" + "=" * 70)
     print(" PATCH TO MARKDOWN: [SUCCESS]")
     print("=" * 70)

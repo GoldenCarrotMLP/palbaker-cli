@@ -5,38 +5,52 @@ import glob
 import subprocess
 import base64
 from utils.extractor.core import extract_game_files
-
-def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_id: str, settings: dict, temp_dir: str, cooked_dir: str, uasset_gui: str, flags: int, log, pal_data: dict = None) -> tuple[dict, str]:
+def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_id: str, settings: dict, temp_dir: str, cooked_dir: str, uasset_gui: str, flags: int, log, pal_data: dict = None, usmap_path: str = None) -> tuple[dict, str]:
     if pal_data is None:
         pal_data = {}
 
-    target_element = pal_data.get("PartnerWeaponElement", "EPalElementType::Fire")
-    target_effect = pal_data.get("PartnerWeaponEffectType", "EPalAdditionalEffectType::Burn")
-    target_niagara_path = pal_data.get("PartnerWeaponNiagara", "Pal/Content/Pal/Effect/Skill/FlameThrower/NS_CommonSkill_Flamethrower")
+    coop_weapon = pal_data.get("Features", {}).get("CoopWeapon", {})
+    if not coop_weapon.get("Enabled", pal_data.get("PartnerWeaponElement") is not None):
+        return json_data, json_str
 
-    # Clean and resolve paths for Niagara System
+    target_element = coop_weapon.get("Element", pal_data.get("PartnerWeaponElement", "EPalElementType::Fire"))
+    target_effect = coop_weapon.get("Effect", pal_data.get("PartnerWeaponEffectType", "EPalAdditionalEffectType::Burn"))
+    target_niagara_path = coop_weapon.get("Niagara", pal_data.get("PartnerWeaponNiagara", "Pal/Content/Pal/Effect/Skill/FlameThrower/NS_CommonSkill_Flamethrower"))
+
     target_niagara_clean = target_niagara_path.replace("\\", "/").strip("/")
     target_niagara_name = target_niagara_clean.split("/")[-1]
     target_niagara_game_pkg = "/" + target_niagara_clean.replace("Pal/Content", "Game")
     target_niagara_rel_pkg = target_niagara_clean
 
-    imports = json_data.get("Imports", [])
-    discovered_weapons = set()
-
-    for imp in imports:
-        if imp.get("ClassName") == "Package":
-            pkg_name = imp.get("ObjectName", "")
-            if "/Pal/Blueprint/Weapon/" in pkg_name and template_id in pkg_name:
-                discovered_weapons.add(pkg_name)
+    mode = coop_weapon.get("Mode", "Flamethrower")
+    discovered_weapons = []
+    
+    if mode == "Flamethrower":
+        discovered_weapons.append(("/Game/Pal/Blueprint/Weapon/BP_Kitsunebi_Flamethrower", "Kitsunebi", "Flamethrower"))
+    elif mode == "Launcher":
+        discovered_weapons.append(("/Game/Pal/Blueprint/Weapon/BP_PenguinLauncher", "Penguin", "Launcher"))
+    elif mode == "ThrowBomb":
+        discovered_weapons.append(("/Game/Pal/Blueprint/Weapon/BP_ThrowElecBomb_CoopWeapon", "ThrowElecBomb", "ThrowElecBomb_CoopWeapon"))
+    elif mode == "Katana":
+        discovered_weapons.append(("/Game/Pal/Blueprint/Weapon/BP_SwordCutlassfish_Katana", "SwordCutlassfish", "Katana"))
+    
+    if not discovered_weapons:
+        return json_data, json_str
 
     project_dir = os.path.dirname(settings.get("uproject", ""))
     project_name = os.path.splitext(os.path.basename(settings.get("uproject", "")))[0]
     weapon_cooked_dir = os.path.join(project_dir, "Saved", "Cooked", "Windows", project_name, "Content", "Pal", "Blueprint", "Weapon")
     os.makedirs(weapon_cooked_dir, exist_ok=True)
 
-    for wp_pkg in discovered_weapons:
+    from utils.uasset_helper import decompile_uasset, compile_uasset, sync_namemap
+
+    for wp_pkg, source_wp_base, wp_suffix in discovered_weapons:
         wp_name = wp_pkg.split("/")[-1]
-        new_wp_name = wp_name.replace(template_id, pal_id)
+        
+        new_wp_name = f"BP_{pal_id}_{wp_suffix}"
+        if mode == "Launcher":
+            new_wp_name = f"BP_{pal_id}_Launcher"
+            
         new_wp_pkg = f"/Game/Pal/Blueprint/Weapon/{new_wp_name}"
         new_rel_core = f"Pal/Content/Pal/Blueprint/Weapon/{new_wp_name}"
 
@@ -72,7 +86,7 @@ def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_
             continue
 
         temp_wp_json = os.path.join(temp_dir, f"{new_wp_name}.json")
-        subprocess.run([uasset_gui, "tojson", source_disk, temp_wp_json, "VER_UE5_1"], check=True, creationflags=flags)
+        decompile_uasset(uasset_gui, source_disk, temp_wp_json, usmap_path)
 
         with open(temp_wp_json, "r", encoding="utf-8") as f_wp:
             wp_content = f_wp.read()
@@ -87,24 +101,21 @@ def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_
         wp_content = wp_content.replace(f"'{source_wp_name}'", f"'{new_wp_name}'")
 
         # 3. Retarget Skeletal Mesh
-        wp_content = wp_content.replace(f"/Monster/Kitsunebi_Ice/SK_Kitsunebi_Ice", f"/Monster/{pal_id}/SK_{pal_id}")
-        wp_content = wp_content.replace(f"SkeletalMesh'SK_Kitsunebi_Ice'", f"SkeletalMesh'SK_{pal_id}'")
-        wp_content = wp_content.replace('"SK_Kitsunebi_Ice"', f'"SK_{pal_id}"')
-        wp_content = wp_content.replace(f"/Monster/{template_id}/SK_{template_id}", f"/Monster/{pal_id}/SK_{pal_id}")
-        wp_content = wp_content.replace(f"SkeletalMesh'SK_{template_id}'", f"SkeletalMesh'SK_{pal_id}'")
-        wp_content = wp_content.replace(f'"SK_{template_id}"', f'"SK_{pal_id}"')
+        wp_content = wp_content.replace(f"/Monster/{source_wp_base}_Ice/SK_{source_wp_base}_Ice", f"/Monster/{pal_id}/SK_{pal_id}")
+        wp_content = wp_content.replace(f"SkeletalMesh'SK_{source_wp_base}_Ice'", f"SkeletalMesh'SK_{pal_id}'")
+        wp_content = wp_content.replace(f'"SK_{source_wp_base}_Ice"', f'"SK_{pal_id}"')
+        wp_content = wp_content.replace(f"/Monster/{source_wp_base}/SK_{source_wp_base}", f"/Monster/{pal_id}/SK_{pal_id}")
+        wp_content = wp_content.replace(f"SkeletalMesh'SK_{source_wp_base}'", f"SkeletalMesh'SK_{pal_id}'")
+        wp_content = wp_content.replace(f'"SK_{source_wp_base}"', f'"SK_{pal_id}"')
+        
+        # Retargeting template_id -> pal_id in case the child had references to template
+        if template_id != source_wp_base:
+            wp_content = wp_content.replace(f"/Monster/{template_id}/SK_{template_id}", f"/Monster/{pal_id}/SK_{pal_id}")
+            wp_content = wp_content.replace(f"SkeletalMesh'SK_{template_id}'", f"SkeletalMesh'SK_{pal_id}'")
+            wp_content = wp_content.replace(f'"SK_{template_id}"', f'"SK_{pal_id}"')
 
         # 4 & 5. Conditional Retargeting for Customizable VFX Weapons
-        partner_skill = pal_data.get("PartnerSkill", "")
-        CUSTOMIZABLE_WEAPONS = [
-            "PartnerSkill_Kitsunebi", "Flamethrower",
-            "PartnerSkill_Penguin", "Launcher",
-            "PartnerSkill_Monkey", "AssaultRifle", "Rifle",
-            "PartnerSkill_Carbunclo", "SubmachineGun", "Submachinegun",
-            "PartnerSkill_Grizzbolt", "HeavyWeapon", "Minigun"
-        ]
-        
-        if partner_skill in CUSTOMIZABLE_WEAPONS:
+        if mode in ["Flamethrower", "Launcher"]:
             # Retarget Niagara Effect
             wp_content = wp_content.replace("Pal/Content/Pal/Effect/Skill/FrostBreath/NS_CommonSkill_FrostBreath", target_niagara_rel_pkg)
             wp_content = wp_content.replace("/Game/Pal/Effect/Skill/FrostBreath/NS_CommonSkill_FrostBreath", target_niagara_game_pkg)
@@ -121,12 +132,13 @@ def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_
             target_eff_full = f"EPalAdditionalEffectType::{target_eff_short}"
 
             # Tier A: Direct String Replacements
-            for old_elem in ["EPalElementType::Ice", "EPalElementType::Fire"]:
+            for old_elem in ["EPalElementType::Ice", "EPalElementType::Fire", "EPalElementType::Water"]:
                 wp_content = wp_content.replace(old_elem, target_elem_full)
             wp_content = wp_content.replace('"Ice"', f'"{target_elem_short}"')
             wp_content = wp_content.replace('"Fire"', f'"{target_elem_short}"')
+            wp_content = wp_content.replace('"Water"', f'"{target_elem_short}"')
 
-            for old_eff in ["EPalAdditionalEffectType::Freeze", "EPalAdditionalEffectType::Burn"]:
+            for old_eff in ["EPalAdditionalEffectType::Freeze", "EPalAdditionalEffectType::Burn", "EPalAdditionalEffectType::None"]:
                 wp_content = wp_content.replace(old_eff, target_eff_full)
             wp_content = wp_content.replace('"Freeze"', f'"{target_eff_short}"')
             wp_content = wp_content.replace('"Burn"', f'"{target_eff_short}"')
@@ -156,12 +168,11 @@ def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_
                         if isinstance(b64_data, str):
                             b_data = bytearray(base64.b64decode(b64_data))
                             
-                            # Search the last 8 bytes of the CDO for the exact ICE [06, 06] or FIRE [02, 04] signature
-                            # This bypasses all length discrepancies across different game versions
-                            for i in range(max(0, len(b_data) - 8), len(b_data) - 1):
-                                if (b_data[i] == 0x06 and b_data[i+1] == 0x06) or (b_data[i] == 0x02 and b_data[i+1] == 0x04):
+                            for i in range(max(0, len(b_data) - 24), len(b_data) - 1):
+                                # Detect [0x02, 0x04] (Fire, Burn) or [0x06, 0x06] (Ice, Freeze) signatures
+                                if (b_data[i] in [0x02, 0x06, 0x03, 0x00]) and (b_data[i + 1] in [0x04, 0x06, 0x00]):
                                     b_data[i] = elem_byte_val
-                                    b_data[i+1] = eff_byte_val
+                                    b_data[i + 1] = eff_byte_val
                                     export["Data"] = base64.b64encode(b_data).decode('utf-8')
                                     log(f"  [Action: Weapon] Mutated Base64 sequence to Element: {elem_byte_val}, Effect: {eff_byte_val}", "success")
                                     break
@@ -190,14 +201,8 @@ def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_
             f_wp.write(wp_content)
 
         dest_wp_uasset = os.path.join(weapon_cooked_dir, f"{new_wp_name}.uasset")
-        subprocess.run([uasset_gui, "fromjson", temp_wp_json, dest_wp_uasset], check=True, creationflags=flags)
-        log(f"  ✓ Compiled weapon blueprint with customized VFX ({target_niagara_name}): {dest_wp_uasset}", "success")
-
-        # 6. Retarget parent character blueprint
-        json_str = json_str.replace(wp_pkg, new_wp_pkg)
-        json_str = json_str.replace(f"'{wp_name}_C'", f"'{new_wp_name}_C'")
-        json_str = json_str.replace(f'"{wp_name}_C"', f'"{new_wp_name}_C"')
-        json_str = json_str.replace(f'"{wp_name}"', f'"{new_wp_name}"')
+        compile_uasset(uasset_gui, temp_wp_json, dest_wp_uasset, usmap_path)
+        log(f"  ✓ Compiled weapon blueprint: {dest_wp_uasset}", "success")
 
     try:
         updated_dict = json.loads(json_str)
