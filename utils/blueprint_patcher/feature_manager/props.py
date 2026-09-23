@@ -16,8 +16,8 @@ SCHEMA SPECIFICATION:
    • add_hand_prop(
          var_name: str = "Weapon",
          attach_socket: str = "Socket_Weapon_R",
-         mesh_class_package: str | None = None,
-         mesh_class_name: str | None = None,
+         mesh_class_package: str = None,
+         mesh_class_name: str = None,
          is_skeletal: bool = True
      ) -> int
 
@@ -59,8 +59,8 @@ class PropsManagerMixin:
         self,
         var_name: str = "Weapon",
         attach_socket: str = "Socket_Weapon_R",
-        mesh_class_package: str | None = None,
-        mesh_class_name: str | None = None,
+        mesh_class_package: str = None,
+        mesh_class_name: str = None,
         is_skeletal: bool = True
     ) -> int:
         """

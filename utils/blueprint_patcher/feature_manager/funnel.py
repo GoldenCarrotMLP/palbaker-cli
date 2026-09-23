@@ -14,10 +14,10 @@ SCHEMA SPECIFICATION:
 ---------------------
 1. Method Signatures:
    • set_partner_funnel(
-         preset_name: str | None = None,
-         custom_waza_id: str | None = None,
-         custom_character_class: str | None = None,
-         custom_controller_class: str | None = None
+         preset_name: str = None,
+         custom_waza_id: str = None,
+         custom_character_class: str = None,
+         custom_controller_class: str = None
      )
    • get_partner_funnel_params() -> dict
    • clear_partner_funnel()
@@ -95,10 +95,10 @@ class FunnelManagerMixin:
 
     def set_partner_funnel(
         self,
-        preset_name: str | None = None,
-        custom_waza_id: str | None = None,
-        custom_character_class: str | None = None,
-        custom_controller_class: str | None = None
+        preset_name: str = None,
+        custom_waza_id: str = None,
+        custom_character_class: str = None,
+        custom_controller_class: str = None
     ):
         """
         Injects satellite minion parameters into ICH PalPartnerSkillParameter using named presets

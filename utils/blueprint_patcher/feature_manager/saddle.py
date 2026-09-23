@@ -16,10 +16,10 @@ SCHEMA SPECIFICATION:
 1. Method Signature:
    add_saddle(
        marker_type: str = "Saddle",
-       ride_position_type: str | None = None,
+       ride_position_type: str = None,
        attach_socket: str = "PlayerRideMarker",
-       relative_rotation: dict | None = None,
-       relative_location: dict | None = None,
+       relative_rotation: dict = None,
+       relative_location: dict = None,
        ride_action_class_path: str = "...",
        with_speed_collision: bool = False
    ) -> int
@@ -73,10 +73,10 @@ class SaddleManagerMixin:
     def add_saddle(
         self,
         marker_type: str = "Saddle",
-        ride_position_type: str | None = None,
+        ride_position_type: str = None,
         attach_socket: str = "PlayerRideMarker",
-        relative_rotation: dict | None = None,
-        relative_location: dict | None = None,
+        relative_rotation: dict = None,
+        relative_location: dict = None,
         ride_action_class_path: str = "/Game/Pal/Blueprint/Controller/AIAction/Coop/BP_AIActionRideCall.BP_AIActionRideCall_C",
         with_speed_collision: bool = False
     ) -> int:

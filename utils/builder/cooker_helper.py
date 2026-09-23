@@ -147,7 +147,7 @@ def is_path_blacklisted(game_virtual_path: str, custom_blacklist: list[str] | No
                 
     return False
 
-def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[str] | None = None) -> list[tuple[str, str]]:
+def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[str] = None) -> list[tuple[str, str]]:
     folders_to_pack = []
     blacklist = getattr(workspace, "custom_blacklist", [])
 

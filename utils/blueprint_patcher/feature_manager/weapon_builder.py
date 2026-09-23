@@ -43,7 +43,7 @@ def synthesize_flamethrower_cluster(
     pal_id: str,
     template_id: str = "Kitsunebi",
     skeleton_guid: str = "BF21DEE0-4BCF0A09-60C97DA1-367595A0",
-    config: dict | None = None
+    config: dict = None
 ) -> dict:
     """
     Synthesizes the complete multi-asset weapon cluster for a partner weapon:

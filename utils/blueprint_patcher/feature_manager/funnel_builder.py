@@ -39,13 +39,13 @@ TARGETING_ACTION_PRESETS = {
 def synthesize_funnel_character_ast(
     seed_funnel_data: dict,
     target_pal_id: str,
-    template_pal_id: str | None = None,
+    template_pal_id: str = None,
     targeting_action: str = "ShadowBall",
-    mesh_capsule_half_height: float | None = None,
-    mesh_capsule_radius: float | None = None,
-    mesh_z_offset: float | None = None,
-    custom_targeting_action_pkg: str | None = None,
-    custom_targeting_action_class: str | None = None
+    mesh_capsule_half_height: float = None,
+    mesh_capsule_radius: float = None,
+    mesh_z_offset: float = None,
+    custom_targeting_action_pkg: str = None,
+    custom_targeting_action_class: str = None
 ) -> dict:
     """
     Synthesizes a standalone BP_FunnelCharacter_<Pal_ID> AST from seed template data.

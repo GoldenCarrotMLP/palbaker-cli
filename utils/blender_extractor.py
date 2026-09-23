@@ -277,7 +277,7 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
         "blend_spaces": blend_spaces
     }
 
-def extract_metadata(output_path: str, fbx_path: str | None = None):
+def extract_metadata(output_path: str, fbx_path: str = None):
     print(f"\n[PalBaker Extractor] Starting metadata extraction for {os.path.basename(output_path)}...", flush=True)
     working_dir = os.path.dirname(output_path)
     base_name = os.path.splitext(os.path.basename(output_path))[0].replace("_blend", "")

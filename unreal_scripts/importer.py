@@ -16,6 +16,131 @@ def harvest_materials(ue_path, target_mesh_name):
                     harvested[str(i)] = mat.material_interface
     return harvested
 
+def inject_vanilla_skeleton_metadata(palbaker_root, custom_skel_path, template_id):
+    """Extracts vanilla skeleton JSON offline, parses Sockets/VBs/Slots, and injects them natively into Unreal."""
+    import os
+    import json
+    import tempfile
+    import shutil
+    import sys
+    import unreal # type: ignore
+
+    settings_path = os.path.join(palbaker_root, "manager_settings.json")
+    if not os.path.exists(settings_path): return
+    with open(settings_path, "r", encoding="utf-8") as f:
+        settings = json.load(f)
+        
+    if palbaker_root not in sys.path:
+        sys.path.append(palbaker_root)
+        
+    from utils.extractor.core import extract_game_files
+    from utils.uasset_helper import decompile_uasset
+
+    temp_dir = os.path.join(tempfile.gettempdir(), "palbaker_skel_meta")
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    os.makedirs(temp_dir, exist_ok=True)
+
+    clean_template = template_id[3:] if template_id.startswith("SK_") else template_id
+    skel_rel = f"Pal/Content/Pal/Model/Character/Skeleton/{clean_template}/SK_{clean_template}_Skeleton"
+    
+    print(f"[PalBaker] Extracting metadata from vanilla skeleton: {skel_rel}...")
+    success, _ = extract_game_files(settings, [f"{skel_rel}.uasset", f"{skel_rel}.uexp"], temp_dir, format_type="raw")
+    if not success: return
+
+    uasset_disk = os.path.join(temp_dir, f"{skel_rel}.uasset")
+    json_path = os.path.join(temp_dir, "vanilla_skel.json")
+    uasset_gui = os.path.normpath(os.path.join(palbaker_root, "deps", "UAssetGUI.exe"))
+    usmap_path = os.path.normpath(os.path.join(palbaker_root, "deps", "Mappings.usmap"))
+
+    if not decompile_uasset(uasset_gui, uasset_disk, json_path, usmap_path): return
+
+    with open(json_path, "r", encoding="utf-8-sig") as f:
+        skel_data = json.load(f)
+
+    sockets_data, vb_sources, vb_targets, slot_names, slot_groups = [], [], [], [], []
+    exports = skel_data.get("Exports", [])
+    skel_exp = next((e for e in exports if e.get("ObjectName", "").endswith("Skeleton")), None)
+    if not skel_exp: return
+
+    # 1. Parse Sockets
+    sockets_prop = next((p for p in skel_exp.get("Data", []) if p.get("Name") == "Sockets"), None)
+    if sockets_prop and isinstance(sockets_prop.get("Value"), list):
+        for s_ref in sockets_prop["Value"]:
+            exp_idx = s_ref.get("Value")
+            if isinstance(exp_idx, int) and 0 < exp_idx <= len(exports):
+                sock_exp = exports[exp_idx - 1]
+                sock_info = {}
+                for p in sock_exp.get("Data", []):
+                    if p.get("Name") == "SocketName": sock_info["SocketName"] = p.get("Value")
+                    elif p.get("Name") == "BoneName": sock_info["BoneName"] = p.get("Value")
+                    elif p.get("Name") == "RelativeLocation":
+                        vec = p.get("Value", [{}])[0].get("Value", {})
+                        sock_info["Loc"] = (vec.get("X",0), vec.get("Y",0), vec.get("Z",0))
+                    elif p.get("Name") == "RelativeRotation":
+                        rot = p.get("Value", [{}])[0].get("Value", {})
+                        sock_info["Rot"] = (rot.get("Roll",0), rot.get("Pitch",0), rot.get("Yaw",0))
+                    elif p.get("Name") == "RelativeScale":
+                        scale = p.get("Value", [{}])[0].get("Value", {})
+                        sock_info["Scale"] = (scale.get("X",1), scale.get("Y",1), scale.get("Z",1))
+                if "SocketName" in sock_info and "BoneName" in sock_info:
+                    sockets_data.append(sock_info)
+
+    # 2. Parse VirtualBones
+    vb_prop = next((p for p in skel_exp.get("Data", []) if p.get("Name") == "VirtualBones"), None)
+    if vb_prop and isinstance(vb_prop.get("Value"), list):
+        for vb in vb_prop["Value"]:
+            src = next((p.get("Value") for p in vb.get("Value", []) if p.get("Name") == "SourceBoneName"), None)
+            tgt = next((p.get("Value") for p in vb.get("Value", []) if p.get("Name") == "TargetBoneName"), None)
+            if src and tgt:
+                vb_sources.append(src)
+                vb_targets.append(tgt)
+
+    # 3. Parse SlotGroups
+    sg_prop = next((p for p in skel_exp.get("Data", []) if p.get("Name") == "SlotGroups"), None)
+    if sg_prop and isinstance(sg_prop.get("Value"), list):
+        for sg in sg_prop["Value"]:
+            grp_name = next((p.get("Value") for p in sg.get("Value", []) if p.get("Name") == "GroupName"), None)
+            slots_arr = next((p.get("Value") for p in sg.get("Value", []) if p.get("Name") == "SlotNames"), [])
+            if grp_name and isinstance(slots_arr, list):
+                for slot in slots_arr:
+                    if slot.get("Value"):
+                        slot_names.append(slot.get("Value"))
+                        slot_groups.append(grp_name)
+
+    # --- INJECT NATIVELY INTO UNREAL ---
+    custom_skel = unreal.EditorAssetLibrary.load_asset(custom_skel_path)
+    if not custom_skel: return
+
+    # Inject Sockets via C++ API (bypassing protected property limits)
+    socket_names = []
+    bone_names = []
+    locs = []
+    rots = []
+    scales = []
+
+    for s_data in sockets_data:
+        socket_names.append(s_data["SocketName"])
+        bone_names.append(s_data["BoneName"])
+        locs.append(unreal.Vector(*s_data.get("Loc", (0, 0, 0))))
+        r, p, yaw = s_data.get("Rot", (0, 0, 0))
+        rots.append(unreal.Rotator(r, p, yaw))
+        scales.append(unreal.Vector(*s_data.get("Scale", (1, 1, 1))))
+
+    if socket_names:
+        report_socks = unreal.AnimScriptingLibrary.inject_sockets(
+            custom_skel, socket_names, bone_names, locs, rots, scales
+        )
+        if report_socks.strip():
+            print(report_socks, flush=True)
+
+    # Inject VBs and Slots via C++ API
+    report = unreal.AnimScriptingLibrary.inject_virtual_bones_and_slots(custom_skel, vb_sources, vb_targets, slot_names, slot_groups)
+    if report.strip():
+        print(report, flush=True)
+    
+    unreal.EditorAssetLibrary.save_loaded_asset(custom_skel)
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
 def clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal=False, has_custom_anims=False, base_pal="", mod_name="", category="Monster"):
     if fbx_file and os.path.exists(fbx_file):
         clean_mesh_name = target_mesh_name.replace("SK_", "")
@@ -53,7 +178,7 @@ def clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal=False, has_cu
                     try: unreal.EditorAssetLibrary.delete_directory(folder)
                     except Exception as e: print(f"[PalBaker] Warning: Failed to delete {folder}: {e}")
 
-def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, template_id=None, is_custom_pal=False, import_tex=True, has_custom_anims=False):
+def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, template_id=None, is_custom_pal=False, import_tex=True, has_custom_anims=False, palbaker_root=""):
     # 1. Textures Import (Forced Overwrite)
     if import_tex and textures:
         print(f"[PalBaker] Importing {len(textures)} textures with forced overwrite...", flush=True)
@@ -226,6 +351,11 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
             if unreal.EditorAssetLibrary.does_asset_exist(generated_skeleton_path) and generated_skeleton_path != expected_skeleton_path:
                 unreal.EditorAssetLibrary.make_directory(f"/Game/Pal/Model/Character/Skeleton/{skel_folder}")
                 unreal.EditorAssetLibrary.rename_asset(generated_skeleton_path, expected_skeleton_path)
+
+        # 3. Native Skeleton Metadata Injection
+        if has_custom_anims:
+            target_skeleton_name = template_id if (is_custom_pal and template_id) else base_pal
+            inject_vanilla_skeleton_metadata(palbaker_root, expected_skeleton_path, target_skeleton_name)
 
         return target_asset_path, shared_phys_path
 

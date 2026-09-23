@@ -37,7 +37,7 @@ class ImportManagerMixin:
         self,
         package_path: str,
         class_name: str,
-        class_type: str | None = None
+        class_type: str = None
     ) -> int:
         """
         Resolves or creates the standard two-level package -> class import hierarchy.

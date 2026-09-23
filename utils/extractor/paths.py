@@ -1,7 +1,7 @@
 # utils/extractor/paths.py
 import os
 
-def get_paks_dir(palworld_exe: str) -> str | None:
+def get_paks_dir(palworld_exe: str):
     """Safely calculates the Palworld Paks folder directory path based on the executable path."""
     if not palworld_exe or not os.path.exists(palworld_exe):
         return None

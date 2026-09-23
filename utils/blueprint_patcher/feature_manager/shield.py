@@ -16,7 +16,7 @@ SCHEMA SPECIFICATION:
    add_shield(
        radius: float = 90.0,
        attach_socket: str = "lowerarm_l",
-       relative_location: dict | None = None,
+       relative_location: dict = None,
        action_class_path: str = "/Game/Pal/Blueprint/Controller/AIAction/Coop/BP_AIActionShieldCall.BP_AIActionShieldCall_C"
    ) -> int
 
@@ -42,7 +42,7 @@ class ShieldManagerMixin:
         self,
         radius: float = 90.0,
         attach_socket: str = "lowerarm_l",
-        relative_location: dict | None = None,
+        relative_location: dict = None,
         action_class_path: str = "/Game/Pal/Blueprint/Controller/AIAction/Coop/BP_AIActionShieldCall.BP_AIActionShieldCall_C"
     ) -> int:
         """

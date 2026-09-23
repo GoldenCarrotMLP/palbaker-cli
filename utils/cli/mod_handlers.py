@@ -106,7 +106,7 @@ def verify_project_integrity(settings: dict) -> tuple[bool, str]:
         
     return True, ""
 
-def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action: str, preserve_override: bool | None = None):
+def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action: str, preserve_override: bool = None):
     is_frozen = getattr(sys, 'frozen', False)
     if is_frozen:
         cmd = [sys.executable, "internal-build-mod", base_pal, mod_name, category, action]

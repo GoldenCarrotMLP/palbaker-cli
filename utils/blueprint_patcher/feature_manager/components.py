@@ -20,8 +20,8 @@ class ComponentManagerMixin:
         var_name: str,
         comp_class_package: str,
         comp_class_name: str,
-        template_properties: list[dict] | None = None,
-        attach_to_name: str | None = None,
+        template_properties: list[dict] = None,
+        attach_to_name: str = None,
         parent_var_name: str = "CharacterMesh0",
         b_is_parent_native: bool = True
     ) -> int:

@@ -7,7 +7,7 @@ from .names import get_localized_name, load_names_map
 from .audio_helper import get_pal_sound_metadata
 from .sidecar_helper import load_sidecar
 
-def scan_character_folders(base_path: str, target_mod: str | None = None) -> list[dict]:
+def scan_character_folders(base_path: str, target_mod: str = None) -> list[dict]:
     """
     Scans character folders across Monsters, NPCs (including Bosses), and Player components.
     Returns a list of dicts containing routing metadata.
@@ -162,7 +162,7 @@ def scan_character_folders(base_path: str, target_mod: str | None = None) -> lis
                     
     return discovered
 
-def get_mod_info(settings: dict, target_mod: str | None = None):
+def get_mod_info(settings: dict, target_mod: str = None):
     fmodel_base = settings.get("fmodel_output", "")
     uproject = settings.get("uproject", "")
     palworld_exe = settings.get("palworld_exe", "")

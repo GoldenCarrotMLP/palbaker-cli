@@ -16,13 +16,13 @@ SCHEMA SPECIFICATION:
 1. Method Signature:
    add_coop_weapon(
        mode: str,
-       weapon_class_package: str | None = None,
-       weapon_class_name: str | None = None,
+       weapon_class_package: str = None,
+       weapon_class_name: str = None,
        attach_socket: str = "Socket_Weapon_R",
-       skill_magnification: list[float] | None = None,
-       aim_blur_angles: list[float] | None = None,
-       custom_mesh_package: str | None = None,
-       custom_mesh_name: str | None = None
+       skill_magnification: list[float] = None,
+       aim_blur_angles: list[float] = None,
+       custom_mesh_package: str = None,
+       custom_mesh_name: str = None
    ) -> int
 
 2. Weapon Archetypes & Discovered Presets:
@@ -142,13 +142,13 @@ class WeaponManagerMixin:
     def add_coop_weapon(
         self,
         mode: str,
-        weapon_class_package: str | None = None,
-        weapon_class_name: str | None = None,
+        weapon_class_package: str = None,
+        weapon_class_name: str = None,
         attach_socket: str = "Socket_Weapon_R",
-        skill_magnification: list[float] | None = None,
-        aim_blur_angles: list[float] | None = None,
-        custom_mesh_package: str | None = None,
-        custom_mesh_name: str | None = None
+        skill_magnification: list[float] = None,
+        aim_blur_angles: list[float] = None,
+        custom_mesh_package: str = None,
+        custom_mesh_name: str = None
     ) -> int:
         """
         Instantiates a Co-op Partner Weapon onto the Pal according to standard presets.

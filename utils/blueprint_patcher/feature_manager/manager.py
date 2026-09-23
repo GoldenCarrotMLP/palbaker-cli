@@ -45,13 +45,13 @@ class BlueprintFeatureManager(
     def create_funnel_character_ast(
         seed_funnel_data: dict,
         target_pal_id: str,
-        template_pal_id: str | None = None,
+        template_pal_id: str = None,
         targeting_action: str = "ShadowBall",
-        mesh_capsule_half_height: float | None = None,
-        mesh_capsule_radius: float | None = None,
-        mesh_z_offset: float | None = None,
-        custom_targeting_action_pkg: str | None = None,
-        custom_targeting_action_class: str | None = None
+        mesh_capsule_half_height: float = None,
+        mesh_capsule_radius: float = None,
+        mesh_z_offset: float = None,
+        custom_targeting_action_pkg: str = None,
+        custom_targeting_action_class: str = None
     ) -> dict:
         """Convenience factory method to synthesize standalone satellite actor blueprints."""
         return synthesize_funnel_character_ast(
@@ -73,7 +73,7 @@ class BlueprintFeatureManager(
         pal_id: str,
         template_id: str = "Kitsunebi",
         skeleton_guid: str = "BF21DEE0-4BCF0A09-60C97DA1-367595A0",
-        config: dict | None = None
+        config: dict = None
     ) -> dict:
         """Convenience factory method to synthesize standalone weapon actor and montages cluster."""
         return synthesize_flamethrower_cluster(

@@ -16,6 +16,9 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "AnimGraphNode_LookAt.h"
+#include "Animation/Skeleton.h"
+#include "Engine/SkeletalMeshSocket.h"
+#include "Animation/BlendProfile.h"
 
 
 bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const FString& JsonPath)
@@ -398,4 +401,88 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
     FKismetEditorUtilities::CompileBlueprint(AnimBP);
 
     return true;
+}
+FString UAnimScriptingLibrary::InjectVirtualBonesAndSlots(USkeleton* TargetSkeleton, const TArray<FString>& VBSources, const TArray<FString>& VBTargets, const TArray<FString>& SlotNames, const TArray<FString>& SlotGroups)
+{
+    if (!TargetSkeleton) return TEXT("Target Skeleton is null.");
+    TargetSkeleton->Modify();
+    FString Report = TEXT("");
+
+    // 1. Inject Virtual Bones
+    for (int32 i = 0; i < VBSources.Num() && i < VBTargets.Num(); i++)
+    {
+        FName SourceName = FName(*VBSources[i]);
+        FName TargetName = FName(*VBTargets[i]);
+
+        bool bExists = false;
+        for (const FVirtualBone& VB : TargetSkeleton->GetVirtualBones()) {
+            if (VB.SourceBoneName == SourceName && VB.TargetBoneName == TargetName) {
+                bExists = true; break;
+            }
+        }
+        if (!bExists) {
+            if (TargetSkeleton->AddNewVirtualBone(SourceName, TargetName)) {
+                Report += FString::Printf(TEXT("  + Virtual Bone: %s -> %s\n"), *VBSources[i], *VBTargets[i]);
+            } else {
+                Report += FString::Printf(TEXT("  - FAILED Virtual Bone: %s -> %s (Missing bone in custom mesh)\n"), *VBSources[i], *VBTargets[i]);
+            }
+        }
+    }
+
+    // 2. Inject Anim Slot Groups
+    for (int32 i = 0; i < SlotNames.Num() && i < SlotGroups.Num(); i++)
+    {
+        FName SlotName = FName(*SlotNames[i]);
+        FName GroupName = FName(*SlotGroups[i]);
+        
+        bool bGroupExists = false;
+        for (const FAnimSlotGroup& Group : TargetSkeleton->GetSlotGroups()) {
+            if (Group.GroupName == GroupName) { bGroupExists = true; break; }
+        }
+        if (!bGroupExists) {
+            TargetSkeleton->AddSlotGroupName(GroupName);
+            Report += FString::Printf(TEXT("  + Slot Group: %s\n"), *SlotGroups[i]);
+        }
+        if (!TargetSkeleton->ContainsSlotName(SlotName)) {
+            TargetSkeleton->SetSlotGroupName(SlotName, GroupName);
+            Report += FString::Printf(TEXT("  + Anim Slot: %s\n"), *SlotNames[i]);
+        }
+    }
+    
+    return Report;
+}
+
+FString UAnimScriptingLibrary::InjectSockets(USkeleton* TargetSkeleton, const TArray<FString>& SocketNames, const TArray<FString>& BoneNames, const TArray<FVector>& RelativeLocations, const TArray<FRotator>& RelativeRotations, const TArray<FVector>& RelativeScales)
+{
+    if (!TargetSkeleton) return TEXT("Target Skeleton is null.");
+    TargetSkeleton->Modify();
+    FString Report = TEXT("");
+    
+    for (int32 i = 0; i < SocketNames.Num(); i++)
+    {
+        FName SocketName = FName(*SocketNames[i]);
+        FName BoneName = FName(*BoneNames[i]);
+        
+        bool bExists = false;
+        for (USkeletalMeshSocket* Socket : TargetSkeleton->Sockets) {
+            if (Socket && Socket->SocketName == SocketName) {
+                bExists = true;
+                break;
+            }
+        }
+        
+        if (!bExists) {
+            USkeletalMeshSocket* NewSocket = NewObject<USkeletalMeshSocket>(TargetSkeleton);
+            NewSocket->SocketName = SocketName;
+            NewSocket->BoneName = BoneName;
+            
+            if (RelativeLocations.IsValidIndex(i)) NewSocket->RelativeLocation = RelativeLocations[i];
+            if (RelativeRotations.IsValidIndex(i)) NewSocket->RelativeRotation = RelativeRotations[i];
+            if (RelativeScales.IsValidIndex(i)) NewSocket->RelativeScale = RelativeScales[i];
+            
+            TargetSkeleton->Sockets.Add(NewSocket);
+            Report += FString::Printf(TEXT("  + Socket: %s (Bone: %s)\n"), *SocketNames[i], *BoneNames[i]);
+        }
+    }
+    return Report;
 }

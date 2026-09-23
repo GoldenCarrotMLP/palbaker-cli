@@ -391,7 +391,8 @@ def main():
                 source_template,
                 has_anims=workspace.has_anims,
                 category=CATEGORY,
-                base_pal=BASE_PAL
+                base_pal=BASE_PAL,
+                keep_temp=True 
             )
 
         final_pak_path = workspace.output_pak_clean

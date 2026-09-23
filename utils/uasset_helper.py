@@ -193,6 +193,8 @@ def extract_notifies_from_ast(data: dict) -> list[dict]:
                 return notifies
     return notifies
 
+
+
 def create_notify_struct_node(index_str: str, time_val: float, name_val: str, duration_val: float = 0.0, template_struct: dict = None) -> dict:
     """Clones a schema-compliant AnimNotifyEvent struct from template and mutates only timing and name fields."""
     if template_struct:
@@ -246,16 +248,17 @@ def create_notify_struct_node(index_str: str, time_val: float, name_val: str, du
         "PropertyTagExtensions": "NoExtension",
         "Value": node_value
     }
+    
 
 def patch_montage_ast(
     data: dict,
     template_id: str,
     target_pal: str,
-    anim_name: str | None = None,
-    duration: float | None = None,
-    skeleton_guid: str | None = None,
-    notifies: list[dict] | None = None,
-    template_notify: dict | None = None
+    anim_name: str = None,
+    duration: float = None,
+    skeleton_guid: str = None,
+    notifies: list[dict] = None,
+    template_notify: dict = None
 ) -> dict:
     """Clones a seed montage AST and synthesizes a valid montage, preserving exact Sub-Object Notify properties."""
     raw_str = json.dumps(data)

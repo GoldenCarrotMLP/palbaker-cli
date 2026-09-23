@@ -25,7 +25,7 @@ class CliMasterController:
         self.view = CliDynamicPalsView()
         self.raw_mods = []
         
-    def refresh_mods(self, scan_disk: bool = True, target_mod: str | None = None, base_pal: str | None = None):
+    def refresh_mods(self, scan_disk: bool = True, target_mod: str = None, base_pal: str = None):
         from utils.scanner import get_mod_info
         mods = get_mod_info(self.settings, target_mod)
         if base_pal:

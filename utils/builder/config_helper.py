@@ -30,7 +30,7 @@ def restore_palbaker_backup(uproject_path: str):
             except (PermissionError, OSError):
                 time.sleep(0.3)
 
-def inject_packaging_settings(ini_path: str, ue_virtual_path: str, skeleton_virtual_path: str, anims_virtual_path: str, has_anims: bool, extra_paths: list | None = None):
+def inject_packaging_settings(ini_path: str, ue_virtual_path: str, skeleton_virtual_path: str, anims_virtual_path: str, has_anims: bool, extra_paths: list = None):
     if not os.path.exists(ini_path):
         return
         
@@ -103,7 +103,7 @@ def inject_packaging_settings(ini_path: str, ue_virtual_path: str, skeleton_virt
         f.write("\n".join(new_lines) + "\n")
 
 class GameIniCookContext:
-    def __init__(self, workspace, extra_paths: list | None = None):
+    def __init__(self, workspace, extra_paths: list = None):
         self.workspace = workspace
         self.extra_paths = extra_paths or []
 
