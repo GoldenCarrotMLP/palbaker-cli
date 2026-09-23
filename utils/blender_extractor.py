@@ -145,7 +145,15 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
         asset_key = montage_asset
 
         # Preserve existing user notifies / rest properties if already configured
-        prev_entry = existing_anims.get(asset_key) or existing_anims.get(sequence_asset) or existing_anims.get(clean_track) or {}
+        prev_entry = existing_anims.get(asset_key) or existing_anims.get(sequence_asset) or existing_anims.get(clean_track)
+        if not prev_entry:
+            # Search by clean track name or suffix (matches AM_CatMage_Cooking to Cooking)
+            for k, v in existing_anims.items():
+                if v.get("nla_track_name", "").lower() == clean_track.lower() or k.lower().endswith(f"_{clean_track.lower()}"):
+                    prev_entry = v
+                    break
+        prev_entry = prev_entry or {}
+
         saved_notifies = prev_entry.get("notifies", [])
         saved_rest_props = prev_entry.get("rest_props")
 

@@ -152,7 +152,7 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         skel_data = import_ui.skeletal_mesh_import_data
         skel_data.set_editor_property('import_mesh_lo_ds', False)
         skel_data.set_editor_property('import_morph_targets', True)
-        skel_data.set_editor_property('use_t0_as_ref_pose', True)
+        skel_data.set_editor_property('use_t0_as_ref_pose', False)
         skel_data.set_editor_property('normal_import_method', unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
         
         # Skeleton routing: nest variant skeleton inside base pal folder

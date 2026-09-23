@@ -257,7 +257,7 @@ def patch_montage_ast(
     notifies: list[dict] | None = None,
     template_notify: dict | None = None
 ) -> dict:
-    """Clones a seed montage AST and synthesizes an arbitrary valid montage with target notifies and duration."""
+    """Clones a seed montage AST and synthesizes a valid montage, preserving exact Sub-Object Notify properties."""
     raw_str = json.dumps(data)
     if anim_name:
         raw_str = raw_str.replace(f"AS_{template_id}_CookingStart", f"AS_{target_pal}_{anim_name}")
@@ -299,35 +299,41 @@ def patch_montage_ast(
                                         if seg_p.get("Name") == "AnimEndTime":
                                             seg_p["Value"] = dur_float
 
+    # SAFELY PATCH NOTIFIES IN-PLACE TO PRESERVE COMBAT LOGIC AND BRANCHING POINTS
     if notifies is not None:
         notifies_prop = next((p for p in props if p.get("Name") == "Notifies"), None)
-        if not notifies_prop:
-            notifies_prop = {
-                "$type": "UAssetAPI.PropertyTypes.Objects.ArrayPropertyData, UAssetAPI",
-                "ArrayType": "StructProperty",
-                "Name": "Notifies",
-                "ArrayIndex": 0,
-                "PropertyGuid": None,
-                "IsZero": False,
-                "PropertyTagFlags": "None",
-                "PropertyTypeName": None,
-                "PropertyTagExtensions": "NoExtension",
-                "Value": []
-            }
-            props.append(notifies_prop)
+        if notifies_prop and isinstance(notifies_prop.get("Value"), list):
+            for i, orig_notify in enumerate(notifies_prop["Value"]):
+                if i < len(notifies):
+                    user_not = notifies[i]
+                    new_time = float(user_not.get("Time", 0.0))
+                    new_dur = float(user_not.get("Duration", 0.0))
+                    
+                    struct_vals = orig_notify.get("Value", [])
+                    for p in struct_vals:
+                        if p.get("Name") in ["LinkValue", "SegmentBeginTime", "TriggerTimeOffset"]:
+                            p["Value"] = new_time
+                        elif p.get("Name") == "Duration":
+                            p["Value"] = new_dur
+                        elif p.get("Name") == "EndLink" and isinstance(p.get("Value"), list):
+                            for end_p in p["Value"]:
+                                if end_p.get("Name") in ["LinkValue", "SegmentBeginTime"]:
+                                    end_p["Value"] = new_time + new_dur
+                                elif end_p.get("Name") == "SegmentLength":
+                                    end_p["Value"] = new_dur
 
-        tmpl = template_notify or (notifies_prop["Value"][0] if notifies_prop.get("Value") else None)
-
-        notifies_prop["Value"] = [
-            create_notify_struct_node(
-                str(i),
-                float(n.get("Time", 0.0)),
-                n.get("Name", "PalCustomNotify"),
-                float(n.get("Duration", 0.0)),
-                template_struct=tmpl
-            )
-            for i, n in enumerate(notifies)
-        ]
+            # Also update the BranchingPointMarkers timings to stay synced with the shifted notifies
+            branch_prop = next((p for p in props if p.get("Name") == "BranchingPointMarkers"), None)
+            if branch_prop and isinstance(branch_prop.get("Value"), list):
+                for branch_marker in branch_prop["Value"]:
+                    struct_vals = branch_marker.get("Value", [])
+                    idx_prop = next((p for p in struct_vals if p.get("Name") == "NotifyIndex"), None)
+                    time_prop = next((p for p in struct_vals if p.get("Name") == "TriggerTime"), None)
+                    
+                    if idx_prop and time_prop:
+                        n_idx = int(idx_prop.get("Value", 0))
+                        if n_idx < len(notifies):
+                            time_prop["Value"] = float(notifies[n_idx].get("Time", 0.0))
 
     sync_namemap(mutated)
     return mutated

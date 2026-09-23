@@ -21,7 +21,7 @@ def extract_track_name(asset_name: str) -> str:
 
     if clean.startswith("BS_"): return clean[3:]
 
-    # 3. Unique Waza
+    # 3. Unique Waza Actions
     m = re.match(r'^(?:BP_Action_Unique|BP_UniqueAction)_[a-zA-Z0-9]+?_(.+)$', clean)
     if m: return m.group(1)
 
@@ -44,54 +44,166 @@ def find_key_globally(node, target_key):
                 return res
     return None
 
+def parse_float_safe(val, default: float = 0.0) -> float:
+    if val is None or val == "" or val == "+0" or val == "-0":
+        return 0.0
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+def resolve_sub_export_details(export_idx: int, exports: list, imports: list) -> dict:
+    """
+    Follows UAsset export pointers to extract deep notify metadata (CapsuleComponent
+    dimensions, AttackFilters, Niagara assets, Wwise audio events, and custom event names).
+    """
+    if not isinstance(export_idx, int) or export_idx <= 0 or export_idx > len(exports):
+        return {}
+
+    exp = exports[export_idx - 1]
+    exp_name = exp.get("ObjectName", "")
+    details = {"SubExport": exp_name}
+
+    for p in exp.get("Data", []):
+        p_name = p.get("Name")
+        p_val = p.get("Value")
+
+        # Extract text identifiers (NotifyName, EyeType, WazaID, Bone attachments)
+        if p_name in ["NotifyName", "EyeType", "Waza", "attachBoneName", "CollisionProfileName"]:
+            details[p_name] = str(p_val)
+
+        # Extract asset pointers (Audio Events, Niagara Systems)
+        elif p_name in ["Event", "Template", "Asset"]:
+            if isinstance(p_val, int) and p_val < 0 and (-p_val - 1) < len(imports):
+                details[p_name] = imports[-p_val - 1].get("ObjectName", "")
+
+        # Extract physical hitbox dimensions (CapsuleComponent)
+        elif p_name in ["CapsuleRadius", "CapsuleHalfHeight"]:
+            details[p_name] = parse_float_safe(p_val)
+
+        # Extract attack filter parameters
+        elif p_name == "NativeBlowVelocity":
+            if isinstance(p_val, list) and len(p_val) > 0:
+                vec = p_val[0].get("Value", {})
+                details["BlowVelocity"] = [
+                    parse_float_safe(vec.get("X")),
+                    parse_float_safe(vec.get("Y")),
+                    parse_float_safe(vec.get("Z"))
+                ]
+
+        # Extract nested child references (Hitbox Capsule pointers inside AttackCollision)
+        elif p_name in ["ShapeComponents", "AttackFilter"]:
+            if isinstance(p_val, int) and 0 < p_val <= len(exports):
+                sub_child = exports[p_val - 1]
+                details[p_name] = resolve_sub_export_details(p_val, exports, imports)
+            elif isinstance(p_val, list):
+                details[p_name] = [
+                    resolve_sub_export_details(item, exports, imports)
+                    for item in p_val if isinstance(item, int) and 0 < item <= len(exports)
+                ]
+
+    return details
+
 def scrape_notifies_from_json(uasset_json_path: str) -> list[dict]:
-    """Parses a NormalExport AnimMontage JSON to extract vanilla anim notifies."""
+    """
+    Parses any AnimMontage JSON (FModel or UAssetGUI format) to extract all notifies,
+    resolving linked sub-objects (hitbox capsules, damage filters, VFX emitters, audio).
+    """
     notifies_list = []
     if not os.path.exists(uasset_json_path):
         return notifies_list
 
     try:
-        with open(uasset_json_path, "r", encoding="utf-8") as f:
+        with open(uasset_json_path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
-            
+
         exports = data.get("Exports", [])
+        imports = data.get("Imports", [])
+
+        # Support FModel flat structure vs UAssetGUI exports array
         if not exports:
+            if isinstance(data, list) and len(data) > 0:
+                props = data[0].get("Properties", {})
+                notifies_val = props.get("Notifies", [])
+                for n in notifies_val:
+                    notifies_list.append({
+                        "Name": str(n.get("NotifyName", "PalCustomNotify")),
+                        "Time": round(parse_float_safe(n.get("LinkValue", n.get("DisplayTime"))), 4),
+                        "Duration": round(parse_float_safe(n.get("Duration")), 4)
+                    })
             return notifies_list
 
-        # Find the primary AnimMontage NormalExport
-        montage_export = next((exp for exp in exports if exp.get("$type", "").endswith("NormalExport, UAssetAPI") and exp.get("ObjectName") != "PalAnimNotifyState_Effect_0"), None)
-        if not montage_export:
-            return notifies_list
+        # Locate the primary AnimMontage export
+        montage_export = next(
+            (exp for exp in exports if exp.get("Type") == "AnimMontage" or exp.get("ObjectName", "").startswith("AM_")),
+            exports[0]
+        )
 
         props = montage_export.get("Data", [])
         notifies_prop = next((p for p in props if p.get("Name") == "Notifies"), None)
-        if not notifies_prop:
+        if not notifies_prop or not isinstance(notifies_prop.get("Value"), list):
             return notifies_list
 
-        # Iterate through the AnimNotifyEvent structs
-        for idx, struct_item in enumerate(notifies_prop.get("Value", [])):
+        for idx, struct_item in enumerate(notifies_prop["Value"]):
             inner_vals = struct_item.get("Value", [])
-            
+
             notify_name = "PalCustomNotify"
             notify_time = 0.0
             notify_duration = 0.0
-            
+            notify_obj_idx = 0
+            notify_state_idx = 0
+            track_index = 0
+
             for p in inner_vals:
                 p_name = p.get("Name")
                 p_val = p.get("Value")
-                
+
                 if p_name == "NotifyName":
                     notify_name = str(p_val)
                 elif p_name == "LinkValue":
-                    notify_time = float(p_val) if p_val is not None else 0.0
+                    notify_time = parse_float_safe(p_val, notify_time)
                 elif p_name == "Duration":
-                    notify_duration = float(p_val) if p_val is not None else 0.0
-                    
-            notifies_list.append({
+                    notify_duration = parse_float_safe(p_val, notify_duration)
+                elif p_name == "Notify":
+                    notify_obj_idx = p_val if isinstance(p_val, int) else 0
+                elif p_name == "NotifyStateClass":
+                    notify_state_idx = p_val if isinstance(p_val, int) else 0
+                elif p_name == "TrackIndex":
+                    track_index = int(p_val) if isinstance(p_val, (int, float)) else 0
+
+            # Follow pointers into sub-exports for deep parameter harvesting
+            deep_details = {}
+            if notify_obj_idx > 0:
+                deep_details = resolve_sub_export_details(notify_obj_idx, exports, imports)
+            elif notify_state_idx > 0:
+                deep_details = resolve_sub_export_details(notify_state_idx, exports, imports)
+
+            # Build record with standard core fields
+            notify_record = {
                 "Name": notify_name,
                 "Time": round(notify_time, 4),
-                "Duration": round(notify_duration, 4)
-            })
+                "Duration": round(notify_duration, 4),
+                "Track": track_index
+            }
+
+            # Map specific event signatures if resolved
+            if "NotifyName" in deep_details and deep_details["NotifyName"] != notify_name:
+                notify_record["EventName"] = deep_details["NotifyName"]
+            if "EyeType" in deep_details:
+                notify_record["EyeType"] = deep_details["EyeType"]
+            if "Event" in deep_details:
+                notify_record["AudioEvent"] = deep_details["Event"]
+            if "Template" in deep_details:
+                notify_record["NiagaraSystem"] = deep_details["Template"]
+            if "Waza" in deep_details:
+                notify_record["WazaID"] = deep_details["Waza"]
+            if "attachBoneName" in deep_details:
+                notify_record["AttachBone"] = deep_details["attachBoneName"]
+            if "BlowVelocity" in deep_details:
+                notify_record["BlowVelocity"] = deep_details["BlowVelocity"]
+
+            notifies_list.append(notify_record)
+
     except Exception as e:
         print(f"[Scraper Warning] Failed to parse notifies: {e}", flush=True)
 
@@ -115,9 +227,30 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
                 mapping_cache = json.load(f_c)
         except Exception: pass
 
-    log(f"Extracting Blueprint and animation metadata for {base_pal}...", "standard")
-    extract_game_files(settings, [f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{base_pal}/*"], temp_dir, format_type="raw")
+    # Clean previous temporary extraction directories
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    os.makedirs(temp_dir, exist_ok=True)
 
+    # -------------------------------------------------------------------------
+    # 1. Full Package Extraction (No wildcards in directory paths)
+    # -------------------------------------------------------------------------
+    log(f"Extracting all Blueprints, Montages, and BlendSpaces for {base_pal} from game archives...", "standard")
+    
+    extract_targets = [
+        f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{base_pal}/*",
+        f"Pal/Content/Pal/Animation/Character/Monster/{base_pal}/*",
+        f"Pal/Content/Pal/Animation/Character/Pending Monster/{base_pal}/*"
+    ]
+    
+    extract_game_files(settings, extract_targets, temp_dir, format_type="raw")
+
+    inventory = {}
+    blend_spaces = {}
+    rest_infos_by_montage = {}
+
+    # -------------------------------------------------------------------------
+    # 2. Parse Parent Actor Blueprint for Idle/Rest Configuration
+    # -------------------------------------------------------------------------
     bp_disk = None
     for root, _, files in os.walk(temp_dir):
         for f in files:
@@ -126,191 +259,69 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
                 break
         if bp_disk: break
 
-    inventory = {}
-    blend_spaces = {}
+    if bp_disk and os.path.exists(bp_disk):
+        bp_json = os.path.join(temp_dir, f"BP_{base_pal}.json")
+        try:
+            subprocess.run([uasset_gui_exe, "tojson", bp_disk, bp_json, "VER_UE5_1", usmap_path], check=True, creationflags=creation_flags)
+            with open(bp_json, "r", encoding="utf-8") as f:
+                raw_bp = json.load(f)
 
-    if not bp_disk or not os.path.exists(bp_disk):
-        return inventory, blend_spaces
-
-    bp_json = os.path.join(temp_dir, f"BP_{base_pal}.json")
-    try:
-        subprocess.run([uasset_gui_exe, "tojson", bp_disk, bp_json, "VER_UE5_1", usmap_path], check=True, creationflags=creation_flags)
-        with open(bp_json, "r", encoding="utf-8") as f:
-            raw_json = json.load(f)
-
-        imports = raw_json.get("Imports", [])
-
-        # Harvest RandomRestMontageInfos properties if present
-        rest_map = find_key_globally(raw_json, "RandomRestMontageInfos") or []
-        rest_infos_by_montage = {}
-        for rest in rest_map:
-            asset = rest.get("RandomRestMontage", {}).get("ObjectName", "")
-            clean_asset = asset.split("'")[-2] if "'" in asset else asset
-            if clean_asset:
-                rest_infos_by_montage[clean_asset] = {
-                    "weight": float(rest.get("Weight", 1.0)),
-                    "loop_min": int(rest.get("LoopNum_Min", 1)),
-                    "loop_max": int(rest.get("LoopNum_Max", 1)),
-                    "after_idle_time": float(rest.get("AfterIdleTime", 2.0))
-                }
-
-        # 1. Harvest all BlendSpaces
-        bs_assets = [imp.get("ObjectName", "") for imp in imports if imp.get("ClassName") in ["BlendSpace1D", "BlendSpace"]]
-        
-        for bs_asset_name in bs_assets:
-            if not bs_asset_name: continue
-            
-            bs_disk = None
-            for root, _, files in os.walk(temp_dir):
-                for f in files:
-                    if f.lower() == f"{bs_asset_name.lower()}.uasset":
-                        bs_disk = os.path.join(root, f)
-                        break
-                if bs_disk: break
-
-            if not bs_disk or not os.path.exists(bs_disk): continue
-
-            samples_list = []
-            axis_name = "Speed"
-            max_speed = 1000.0
-
-            bs_json = os.path.join(temp_dir, f"{bs_asset_name}.json")
-            try:
-                subprocess.run([uasset_gui_exe, "tojson", bs_disk, bs_json, "VER_UE5_1", usmap_path], check=True, creationflags=creation_flags)
-                with open(bs_json, "r", encoding="utf-8") as f_bs:
-                    bs_raw = json.load(f_bs)
-
-                bs_imports = bs_raw.get("Imports", [])
-                anim_seqs = [imp.get("ObjectName", "") for imp in bs_imports if imp.get("ClassName") == "AnimSequence"]
-
-                speed_step = (max_speed / max(1, len(anim_seqs) - 1)) if len(anim_seqs) > 1 else 0.0
-                for idx, seq_name in enumerate(anim_seqs):
-                    clean_track = extract_track_name(seq_name)
-                    calc_speed = round(float(idx * speed_step), 1)
-
-                    samples_list.append({
-                        "animation": seq_name,
-                        "clean_name": clean_track,
-                        "speed": calc_speed,
-                        "rate_scale": 1.0,
-                        "in_nla": False
-                    })
-
-                    inventory[seq_name] = {
-                        "category": "BlendSpaceSample",
-                        "enum_key": f"{bs_asset_name}_{clean_track}",
-                        "display_name": f"{bs_asset_name}: {clean_track} ({calc_speed} u/s)",
-                        "sequence_asset": seq_name,
-                        "montage_asset": None,
-                        "nla_track_name": clean_track,
-                        "in_nla": False,
-                        "is_modified": False,
-                        "notifies": []
+            rest_map = find_key_globally(raw_bp, "RandomRestMontageInfos") or []
+            for rest in rest_map:
+                asset = rest.get("RandomRestMontage", {}).get("ObjectName", "")
+                clean_asset = asset.split("'")[-2] if "'" in asset else asset
+                if clean_asset:
+                    rest_infos_by_montage[clean_asset] = {
+                        "weight": float(rest.get("Weight", 1.0)),
+                        "loop_min": int(rest.get("LoopNum_Min", 1)),
+                        "loop_max": int(rest.get("LoopNum_Max", 1)),
+                        "after_idle_time": float(rest.get("AfterIdleTime", 2.0))
                     }
-            except Exception: pass
+        except Exception as e:
+            log(f"Warning parsing Actor Blueprint: {e}", "warning")
 
-            clean_bs_key = extract_track_name(bs_asset_name)
-            enum_key = mapping_cache.get(clean_bs_key, {}).get("enum_key", f"EPalGeneralBlendSpaceType::{clean_bs_key}")
+    # -------------------------------------------------------------------------
+    # 3. Harvest All BlendSpaces (*.uasset)
+    # -------------------------------------------------------------------------
+    bs_uassets = []
+    for root, _, files in os.walk(temp_dir):
+        for f in files:
+            if f.startswith("BS_") and f.endswith(".uasset"):
+                bs_uassets.append(os.path.join(root, f))
 
-            blend_spaces[clean_bs_key] = {
-                "enum_key": enum_key,
-                "asset_name": bs_asset_name,
-                "axis_name": axis_name,
-                "max_speed": max_speed,
-                "samples": samples_list
-            }
+    for bs_path in bs_uassets:
+        bs_asset_name = os.path.splitext(os.path.basename(bs_path))[0]
+        bs_json = bs_path.replace(".uasset", ".json")
 
-        # 2. Extract and decompile AnimMontages (AM_) to scrape original baseline notifies
-        montage_names = [imp.get("ObjectName", "") for imp in imports if imp.get("ClassName") == "AnimMontage"]
-        if montage_names:
-            log(f"Extracting {len(montage_names)} montages to scrape baseline notifies...")
-            montage_rel_paths = [f"Pal/Content/Pal/Animation/Character/Monster/{base_pal}/{m}*" for m in montage_names]
-            extract_game_files(settings, montage_rel_paths, temp_dir, format_type="raw")
+        try:
+            subprocess.run([uasset_gui_exe, "tojson", bs_path, bs_json, "VER_UE5_1", usmap_path], check=True, creationflags=creation_flags)
+            with open(bs_json, "r", encoding="utf-8") as f_bs:
+                bs_raw = json.load(f_bs)
 
-        for imp in imports:
-            c_name = imp.get("ClassName", "")
-            o_name = imp.get("ObjectName", "")
-            if not o_name or o_name in inventory: continue
+            bs_imports = bs_raw.get("Imports", [])
+            anim_seqs = [imp.get("ObjectName", "") for imp in bs_imports if imp.get("ClassName") == "AnimSequence"]
 
-            clean_track = extract_track_name(o_name)
+            max_speed = 1000.0
+            speed_step = (max_speed / max(1, len(anim_seqs) - 1)) if len(anim_seqs) > 1 else 0.0
+            samples_list = []
 
-            if c_name == "AnimMontage":
-                is_rest_animation = bool(re.match(r'^Rest_?\d+$', clean_track, re.IGNORECASE) or "rest0" in clean_track.lower())
+            for idx, seq_name in enumerate(anim_seqs):
+                clean_track = extract_track_name(seq_name)
+                calc_speed = round(float(idx * speed_step), 1)
 
-                # Scrape baseline notifies from the extracted uasset
-                scraped_notifies = []
-                extracted_am_uasset = None
-                for root, _, files in os.walk(temp_dir):
-                    for f in files:
-                        if f.lower() == f"{o_name.lower()}.uasset":
-                            extracted_am_uasset = os.path.join(root, f)
-                            break
-                    if extracted_am_uasset: break
+                samples_list.append({
+                    "animation": seq_name,
+                    "clean_name": clean_track,
+                    "speed": calc_speed,
+                    "rate_scale": 1.0,
+                    "in_nla": False
+                })
 
-                if extracted_am_uasset and os.path.exists(extracted_am_uasset):
-                    temp_am_json = extracted_am_uasset.replace(".uasset", "_scraped.json")
-                    subprocess.run([uasset_gui_exe, "tojson", extracted_am_uasset, temp_am_json, "VER_UE5_1", usmap_path], check=True, creationflags=creation_flags)
-                    scraped_notifies = scrape_notifies_from_json(temp_am_json)
-
-                if is_rest_animation:
-                    category = "RandomRest"
-                    enum_key = f"Rest_{clean_track}"
-                    display_name = f"Idle/Rest: {clean_track}"
-                    rest_props = rest_infos_by_montage.get(o_name, {
-                        "weight": 1.0,
-                        "loop_min": 1,
-                        "loop_max": 2,
-                        "after_idle_time": 2.0
-                    })
-                elif clean_track in mapping_cache:
-                    meta = mapping_cache[clean_track]
-                    category = meta.get("category", "GeneralMontage")
-                    enum_key = meta.get("enum_key", f"EPalGeneralMontageType::{clean_track}")
-                    display_name = meta.get("display_name", f"Montage: {clean_track}")
-                    rest_props = None
-                else:
-                    if "machete" in clean_track.lower() or "unique" in o_name.lower():
-                        category = "UniqueAttack"
-                        enum_key = f"EPalWazaID::Unique_{base_pal}_{clean_track}"
-                        display_name = f"Unique: {clean_track.replace('_', ' ')}"
-                    else:
-                        category = "GeneralMontage"
-                        enum_key = f"EPalGeneralMontageType::{clean_track}"
-                        display_name = f"Montage: {clean_track.replace('_', ' ')}"
-                    rest_props = None
-
-                anim_entry = {
-                    "category": category,
-                    "enum_key": enum_key,
-                    "display_name": display_name,
-                    "montage_asset": o_name,
-                    "sequence_asset": o_name.replace("AM_", "AS_"),
-                    "nla_track_name": clean_track,
-                    "in_nla": False,
-                    "is_modified": False,
-                    "notifies": scraped_notifies # Baseline fully loaded!
-                }
-                if rest_props:
-                    anim_entry["rest_props"] = rest_props
-
-                inventory[o_name] = anim_entry
-
-            elif c_name == "AnimSequence" and o_name not in inventory:
-                if clean_track in mapping_cache:
-                    meta = mapping_cache[clean_track]
-                    category = meta.get("category", "LocomotionSequence")
-                    enum_key = meta.get("enum_key", f"EPalGeneralAnimSequenceType::{clean_track}")
-                    display_name = meta.get("display_name", f"Sequence: {clean_track}")
-                else:
-                    category = "LocomotionSequence"
-                    enum_key = f"EPalGeneralAnimSequenceType::{clean_track}"
-                    display_name = f"Sequence: {clean_track.replace('_', ' ')}"
-
-                inventory[o_name] = {
-                    "category": category,
-                    "enum_key": enum_key,
-                    "display_name": display_name,
-                    "sequence_asset": o_name,
+                inventory[seq_name] = {
+                    "category": "BlendSpaceSample",
+                    "enum_key": f"{bs_asset_name}_{clean_track}",
+                    "display_name": f"{bs_asset_name}: {clean_track} ({calc_speed} u/s)",
+                    "sequence_asset": seq_name,
                     "montage_asset": None,
                     "nla_track_name": clean_track,
                     "in_nla": False,
@@ -318,7 +329,117 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
                     "notifies": []
                 }
 
-    except Exception as e:
-        log(f"Warning during blueprint harvest: {e}", "warning")
+            clean_bs_key = extract_track_name(bs_asset_name)
+            enum_key = mapping_cache.get(clean_bs_key, {}).get("enum_key", f"EPalGeneralBlendSpaceType::{clean_bs_key}")
 
+            blend_spaces[clean_bs_key] = {
+                "enum_key": enum_key,
+                "asset_name": bs_asset_name,
+                "axis_name": "Speed",
+                "max_speed": max_speed,
+                "samples": samples_list
+            }
+        except Exception: pass
+
+    # -------------------------------------------------------------------------
+    # 4. Harvest All AnimMontages (*.uasset) with Deep Notify Extraction
+    # -------------------------------------------------------------------------
+    am_uassets = []
+    for root, _, files in os.walk(temp_dir):
+        for f in files:
+            if f.startswith("AM_") and f.endswith(".uasset"):
+                am_uassets.append(os.path.join(root, f))
+
+    log(f"Decompiling and scraping notifies from {len(am_uassets)} AnimMontages...", "standard")
+
+    for am_path in am_uassets:
+        o_name = os.path.splitext(os.path.basename(am_path))[0]
+        clean_track = extract_track_name(o_name)
+        am_json = am_path.replace(".uasset", ".json")
+
+        scraped_notifies = []
+        try:
+            subprocess.run([uasset_gui_exe, "tojson", am_path, am_json, "VER_UE5_1", usmap_path], check=True, creationflags=creation_flags)
+            scraped_notifies = scrape_notifies_from_json(am_json)
+        except Exception: pass
+
+        is_rest_animation = bool(re.match(r'^Rest_?\d+$', clean_track, re.IGNORECASE) or "rest0" in clean_track.lower())
+
+        if is_rest_animation:
+            category = "RandomRest"
+            enum_key = f"Rest_{clean_track}"
+            display_name = f"Idle/Rest: {clean_track}"
+            rest_props = rest_infos_by_montage.get(o_name, {
+                "weight": 1.0, "loop_min": 1, "loop_max": 2, "after_idle_time": 2.0
+            })
+        elif clean_track in mapping_cache:
+            meta = mapping_cache[clean_track]
+            category = meta.get("category", "GeneralMontage")
+            enum_key = meta.get("enum_key", f"EPalGeneralMontageType::{clean_track}")
+            display_name = meta.get("display_name", f"Montage: {clean_track}")
+            rest_props = None
+        else:
+            if any(kw in clean_track.lower() for kw in ["tossin", "unique", "skill", "machete", "punch"]):
+                category = "UniqueAttack"
+                enum_key = f"EPalWazaID::Unique_{base_pal}_{clean_track}"
+                display_name = f"Unique: {clean_track.replace('_', ' ')}"
+            else:
+                category = "GeneralMontage"
+                enum_key = f"EPalGeneralMontageType::{clean_track}"
+                display_name = f"Montage: {clean_track.replace('_', ' ')}"
+            rest_props = None
+
+        anim_entry = {
+            "category": category,
+            "enum_key": enum_key,
+            "display_name": display_name,
+            "montage_asset": o_name,
+            "sequence_asset": o_name.replace("AM_", "AS_"),
+            "nla_track_name": clean_track,
+            "in_nla": False,
+            "is_modified": False,
+            "notifies": scraped_notifies
+        }
+        if rest_props:
+            anim_entry["rest_props"] = rest_props
+
+        inventory[o_name] = anim_entry
+
+    # -------------------------------------------------------------------------
+    # 5. Harvest Standalone AnimSequences (*.uasset)
+    # -------------------------------------------------------------------------
+    as_uassets = []
+    for root, _, files in os.walk(temp_dir):
+        for f in files:
+            if f.startswith("AS_") and f.endswith(".uasset"):
+                as_uassets.append(os.path.join(root, f))
+
+    for as_path in as_uassets:
+        seq_name = os.path.splitext(os.path.basename(as_path))[0]
+        if seq_name in inventory: continue
+
+        clean_track = extract_track_name(seq_name)
+        if clean_track in mapping_cache:
+            meta = mapping_cache[clean_track]
+            category = meta.get("category", "LocomotionSequence")
+            enum_key = meta.get("enum_key", f"EPalGeneralAnimSequenceType::{clean_track}")
+            display_name = meta.get("display_name", f"Sequence: {clean_track}")
+        else:
+            category = "LocomotionSequence"
+            enum_key = f"EPalGeneralAnimSequenceType::{clean_track}"
+            display_name = f"Sequence: {clean_track.replace('_', ' ')}"
+
+        inventory[seq_name] = {
+            "category": category,
+            "enum_key": enum_key,
+            "display_name": display_name,
+            "sequence_asset": seq_name,
+            "montage_asset": None,
+            "nla_track_name": clean_track,
+            "in_nla": False,
+            "is_modified": False,
+            "notifies": []
+        }
+
+    log(f"Extracted {len(inventory)} total animations and {len(blend_spaces)} blendspaces.", "success")
     return inventory, blend_spaces

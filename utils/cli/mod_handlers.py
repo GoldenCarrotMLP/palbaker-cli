@@ -233,7 +233,7 @@ def handle_mod_command(args, settings):
         sys.exit(1)
 
 
-    if action in ["push", "full", "decompile", "browse-ue", "recursive-cook"]:
+    if action in ["push", "full", "decompile", "browse-ue", "recursive-cook", "push-anims"]:
         is_connected, err_code, err_msg = verify_unreal_connection(settings)
         if not is_connected:
             json_print({"status": "error", "error_code": err_code, "message": err_msg})
@@ -378,10 +378,19 @@ def handle_mod_command(args, settings):
         existing_anims = sidecar_data.get("custom_animations", {}).get("anims", {})
         
         for inv_k, inv_v in inventory.items():
-            if inv_k in existing_anims:
-                inv_v["notifies"] = existing_anims[inv_k].get("notifies", [])
-                if "rest_props" in existing_anims[inv_k]:
-                    inv_v["rest_props"] = existing_anims[inv_k]["rest_props"]
+            # Try exact key or match by track name
+            existing_match = existing_anims.get(inv_k)
+            if not existing_match:
+                clean_t = inv_v.get("nla_track_name", "")
+                existing_match = next((v for v in existing_anims.values() if v.get("nla_track_name") == clean_t), None)
+
+            if existing_match:
+                # ONLY preserve existing notifies if they are NOT empty (e.g. user customized them)
+                if existing_match.get("notifies"):
+                    inv_v["notifies"] = existing_match["notifies"]
+                if "rest_props" in existing_match:
+                    inv_v["rest_props"] = existing_match["rest_props"]
+
 
         sidecar_data.setdefault("custom_animations", {})["is_active"] = True
         sidecar_data["custom_animations"]["anims"] = inventory
@@ -451,50 +460,43 @@ def handle_mod_command(args, settings):
 
         
     elif action == "push-anims":
-        from utils.anim_patcher.montage_generator import create_dynamic_montage_payload, build_uasset
-        from utils.sidecar_helper import load_sidecar
-        from utils.builder.unreal_helper import run_remote_command, focus_unreal_window
-        import tempfile
-
-        sidecar_path = os.path.join(mod_data["fmodel_path"], f"{mod_name}_blend.json")
-        sidecar_data = load_sidecar(sidecar_path)
-        custom_anims_meta = sidecar_data.get("custom_animations", {})
-        anims_dict = custom_anims_meta.get("anims", {})
-
-        # Step 1: Export unified FBX with mesh and animations together
         blend_file = os.path.join(mod_data["fmodel_path"], f"{mod_name}.blend")
-        export_fbx = os.path.join(mod_data["fmodel_path"], f"{mod_name}.fbx")
-
-        # Clean up legacy standalone _Anims.fbx if present
-        legacy_anims_fbx = os.path.join(mod_data["fmodel_path"], f"{mod_name}_Anims.fbx")
-        if os.path.exists(legacy_anims_fbx):
-            try: os.remove(legacy_anims_fbx)
-            except OSError: pass
+        export_anims_dir = os.path.join(mod_data["fmodel_path"], ".temp_export_anims")
+        shutil.rmtree(export_anims_dir, ignore_errors=True)
+        os.makedirs(export_anims_dir, exist_ok=True)
 
         repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         exporter_script = os.path.join(repo_root, "utils", "blender_export_anims.py")
         
-        cmd = [settings["blender"], "-b", blend_file, "--python", exporter_script, "--", "--output-fbx", export_fbx]
+        # Step 1: Export individual FBXs
+        cmd = [
+            settings["blender"], "-b", blend_file,
+            "--python", exporter_script, "--",
+            "--output-dir", export_anims_dir,
+            "--mod-name", mod_name,
+            "--base-pal", base_pal
+        ]
+        creation_flags = 0x08000000 if os.name == 'nt' else 0
         blender_res = subprocess.run(
             cmd, 
             capture_output=True, 
             text=True, 
             encoding="utf-8", 
             errors="replace", 
-            creationflags=0x08000000 if os.name == 'nt' else 0
+            creationflags=creation_flags
         )
         if blender_res.stdout and blender_res.stdout.strip():
             print(blender_res.stdout, flush=True)
 
-                # Resolve source template for clean take prefix stripping
         source_pal, is_custom = resolve_source_template(mod_data, settings, base_pal, mod_name)
 
-        # Step 2: Ingest FBX takes into Unreal Editor via Remote Execution
+        # Step 2: Configure Unreal Batch Import
+        import tempfile
         temp_dir = tempfile.gettempdir()
         cfg_path = os.path.join(temp_dir, "palbaker_anim_import_config.json")
         with open(cfg_path, "w", encoding="utf-8") as f_cfg:
             json.dump({
-                "fbx_file": export_fbx,
+                "anims_dir": export_anims_dir,
                 "mod_name": mod_name,
                 "base_pal": base_pal,
                 "template_id": source_pal,
@@ -506,21 +508,31 @@ def handle_mod_command(args, settings):
         target_project_name = os.path.splitext(os.path.basename(settings["uproject"]))[0]
         cmd_import = f'f = open(r"{import_script}", encoding="utf-8"); exec(f.read()); f.close()'
         
+        from utils.builder.unreal_helper import run_remote_command, focus_unreal_window
         success, ue_msg = run_remote_command(settings["ue_root"], target_project_name, cmd_import)
         if ue_msg.strip():
             print(ue_msg, flush=True)
 
+        if not success:
+            error_print("Failed to push animations to Unreal Editor.")
+            sys.exit(1)
+
+        # Clean temporary staging directory and config
+        shutil.rmtree(export_anims_dir, ignore_errors=True)
         try: os.remove(cfg_path)
         except OSError: pass
 
-        anims_vpath = f"/Game/Pal/Animation/Character/{mod_data.get('category', 'Monster').replace(' ', '_')}/{mod_name}"
+        category_sanitized = mod_data.get('category', 'Monster').replace(' ', '_')
+        is_var = (not is_custom and base_pal.lower() != mod_name.lower())
+        anims_vpath = f"/Game/Pal/Animation/Character/{category_sanitized}/{base_pal}/{mod_name}" if is_var else f"/Game/Pal/Animation/Character/{category_sanitized}/{mod_name}"
+        
         sync_cmd = f'import unreal; unreal.EditorUtilityLibrary.sync_browser_to_folders(["{anims_vpath}"]); unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous(["{anims_vpath}"], True)'
         run_remote_command(settings["ue_root"], target_project_name, sync_cmd)
         focus_unreal_window(target_project_name)
 
         json_print({
             "status": "success",
-            "message": f"Successfully imported FBX takes into Unreal! Montages will compile on Cook."
+            "message": f"Successfully imported animations into Unreal! Montages will compile on Cook."
         })
 
     elif action == "set-preserve-materials":

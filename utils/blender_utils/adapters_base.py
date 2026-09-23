@@ -429,25 +429,47 @@ def compile_material_instance_base(mat_name: str, parent_class: str, params: dic
 
 @translator.register("export_fbx", (0, 0))
 def export_fbx_base(fbx_path: str, armature_name: str = "Armature"):
-    from mathutils import Matrix  # type: ignore
-    
     arm_obj = bpy.data.objects.get(armature_name)
-    if arm_obj:
-        print("Restoring bones to T-pose before export...")
-        for p_bone in arm_obj.pose.bones:  # type: ignore
-            p_bone.matrix_basis = Matrix.Identity(4)
-        bpy.context.view_layer.update()  # type: ignore
-    
+    if not arm_obj:
+        return
+
+    # Ensure in Object Mode
+    if bpy.ops.object.mode_set.poll():
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    # 1. Apply Object Transforms on Armature and all Child Meshes (Fixes 90-degree rotation)
+    bpy.ops.object.select_all(action='DESELECT')
+    arm_obj.select_set(True)
+    for child in arm_obj.children:
+        if child.type == 'MESH':
+            child.select_set(True)
+    bpy.context.view_layer.objects.active = arm_obj
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+    # 2. Force Armature into REST position (Bypasses constraints and fixes bone twisting)
+    original_pose_pos = arm_obj.data.pose_position
+    arm_obj.data.pose_position = 'REST'
+    bpy.context.view_layer.update()
+
+    print("[PalBaker Export] Exporting FBX in neutral REST pose with applied transforms...", flush=True)
+
+    # 3. Export FBX
     bpy.ops.export_scene.fbx(
         filepath=os.path.abspath(fbx_path),
-        use_selection=False,
+        use_selection=True,
         object_types={'ARMATURE', 'MESH'},
         add_leaf_bones=False,
         mesh_smooth_type='FACE',
         armature_nodetype='ROOT',
+        axis_forward='-Z',
+        axis_up='Y',
         global_scale=0.01,
         apply_scale_options='FBX_SCALE_ALL'
     )
+
+    # Restore Pose position for viewport interaction
+    arm_obj.data.pose_position = original_pose_pos
+    bpy.context.view_layer.update()
 
 # --- ADDED INTERACTIVE SHADER ADAPTERS ---
 
