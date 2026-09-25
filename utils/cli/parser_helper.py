@@ -117,6 +117,9 @@ def create_cli_parser() -> argparse.ArgumentParser:
     creator_refresh_bp = creator_subparsers.add_parser("refresh-bp", help="Refresh Actor Blueprint")
     creator_refresh_bp.add_argument("id", help="Target unique ID to refresh")
     creator_refresh_bp.add_argument("--keep-temp", action="store_true", help="Keep temporary decompiled JSON files in temp_bp_extract for debugging")
+
+    creator_validate = creator_subparsers.add_parser("validate", help="Validate custom Pal features and dependencies")
+    creator_validate.add_argument("id", help="Target unique ID to validate")
     # manager
     manager_parser = subparsers.add_parser("manager", help="Global state management")
     manager_subparsers = manager_parser.add_subparsers(dest="subcommand", required=True)

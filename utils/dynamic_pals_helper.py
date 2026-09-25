@@ -253,7 +253,7 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
     final_character_id = f"MOD_{monster_name}" if is_custom_pal else monster_name
 
     material_to_virtual_dir = {}
-    vanilla_dir = os.path.normpath(os.path.join(fmodel_root, "Pal", "Content", "Pal", "Model", "Character", category, monster_name))
+    vanilla_dir = os.path.normpath(os.path.join(fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", category, monster_name))
     
     vanilla_sidecar_path = os.path.join(vanilla_dir, f"{monster_name}_blend.json")
     if os.path.exists(vanilla_sidecar_path):
@@ -281,6 +281,7 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
                         pass
 
     skin_map = {}
+    manifest_dirty = False
 
     for v in variants_list:
         if v.get("is_base") and not is_custom_pal:
@@ -289,17 +290,30 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
         try:
             slots_order = []
             
-            # --- NEW: Respect AnimTarget for cross-pal path resolution ---
+            # --- Respect AnimTarget for cross-pal path resolution ---
             anim_target = v.get("AnimTarget", "")
-            target_base_pal = anim_target if anim_target else monster_name
+            target_base_pal = monster_name
+            # Only use anim_target as target_base_pal if it's a bare Pal name (not an Actor Blueprint virtual path)
+            if anim_target and not anim_target.startswith("/") and "/" not in anim_target and "\\" not in anim_target:
+                target_base_pal = anim_target
             
             dynamic_pals_staging_dir_target = os.path.normpath(os.path.join(fmodel_root, "Exports", "Pal", "Content", "Palbaker", "Model", "Character", category, target_base_pal))
             vanilla_dir_target = os.path.normpath(os.path.join(fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", category, target_base_pal))
+
+            raw_label = v.get("label", "Default")
+            if raw_label.startswith(f"{monster_name}_"):
+                skin_label = raw_label[len(monster_name) + 1:]
+            elif raw_label == "base":
+                skin_label = "Default"
+            else:
+                skin_label = raw_label
 
             if v.get("is_base") and is_custom_pal:
                 cat_sanitized = category.replace(" ", "_")
                 mesh_resolved_path = f"/Game/Pal/Model/Character/{cat_sanitized}/{monster_name}/SK_{monster_name}"
                 sidecar_path = os.path.join(vanilla_dir, f"{monster_name}_blend.json")
+                blend_base_name = monster_name
+                blend_file_path = None
             else:
                 blend_base_name = os.path.splitext(v.get("SkeletonSource", "base"))[0]
                 if blend_base_name == "base":
@@ -308,14 +322,39 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
                 blend_file_path = None
                 sidecar_path = None
 
-                # Search inside the resolved target directory!
-                for search_root in [dynamic_pals_staging_dir_target, vanilla_dir_target]:
-                    if os.path.exists(search_root):
-                        for root, _, files in os.walk(search_root):
-                            if not blend_file_path and f"{os.path.basename(blend_base_name)}.blend" in files:
-                                blend_file_path = os.path.join(root, f"{os.path.basename(blend_base_name)}.blend")
-                            if not sidecar_path and f"{os.path.basename(blend_base_name)}_blend.json" in files:
-                                sidecar_path = os.path.join(root, f"{os.path.basename(blend_base_name)}_blend.json")
+                # Search across all potential workspace staging and vanilla directories
+                search_roots = [
+                    dynamic_pals_staging_dir,
+                    dynamic_pals_staging_dir_target,
+                    vanilla_dir_target,
+                    vanilla_dir
+                ]
+                search_roots = [os.path.normpath(p) for p in set(search_roots) if p and os.path.exists(p)]
+
+                candidate_names = []
+                if blend_base_name and blend_base_name != "base":
+                    candidate_names.append(os.path.basename(blend_base_name))
+                if skin_label and skin_label != "Default":
+                    candidate_names.append(skin_label)
+                if raw_label and raw_label not in candidate_names:
+                    candidate_names.append(raw_label)
+                if target_base_pal and target_base_pal not in candidate_names:
+                    candidate_names.append(target_base_pal)
+
+                for search_root in search_roots:
+                    for root, _, files in os.walk(search_root):
+                        for cname in candidate_names:
+                            if not blend_file_path and f"{cname}.blend" in files:
+                                blend_file_path = os.path.join(root, f"{cname}.blend")
+                            if not sidecar_path and f"{cname}_blend.json" in files:
+                                sidecar_path = os.path.join(root, f"{cname}_blend.json")
+
+                        # Subfolder match check (e.g. Boar/SexyRushroarNude/*_blend.json)
+                        if not sidecar_path and os.path.basename(root).lower() in [c.lower() for c in candidate_names if c]:
+                            for f in files:
+                                if f.endswith("_blend.json") and not f.startswith("."):
+                                    sidecar_path = os.path.join(root, f)
+                                    break
 
                 if blend_file_path:
                     clean_path = blend_file_path.replace("\\", "/")
@@ -333,6 +372,7 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
                     cat_sanitized = category.replace(" ", "_")
                     mesh_resolved_path = f"/Game/Pal/Model/Character/{cat_sanitized}/{monster_name}/SK_{monster_name}"
 
+            sidecar_data = {}
             if sidecar_path and os.path.exists(sidecar_path):
                 try:
                     with open(sidecar_path, "r", encoding="utf-8") as f_side:
@@ -341,11 +381,42 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
                 except Exception:
                     pass
 
-
             if not slots_order:
                 slots_order = ["mi_body", "mi_eye", "mi_mouth"]
 
             slots_order_lower = [s.lower() for s in slots_order]
+
+            # Detect if custom animations are active in sidecar or variant payload
+            custom_anims = sidecar_data.get("custom_animations", {})
+            has_custom_anims = bool(custom_anims.get("is_active", False))
+            if not has_custom_anims and isinstance(v.get("custom_animations"), dict):
+                has_custom_anims = bool(v["custom_animations"].get("is_active", False))
+
+            # Resolve expected Actor Blueprint location for custom animations
+            variant_mod_name = ""
+            if sidecar_path and os.path.exists(sidecar_path):
+                s_base = os.path.splitext(os.path.basename(sidecar_path))[0]
+                if s_base.endswith("_blend"):
+                    variant_mod_name = s_base[:-6]
+            if not variant_mod_name and blend_file_path and os.path.exists(blend_file_path):
+                variant_mod_name = os.path.splitext(os.path.basename(blend_file_path))[0]
+            if not variant_mod_name:
+                if v.get("SkeletonSource") and v.get("SkeletonSource") != "base":
+                    variant_mod_name = os.path.splitext(os.path.basename(v["SkeletonSource"]))[0]
+            if not variant_mod_name:
+                variant_mod_name = skin_label if skin_label != "Default" else monster_name
+
+            is_var = (variant_mod_name.lower() != monster_name.lower() and not (v.get("is_base") and is_custom_pal))
+            cat_sanitized = category.replace(" ", "_")
+
+            if "npc" in category.lower():
+                bp_virtual_dir = f"/Game/Pal/Blueprint/Character/NPC/{monster_name}/{variant_mod_name}" if is_var else f"/Game/Pal/Blueprint/Character/NPC/{variant_mod_name}"
+            elif "player" in category.lower():
+                bp_virtual_dir = f"/Game/Pal/Blueprint/Character/Player/{monster_name}/{variant_mod_name}" if is_var else f"/Game/Pal/Blueprint/Character/Player/{variant_mod_name}"
+            else:
+                bp_virtual_dir = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{monster_name}/{variant_mod_name}" if is_var else f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{variant_mod_name}"
+
+            expected_bp_location = f"{bp_virtual_dir}/BP_{variant_mod_name}"
 
             # Special Materials
             special_materials = []
@@ -393,22 +464,21 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
                     sk_entry["Set"] = float(m.get("Set", 0.5))
                 shape_keys.append(sk_entry)
 
-            # Clean Skin Label: Strip redundant parent prefix (e.g., "PandaGirl_Lopunny" -> "Lopunny")
-            raw_label = v.get("label", "Default")
-            if raw_label.startswith(f"{monster_name}_"):
-                skin_label = raw_label[len(monster_name) + 1:]
-            elif raw_label == "base":
-                skin_label = "Default"
-            else:
-                skin_label = raw_label
-
             # Construct strictly specified V2 Skin Object (omitting unconfigured fields!)
             skin_obj = {
                 "SkinPath": mesh_resolved_path
             }
 
-            if anim_target:
+            if has_custom_anims:
+                skin_obj["AnimTarget"] = expected_bp_location
+                if v.get("AnimTarget") != expected_bp_location:
+                    v["AnimTarget"] = expected_bp_location
+                    manifest_dirty = True
+            elif anim_target:
                 skin_obj["AnimTarget"] = anim_target
+            elif v.get("AnimTarget") and v["AnimTarget"].startswith("/Game/Pal/Blueprint/"):
+                v.pop("AnimTarget", None)
+                manifest_dirty = True
 
             # Dynamic Pal Icon Resolver
             icon_name = f"T_{os.path.basename(blend_base_name)}_icon_normal"
@@ -504,12 +574,20 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
     os.makedirs(swap_json_dir, exist_ok=True)
     target_path = os.path.join(swap_json_dir, f"{final_filename}.json")
 
+    if manifest_dirty and os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "w", encoding="utf-8") as f_man:
+                json.dump(manifest_data, f_man, indent=4)
+        except Exception:
+            pass
+
     try:
         with open(target_path, "w", encoding="utf-8") as f:
             json.dump(output_structure, f, indent=4)
         return True, f"SUCCESS: Compiled and deployed Dynamic Pals V2 config to {os.path.basename(target_path)}"
     except Exception as e:
         return False, f"Failed to write deployment JSON: {e}"
+
 
 def load_traits_database() -> dict:
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

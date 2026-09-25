@@ -5,7 +5,8 @@ import glob
 import subprocess
 import base64
 from utils.extractor.core import extract_game_files
-def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_id: str, settings: dict, temp_dir: str, cooked_dir: str, uasset_gui: str, flags: int, log, pal_data: dict = None, usmap_path: str = None) -> tuple[dict, str]:
+def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_id: str, settings: dict, temp_dir: str, cooked_dir: str, uasset_gui: str, flags: int, log, pal_data: dict = None, usmap_path: str = None, has_anims: bool = False) -> tuple[dict, str]:
+
     if pal_data is None:
         pal_data = {}
 
@@ -74,15 +75,22 @@ def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_
             source_wp_pkg = f"/Game/Pal/Blueprint/Weapon/{source_wp_name}"
             source_rel_core = f"Pal/Content/Pal/Blueprint/Weapon/{source_wp_name}"
         else:
-            log(f"  [Action: Weapon] Warning: No child template found for {wp_name}.", "warning")
+            log(f"  [Action: Weapon] Base weapon '{wp_name}' extraction triggered...", "standard")
             rel_core = wp_pkg.replace("/Game/", "Pal/Content/")
             extract_game_files(settings, [f"{rel_core}*"], temp_dir, format_type="raw")
-            source_disk = os.path.join(temp_dir, f"{wp_name}.uasset")
+            
+            source_disk = None
+            for root, _, files in os.walk(temp_dir):
+                if f"{wp_name.lower()}.uasset" in [f.lower() for f in files]:
+                    source_disk = os.path.join(root, f"{wp_name}.uasset")
+                    break
+                    
             source_wp_name = wp_name
             source_wp_pkg = wp_pkg
             source_rel_core = rel_core
 
-        if not os.path.exists(source_disk):
+        if not source_disk or not os.path.exists(source_disk):
+            log(f"  [Action: Weapon] Error: Failed to extract weapon {wp_name}. Skipping compilation.", "error")
             continue
 
         temp_wp_json = os.path.join(temp_dir, f"{new_wp_name}.json")
@@ -113,6 +121,14 @@ def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_
             wp_content = wp_content.replace(f"/Monster/{template_id}/SK_{template_id}", f"/Monster/{pal_id}/SK_{pal_id}")
             wp_content = wp_content.replace(f"SkeletalMesh'SK_{template_id}'", f"SkeletalMesh'SK_{pal_id}'")
             wp_content = wp_content.replace(f'"SK_{template_id}"', f'"SK_{pal_id}"')
+        if has_anims:
+            for suffix in ["Flamethrower", "Flamethrower_Fire", "Flamethrower_Fire_Start", "Launcher", "ThrowElecBomb", "Katana"]:
+                wp_content = wp_content.replace(f"AM_{source_wp_base}_{suffix}", f"AM_{pal_id}_{suffix}")
+                wp_content = wp_content.replace(f"AS_{source_wp_base}_{suffix}", f"AS_{pal_id}_{suffix}")
+            wp_content = wp_content.replace(f"/Monster/{source_wp_base}/", f"/Monster/{pal_id}/")
+            wp_content = wp_content.replace(f"/Skeleton/{source_wp_base}/", f"/Skeleton/{pal_id}/")
+            wp_content = wp_content.replace(f"SK_{source_wp_base}_Skeleton", f"SK_{pal_id}_Skeleton")
+
 
         # 4 & 5. Conditional Retargeting for Customizable VFX Weapons
         if mode in ["Flamethrower", "Launcher"]:
@@ -168,14 +184,15 @@ def clone_partner_weapons(json_data: dict, json_str: str, template_id: str, pal_
                         if isinstance(b64_data, str):
                             b_data = bytearray(base64.b64decode(b64_data))
                             
-                            for i in range(max(0, len(b_data) - 24), len(b_data) - 1):
-                                # Detect [0x02, 0x04] (Fire, Burn) or [0x06, 0x06] (Ice, Freeze) signatures
-                                if (b_data[i] in [0x02, 0x06, 0x03, 0x00]) and (b_data[i + 1] in [0x04, 0x06, 0x00]):
-                                    b_data[i] = elem_byte_val
-                                    b_data[i + 1] = eff_byte_val
-                                    export["Data"] = base64.b64encode(b_data).decode('utf-8')
-                                    log(f"  [Action: Weapon] Mutated Base64 sequence to Element: {elem_byte_val}, Effect: {eff_byte_val}", "success")
-                                    break
+                            # In BP_Kitsunebi_Flamethrower child CDOs (17 bytes):
+                            # Bytes 0-6 are FUnversionedHeader (NEVER mutate b_data[0..6]!)
+                            # Bytes 7-10 are the Niagara PackageIndex (-15)
+                            # Byte 11 is EPalElementType, Byte 12 is EPalAdditionalEffectType
+                            if len(b_data) >= 13:
+                                b_data[11] = elem_byte_val
+                                b_data[12] = eff_byte_val
+                                export["Data"] = base64.b64encode(b_data).decode('utf-8')
+                                log(f"  [Action: Weapon] Safely set Element={elem_byte_val} and Effect={eff_byte_val} at bytes [11, 12].", "success")
                                     
                         # Normal Export Scenario (List of properties)
                         elif isinstance(b64_data, list):

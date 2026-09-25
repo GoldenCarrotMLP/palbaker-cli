@@ -247,6 +247,12 @@ class WeaponManagerMixin:
             template_properties=template_props
         )
 
+        # Ensure the spawned weapon class is registered in the component's EDL dependencies
+        if "default_weapon_pkg" in preset or weapon_class_package:
+            for exp in self.exports:
+                if exp.get("ObjectName") == f"{param_var}_GEN_VARIABLE":
+                    exp["CreateBeforeSerializationDependencies"] = [wp_class_idx]
+
         # Inject RayStart component if needed
         if "ray_var" in preset:
             self.add_component(

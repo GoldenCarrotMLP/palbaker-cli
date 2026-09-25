@@ -527,7 +527,18 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                         extract_game_files(settings, [seed_bs_rel, seed_bs_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
                         seed_bs_disk = os.path.join(temp_dir, seed_bs_rel)
 
-                    if os.path.exists(seed_bs_disk):
+                    # Dynamic recursive search if exact relative path had case discrepancies
+                    if not os.path.exists(seed_bs_disk):
+                        for root, _, files in os.walk(temp_dir):
+                            for f in files:
+                                if f.lower().startswith("bs_move_") and f.lower().endswith(".uasset"):
+                                    seed_bs_disk = os.path.join(root, f)
+                                    break
+                            if seed_bs_disk and os.path.exists(seed_bs_disk):
+                                break
+
+                    bs_compiled_ok = False
+                    if seed_bs_disk and os.path.exists(seed_bs_disk):
                         old_bs_name = os.path.splitext(os.path.basename(seed_bs_disk))[0]
                         temp_bs_json = os.path.join(temp_dir, f"{new_bs_name}.json")
                         if decompile_uasset(uasset_gui_exe, seed_bs_disk, temp_bs_json, usmap_path):
@@ -536,28 +547,30 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
 
                             seed_pal_id = template_id if template_id in old_bs_name else "WeaselDragon"
 
-                            bs_str = bs_str.replace(f"/PalActorBP/{seed_pal_id}/{old_bs_name}", f"/PalActorBP/{pal_id}/{new_bs_name}")
+                            bs_str = bs_str.replace(f"/PalActorBP/{seed_pal_id}/{old_bs_name}", f"/PalActorBP/{target_bp_folder}/{new_bs_name}")
                             bs_str = bs_str.replace(f'"{old_bs_name}"', f'"{new_bs_name}"')
                             bs_str = bs_str.replace(f"'{old_bs_name}'", f"'{new_bs_name}'")
-                            bs_str = bs_str.replace(f"/PalActorBP/{seed_pal_id}/", f"/PalActorBP/{pal_id}/")
+                            bs_str = bs_str.replace(f"/PalActorBP/{seed_pal_id}/", f"/PalActorBP/{target_bp_folder}/")
 
                             if has_anims:
                                 bs_str = bs_str.replace(f"SK_{seed_pal_id}_Skeleton", f"SK_{pal_id}_Skeleton")
                                 bs_str = bs_str.replace(f"AS_{seed_pal_id}_", f"AS_{pal_id}_")
-                                bs_str = bs_str.replace(f"/Skeleton/{seed_pal_id}/", f"/Skeleton/{pal_id}/")
-                                bs_str = bs_str.replace(f"/Monster/{seed_pal_id}/", f"/Monster/{pal_id}/")
+                                bs_str = bs_str.replace(f"/Skeleton/{seed_pal_id}/", f"/Skeleton/{target_skel_folder}/")
+                                bs_str = bs_str.replace(f"/Monster/{seed_pal_id}/", f"/Monster/{target_anims_folder}/")
                             else:
                                 bs_str = bs_str.replace(f"SK_{seed_pal_id}_Skeleton", f"SK_{template_id}_Skeleton")
                                 bs_str = bs_str.replace(f"/Skeleton/{seed_pal_id}/", f"/Skeleton/{template_id}/")
                                 bs_str = bs_str.replace(f"AS_{seed_pal_id}_", f"AS_{template_id}_")
                                 bs_str = bs_str.replace(f"/Monster/{seed_pal_id}/", f"/Monster/{template_id}/")
 
-                            if f"BS_Move_{template_id}_Riding" not in seed_bs_rel:
-                                bs_str = bs_str.replace(f"AS_{template_id}_Run_Riding", f"AS_{template_id}_Run")
-                                bs_str = bs_str.replace(f"AS_{template_id}_Walk_Riding", f"AS_{template_id}_Walk")
+                            # Normalize any riding-specific sequence references to template's existing sequences
+                            bs_str = bs_str.replace(f"AS_{seed_pal_id}_Run_Riding", f"AS_{template_id}_Run")
+                            bs_str = bs_str.replace(f"AS_{seed_pal_id}_Walk_Riding", f"AS_{template_id}_Walk")
+                            bs_str = bs_str.replace(f"AS_{template_id}_Run_Riding", f"AS_{template_id}_Run")
+                            bs_str = bs_str.replace(f"AS_{template_id}_Walk_Riding", f"AS_{template_id}_Walk")
 
                             bs_data = json.loads(bs_str)
-                            bs_data["FolderName"] = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{pal_id}/{new_bs_name}"
+                            bs_data["FolderName"] = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_bs_name}"
                             if bs_data.get("Exports"):
                                 bs_data["Exports"][0]["ObjectName"] = new_bs_name
 
@@ -567,12 +580,18 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
 
                             if compile_uasset(uasset_gui_exe, temp_bs_json, dest_bs_uasset, usmap_path):
                                 log(f"  ✓ Compiled standalone Riding BlendSpace: {dest_bs_uasset}", "success")
+                                bs_compiled_ok = True
 
-                    bs_pkg_path = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{pal_id}/{new_bs_name}"
+                    bs_pkg_path = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_bs_name}"
                     bs_import_idx = mgr.ensure_import_chain(bs_pkg_path, new_bs_name, class_type="BlendSpace1D")
 
                     comp = mgr.find_static_char_param_export()
                     if comp and isinstance(comp.get("Data"), list):
+                        # --- CRITICAL FIX: Register Import in EDL Dependencies to satisfy FAsyncLoadingThread ---
+                        comp_deps = comp.setdefault("CreateBeforeSerializationDependencies", [])
+                        if bs_import_idx not in comp_deps:
+                            comp_deps.append(bs_import_idx)
+
                         bs_map = next((p for p in comp["Data"] if isinstance(p, dict) and p.get("Name") == "GeneralBlendSpaceMap"), None)
                         if bs_map and isinstance(bs_map.get("Value"), list):
                             bs_map["Value"] = [
@@ -681,6 +700,11 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                         skill_magnification=coop_weapon.get("SkillMagnification"),
                         aim_blur_angles=coop_weapon.get("AimBlurAngles")
                     )
+                    
+                    # --- CRITICAL FIX: Trigger actual Synthesis of the Weapon Blueprint ---
+                    from utils.blueprint_patcher.clone_weapons import clone_partner_weapons
+                    # We pass the dummy vars down to trigger the clone sequence into the cooked folder
+                    clone_partner_weapons({}, "", template_id, pal_id, settings, temp_dir, cooked_base_content, uasset_gui_exe, flags, log, pal_data=pal_data, usmap_path=usmap_path, has_anims=has_anims)
                 else:
                     mgr.remove_component("BP_CoopParam_Weapon")
                     mgr.remove_component("BP_CoopParam_AssaultRifleMode")

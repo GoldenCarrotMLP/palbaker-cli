@@ -230,6 +230,27 @@ class PalManager:
                         
                         data["resolved_icon_path"] = resolved_icon_path
                         
+                        # Resolve all_bones from the model's companion sidecar
+                        all_bones = []
+                        if fmodel_base:
+                            template_id = data.get("TemplateID", "")
+                            sidecar_candidates = [
+                                os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Model", "Character", "Monster", pal_id, f"{pal_id}_blend.json")),
+                                os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Model", "Character", "Monster", pal_id, f"{template_id}_blend.json")),
+                                os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Model", "Character", "Monster", template_id, f"{template_id}_blend.json")),
+                            ]
+                            for sc in sidecar_candidates:
+                                if os.path.exists(sc):
+                                    try:
+                                        with open(sc, "r", encoding="utf-8") as f_sc:
+                                            sc_json = json.load(f_sc)
+                                            if "all_bones" in sc_json and isinstance(sc_json["all_bones"], list):
+                                                all_bones = sc_json["all_bones"]
+                                                break
+                                    except Exception:
+                                        pass
+                        data["all_bones"] = all_bones
+                        
                         self.c.custom_pals.append(data)
                 except Exception: pass
 

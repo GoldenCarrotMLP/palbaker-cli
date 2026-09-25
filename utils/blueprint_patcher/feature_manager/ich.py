@@ -345,6 +345,9 @@ class ICHManagerMixin:
                 }
             ])
 
+            # Ensure the Funnel Character and Controller imports are created before template serialization
+            tmpl_export["CreateBeforeSerializationDependencies"] = [funnel_char_idx, funnel_ctrl_idx]
+
         sync_namemap(self.data)
 
     def get_partner_funnel_params(self) -> dict:

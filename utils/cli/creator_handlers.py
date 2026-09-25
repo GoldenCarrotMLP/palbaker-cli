@@ -120,17 +120,67 @@ def handle_creator_command(args, settings):
         try:
             updated_data = json.loads(data_str)
             controller.manager.save_custom_pal(pal_id, updated_data, sync=True)
-            # Echo back the updated data
+
+            # === RUN FEATURE DEPENDENCY & ATTACHMENT VALIDATION ===
+            from utils.validator import FeatureDependencyValidator
+            from utils.sidecar_helper import load_sidecar
+
+            repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            category = "Monster"
+            fmodel_path = os.path.normpath(os.path.join(settings["fmodel_output"], "Exports", "Pal", "Content", "Pal", "Model", "Character", category, pal_id))
+            sidecar_path = os.path.join(fmodel_path, f"{pal_id}_blend.json")
+
+            sidecar_data = load_sidecar(sidecar_path) if os.path.exists(sidecar_path) else {}
+            validator = FeatureDependencyValidator(repo_root)
+            missing_deps = validator.validate_dependencies(updated_data, sidecar_data)
+
+            if "all_bones" in sidecar_data:
+                updated_data["all_bones"] = sidecar_data["all_bones"]
+
+            # Echo back the updated data alongside verified feature dependencies
             json_print({
                 "status": "success", 
                 "message": f"Successfully updated custom Pal parameters for: {pal_id}",
-                "data": updated_data
+                "data": updated_data,
+                "missing_dependencies": missing_deps
             })
         except json.JSONDecodeError:
             error_print("Invalid JSON payload passed to --data.")
             sys.exit(1)
         except Exception as e:
             error_print(f"Failed to update standalone Pal: {str(e)}")
+            sys.exit(1)
+
+    elif subcommand == "validate":
+        if not pal_id:
+            error_print("Missing required parameter: <pal_id>")
+            sys.exit(1)
+        try:
+            controller.load_custom_pals()
+            pal_data = next((p for p in controller.custom_pals if p["CharacterID"] == pal_id), None)
+            if not pal_data:
+                error_print(f"Custom Pal {pal_id} configuration not found on disk.")
+                sys.exit(1)
+
+            from utils.validator import FeatureDependencyValidator
+            from utils.sidecar_helper import load_sidecar
+
+            repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            category = "Monster"
+            fmodel_path = os.path.normpath(os.path.join(settings["fmodel_output"], "Exports", "Pal", "Content", "Pal", "Model", "Character", category, pal_id))
+            sidecar_path = os.path.join(fmodel_path, f"{pal_id}_blend.json")
+
+            sidecar_data = load_sidecar(sidecar_path) if os.path.exists(sidecar_path) else {}
+            validator = FeatureDependencyValidator(repo_root)
+            missing_deps = validator.validate_dependencies(pal_data, sidecar_data)
+
+            json_print({
+                "status": "success",
+                "pal_id": pal_id,
+                "missing_dependencies": missing_deps
+            })
+        except Exception as e:
+            error_print(f"Validation crashed: {str(e)}")
             sys.exit(1)
 
     # utils/cli/creator_handlers.py (Excerpt)

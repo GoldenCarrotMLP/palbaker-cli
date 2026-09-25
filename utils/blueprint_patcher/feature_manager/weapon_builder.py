@@ -39,11 +39,12 @@ EFFECT_MAP = {
 
 def synthesize_flamethrower_cluster(
     seed_weapon_data: dict,
-    seed_montages: dict,
-    pal_id: str,
+    seed_montages: dict = None,
+    pal_id: str = "",
     template_id: str = "Kitsunebi",
     skeleton_guid: str = "BF21DEE0-4BCF0A09-60C97DA1-367595A0",
-    config: dict = None
+    config: dict = None,
+    use_custom_anims: bool = None
 ) -> dict:
     """
     Synthesizes the complete multi-asset weapon cluster for a partner weapon:
@@ -66,37 +67,39 @@ def synthesize_flamethrower_cluster(
     elem_byte = ELEMENT_MAP.get(element_str, 2)
     eff_byte = EFFECT_MAP.get(effect_str, 4)
 
+    if use_custom_anims is None:
+        use_custom_anims = bool(seed_montages and any(seed_montages.values()))
+
     # -------------------------------------------------------------------------
-    # 1. Synthesize the 3 Partner Skill Montages
+    # 1. Synthesize Montages only if custom animations are active
     # -------------------------------------------------------------------------
     synthesized_montages = {}
 
-    montage_configs = [
-        ("idle", f"AM_{pal_id}_Flamethrower", "Flamethrower"),
-        ("start", f"AM_{pal_id}_Flamethrower_Fire_Start", "Flamethrower_Fire_Start"),
-        ("loop", f"AM_{pal_id}_Flamethrower_Fire", "Flamethrower_Fire")
-    ]
+    if use_custom_anims and seed_montages:
+        montage_configs = [
+            ("idle", f"AM_{pal_id}_Flamethrower", "Flamethrower"),
+            ("start", f"AM_{pal_id}_Flamethrower_Fire_Start", "Flamethrower_Fire_Start"),
+            ("loop", f"AM_{pal_id}_Flamethrower_Fire", "Flamethrower_Fire")
+        ]
 
-    for key, target_montage_name, sub_name in montage_configs:
-        seed_ast = seed_montages.get(key)
-        if seed_ast:
-            mutated_ast = patch_montage_ast(
-                seed_ast,
-                template_id=template_id,
-                target_pal=pal_id,
-                skeleton_guid=skeleton_guid
-            )
-            # Ensure ObjectName matches target
-            mutated_ast["Exports"][0]["ObjectName"] = target_montage_name
-            sync_namemap(mutated_ast)
-            synthesized_montages[target_montage_name] = mutated_ast
+        for key, target_montage_name, sub_name in montage_configs:
+            seed_ast = seed_montages.get(key)
+            if seed_ast:
+                mutated_ast = patch_montage_ast(
+                    seed_ast,
+                    template_id=template_id,
+                    target_pal=pal_id,
+                    skeleton_guid=skeleton_guid
+                )
+                mutated_ast["Exports"][0]["ObjectName"] = target_montage_name
+                sync_namemap(mutated_ast)
+                synthesized_montages[target_montage_name] = mutated_ast
 
     # -------------------------------------------------------------------------
     # 2. Synthesize Weapon Actor Blueprint (BP_<Pal>_Flamethrower)
     # -------------------------------------------------------------------------
     raw_str = json.dumps(seed_weapon_data)
 
-    # 2a. Package and Class Names
     old_pkg = f"/Game/Pal/Blueprint/Weapon/BP_{template_id}_Flamethrower"
     new_pkg = f"/Game/Pal/Blueprint/Weapon/BP_{pal_id}_Flamethrower"
     raw_str = raw_str.replace(old_pkg, new_pkg)
@@ -106,7 +109,7 @@ def synthesize_flamethrower_cluster(
     raw_str = raw_str.replace(f"Default__BP_{template_id}_Flamethrower_C", f"Default__BP_{pal_id}_Flamethrower_C")
     raw_str = raw_str.replace(f"ExecuteUbergraph_BP_{template_id}_Flamethrower", f"ExecuteUbergraph_BP_{pal_id}_Flamethrower")
 
-    # 2b. Internal Puppet Mesh
+    # Retarget Internal Puppet Mesh
     raw_str = raw_str.replace(
         f"/Game/Pal/Model/Character/Monster/{template_id}/SK_{template_id}",
         f"/Game/Pal/Model/Character/Monster/{pal_id}/SK_{pal_id}"
@@ -114,30 +117,32 @@ def synthesize_flamethrower_cluster(
     raw_str = raw_str.replace(f'"SK_{template_id}"', f'"SK_{pal_id}"')
     raw_str = raw_str.replace(f"'SK_{template_id}'", f"'SK_{pal_id}'")
 
-    # 2c. Montages and Sequence references in Imports & Bytecode
-    for suffix in ["Flamethrower", "Flamethrower_Fire", "Flamethrower_Fire_Start"]:
-        raw_str = raw_str.replace(f"AM_{template_id}_{suffix}", f"AM_{pal_id}_{suffix}")
-        raw_str = raw_str.replace(f"AS_{template_id}_{suffix}", f"AS_{pal_id}_{suffix}")
-    raw_str = raw_str.replace(f"/Monster/{template_id}/", f"/Monster/{pal_id}/")
+    # Only retarget montages if custom animations exist; otherwise use shared vanilla montages
+    if use_custom_anims:
+        for suffix in ["Flamethrower", "Flamethrower_Fire", "Flamethrower_Fire_Start"]:
+            raw_str = raw_str.replace(f"AM_{template_id}_{suffix}", f"AM_{pal_id}_{suffix}")
+            raw_str = raw_str.replace(f"AS_{template_id}_{suffix}", f"AS_{pal_id}_{suffix}")
+        raw_str = raw_str.replace(f"/Monster/{template_id}/", f"/Monster/{pal_id}/")
 
-    # 2d. Custom Sockets
     if muzzle_socket != "Socket_Mouth":
         raw_str = raw_str.replace('"Socket_Mouth"', f'"{muzzle_socket}"')
     if equip_socket != "Socket_Weapon_R":
         raw_str = raw_str.replace('"Socket_Weapon_R"', f'"{equip_socket}"')
 
-    # 2e. Custom Niagara VFX System
     default_vfx_pkg = "/Game/Pal/Effect/Skill/FlameThrower/NS_CommonSkill_Flamethrower"
     default_vfx_name = "NS_CommonSkill_Flamethrower"
-    if niagara_path != default_vfx_pkg:
-        clean_vfx_pkg = niagara_path.rsplit(".", 1)[0]
-        clean_vfx_name = clean_vfx_pkg.split("/")[-1]
+    clean_vfx_pkg = niagara_path.rsplit(".", 1)[0].replace("Pal/Content/", "/Game/").replace("Pal/Content", "/Game")
+    if not clean_vfx_pkg.startswith("/Game/"):
+        clean_vfx_pkg = f"/Game/{clean_vfx_pkg.lstrip('/')}"
+    target_niagara_name = clean_vfx_pkg.split("/")[-1]
+
+    if clean_vfx_pkg != default_vfx_pkg:
         raw_str = raw_str.replace(default_vfx_pkg, clean_vfx_pkg)
-        raw_str = raw_str.replace(f'"{default_vfx_name}"', f'"{clean_vfx_name}"')
+        raw_str = raw_str.replace(f'"{default_vfx_name}"', f'"{target_niagara_name}"')
+        raw_str = raw_str.replace(f"'{default_vfx_name}'", f"'{target_niagara_name}'")
 
     weapon_ast = json.loads(raw_str)
 
-    # --- CRITICAL FIX: Re-link Component Pointers ---
     skel_mesh_idx = None
     niagara_idx = None
     
@@ -195,3 +200,66 @@ def synthesize_flamethrower_cluster(
         "weapon_bp": weapon_ast,
         "montages": synthesized_montages
     }
+
+def synthesize_generic_weapon_ast(
+    seed_wp_data: dict,
+    source_seed_name: str,
+    wp_name: str,
+    pal_id: str,
+    seed_mesh: str,
+    config: dict = None
+) -> dict:
+    """Synthesizes standalone weapon blueprints for Launcher, ThrowBomb, Katana, etc."""
+    cfg = config or {}
+    element_str = cfg.get("element", "Fire").replace("EPalElementType::", "")
+    effect_str = cfg.get("effect", "Burn").replace("EPalAdditionalEffectType::", "")
+    elem_byte = ELEMENT_MAP.get(element_str, 2)
+    eff_byte = EFFECT_MAP.get(effect_str, 4)
+
+    raw_str = json.dumps(seed_wp_data)
+
+    old_pkg = f"/Game/Pal/Blueprint/Weapon/{source_seed_name}"
+    new_pkg = f"/Game/Pal/Blueprint/Weapon/{wp_name}"
+    raw_str = raw_str.replace(old_pkg, new_pkg)
+
+    raw_str = raw_str.replace(f"Default__{source_seed_name}_C", f"Default__{wp_name}_C")
+    raw_str = raw_str.replace(f"Default__{source_seed_name}", f"Default__{wp_name}")
+    raw_str = raw_str.replace(f"{source_seed_name}_C", f"{wp_name}_C")
+    raw_str = raw_str.replace(f'"{source_seed_name}"', f'"{wp_name}"')
+    raw_str = raw_str.replace(f"'{source_seed_name}'", f"'{wp_name}'")
+    raw_str = raw_str.replace(f"ExecuteUbergraph_{source_seed_name}", f"ExecuteUbergraph_{wp_name}")
+
+    raw_str = raw_str.replace(f"/Monster/{seed_mesh}/SK_{seed_mesh}", f"/Monster/{pal_id}/SK_{pal_id}")
+    raw_str = raw_str.replace(f"SkeletalMesh'SK_{seed_mesh}'", f"SkeletalMesh'SK_{pal_id}'")
+    raw_str = raw_str.replace(f'"SK_{seed_mesh}"', f'"SK_{pal_id}"')
+    raw_str = raw_str.replace(f"'SK_{seed_mesh}'", f"'SK_{pal_id}'")
+
+    weapon_ast = json.loads(raw_str)
+
+    skel_mesh_idx = None
+    for i, imp in enumerate(weapon_ast.get("Imports", [])):
+        if imp.get("ClassName") == "SkeletalMesh" and pal_id.lower() in imp.get("ObjectName", "").lower():
+            skel_mesh_idx = -(i + 1)
+            break
+
+    for export in weapon_ast.get("Exports", []):
+        obj_name = export.get("ObjectName", "")
+        if obj_name == "Mesh_GEN_VARIABLE" and skel_mesh_idx:
+            for p in export.get("Data", []):
+                if p.get("Name") in ["SkeletalMesh", "SkinnedAsset"]:
+                    p["Value"] = skel_mesh_idx
+
+        if obj_name.startswith("Default__") and obj_name.endswith(f"_{wp_name.replace(f'BP_{pal_id}_', '')}_C") or obj_name == f"Default__{wp_name}_C":
+            if export.get("$type", "").endswith("RawExport, UAssetAPI"):
+                pass # Can add fallback binary parsing here if necessary for generic weapons
+            elif isinstance(export.get("Data"), list):
+                for prop in export["Data"]:
+                    if isinstance(prop, dict):
+                        p_name = prop.get("Name", "").lower()
+                        if p_name == "element":
+                            prop["Value"] = f"EPalElementType::{element_str}"
+                        elif "effect" in p_name and "type" in p_name:
+                            prop["Value"] = f"EPalAdditionalEffectType::{effect_str}"
+
+    sync_namemap(weapon_ast)
+    return weapon_ast
