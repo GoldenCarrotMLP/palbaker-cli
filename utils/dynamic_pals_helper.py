@@ -222,6 +222,16 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
                 variants_list.append(v)
         elif isinstance(variants_data, list):
             variants_list = variants_data
+
+        # Load skipped variants from .palbaker_state.json
+        state_file = os.path.join(dynamic_pals_staging_dir, ".palbaker_state.json")
+        skipped_variants_set = set()
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r", encoding="utf-8") as f_st:
+                    skipped_variants_set = set(json.load(f_st).get("skipped_variants", []))
+            except Exception:
+                pass
             
     except Exception as e:
         return False, f"Failed to read Dynamic Pals manifest: {e}"
@@ -307,6 +317,17 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
                 skin_label = "Default"
             else:
                 skin_label = raw_label
+
+            # Omit variants that are skipped from packaging (.palbaker_state.json)
+            skel_src_clean = os.path.splitext(os.path.basename(v.get("SkeletonSource", "")))[0]
+            if (
+                skin_label in skipped_variants_set or 
+                raw_label in skipped_variants_set or 
+                skel_src_clean in skipped_variants_set or
+                f"{monster_name}_{skin_label}" in skipped_variants_set
+            ):
+                print(f"[Dynamic Pals] Skipping '{skin_label}' from deployed SwapJSON (excluded in .palbaker_state.json).", flush=True)
+                continue
 
             if v.get("is_base") and is_custom_pal:
                 cat_sanitized = category.replace(" ", "_")

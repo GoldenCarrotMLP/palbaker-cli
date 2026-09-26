@@ -63,6 +63,16 @@ class ModWorkspace:
             except Exception:
                 pass
 
+        # Load skipped variants from .palbaker_state.json
+        self.skipped_variants = []
+        if parent_dir and os.path.exists(parent_dir):
+            try:
+                from utils.state import get_skipped_variants
+                self.skipped_variants = get_skipped_variants(parent_dir)
+            except Exception:
+                pass
+        self.is_skipped = (self.is_variant and self.mod_name in self.skipped_variants)
+
         # Determine target mesh name and virtual path based on variance and parent nesting
         category_sanitized = category.replace(" ", "_")
         

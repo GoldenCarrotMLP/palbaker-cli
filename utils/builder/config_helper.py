@@ -145,6 +145,9 @@ class GameIniCookContext:
                         discovered_subs.add(sub)
 
             for sub in sorted(list(discovered_subs)):
+                if hasattr(self.workspace, "skipped_variants") and sub in self.workspace.skipped_variants:
+                    print(f"  [Recursive Cook] Skipping variant subfolder '{sub}' (in skipped_variants).", flush=True)
+                    continue
                 variant_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{self.workspace.base_pal}/{sub}"
                 if variant_virtual_path not in actual_extra_paths:
                     actual_extra_paths.append(variant_virtual_path)

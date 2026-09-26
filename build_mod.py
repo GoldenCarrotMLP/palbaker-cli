@@ -317,6 +317,9 @@ def main():
         )) if workspace.project_dir else ""
         if os.path.exists(ue_char_dir):
             for sub in os.listdir(ue_char_dir):
+                if hasattr(workspace, "skipped_variants") and sub in workspace.skipped_variants:
+                    print(f"  [Cook Queue] Skipping variant directory to cook: {sub} (in skipped_variants)", flush=True)
+                    continue
                 sub_p = os.path.join(ue_char_dir, sub)
                 if os.path.isdir(sub_p) and not sub.startswith(".") and sub.lower() not in ["sources", ".palbaker_audio"]:
                     variant_vpath = f"/Game/Pal/Model/Character/{category_sanitized}/{workspace.base_pal}/{sub}"

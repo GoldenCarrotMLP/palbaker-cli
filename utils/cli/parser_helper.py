@@ -19,7 +19,8 @@ def create_cli_parser() -> argparse.ArgumentParser:
         "extract", "create-blend", "push", "cook", "pack", "full", "decompile",
         "set-icon", "browse-ue", "open-source", "open-ue", "open-pak", "ping",
         "set-preserve-materials", "refresh-blend", "recursive-cook", "set-push-setting",
-        "set-blacklist", "dump-anims", "push-anims", "save-notifies", "toggle-anims"
+        "set-blacklist", "dump-anims", "push-anims", "save-notifies", "toggle-anims",
+        "set-variant-pack"
     ])
     mod_parser.add_argument("base_pal", help="Original base Pal (e.g., WeaselDragon)")
     mod_parser.add_argument("mod", help="Unique name of the mod")

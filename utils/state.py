@@ -34,23 +34,61 @@ def get_max_source_mtime(directory):
                 max_time = max(max_time, os.path.getmtime(file_path))
     return max_time
 
+def load_palbaker_state(fmodel_dir: str) -> dict:
+    """Safely loads .palbaker_state.json from directory."""
+    if not fmodel_dir or not os.path.exists(fmodel_dir):
+        return {}
+    state_file = os.path.join(fmodel_dir, ".palbaker_state.json")
+    if os.path.exists(state_file):
+        try:
+            with open(state_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+    return {}
+
+def save_palbaker_state(fmodel_dir: str, data: dict):
+    """Safely writes .palbaker_state.json to directory."""
+    if not fmodel_dir or not os.path.exists(fmodel_dir):
+        return
+    state_file = os.path.join(fmodel_dir, ".palbaker_state.json")
+    try:
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        print(f"Warning: Failed to save state to {state_file}: {e}")
+
+def get_skipped_variants(fmodel_dir: str) -> list[str]:
+    """Returns the list of variant names marked as excluded from packaging."""
+    state = load_palbaker_state(fmodel_dir)
+    return state.get("skipped_variants", [])
+
+def set_variant_pack_state(fmodel_dir: str, variant_name: str, include_in_pak: bool) -> dict:
+    """Updates the skipped_variants list in .palbaker_state.json."""
+    state = load_palbaker_state(fmodel_dir)
+    skipped = set(state.get("skipped_variants", []))
+    if include_in_pak:
+        skipped.discard(variant_name)
+    else:
+        skipped.add(variant_name)
+    state["skipped_variants"] = sorted(list(skipped))
+    save_palbaker_state(fmodel_dir, state)
+    return state
+
 def save_push_state(fmodel_dir, ue_dir):
-    """Records the timestamp of both UE assets and Source assets immediately after an import."""
+    """Records the timestamp of both UE assets and Source assets immediately after an import without wiping existing state."""
     if not os.path.exists(fmodel_dir):
         return
     
     ue_mtime = get_max_mtime(ue_dir, ".uasset")
     source_mtime = get_max_source_mtime(fmodel_dir)
-    state_file = os.path.join(fmodel_dir, ".palbaker_state.json")
     
-    try:
-        with open(state_file, "w") as f:
-            json.dump({
-                "last_ue_mtime": ue_mtime,
-                "last_source_mtime": source_mtime
-            }, f)
-    except Exception as e:
-        print(f"Warning: Failed to save push state to {state_file}: {e}")
+    data = load_palbaker_state(fmodel_dir)
+    data["last_ue_mtime"] = ue_mtime
+    data["last_source_mtime"] = source_mtime
+    save_palbaker_state(fmodel_dir, data)
 
 def is_ue_modified(fmodel_dir, ue_dir):
     """Returns a list of specific UE assets modified since the last Push."""

@@ -453,7 +453,7 @@ def export_fbx_base(fbx_path: str, armature_name: str = "Armature"):
 
     print("[PalBaker Export] Exporting FBX in neutral REST pose with applied transforms...", flush=True)
 
-    # 3. Export FBX
+    # 3. Export FBX (Strictly disable bake_anim for skeletal mesh imports)
     bpy.ops.export_scene.fbx(
         filepath=os.path.abspath(fbx_path),
         use_selection=True,
@@ -464,7 +464,8 @@ def export_fbx_base(fbx_path: str, armature_name: str = "Armature"):
         axis_forward='-Z',
         axis_up='Y',
         global_scale=0.01,
-        apply_scale_options='FBX_SCALE_ALL'
+        apply_scale_options='FBX_SCALE_ALL',
+        bake_anim=False
     )
 
     # Restore Pose position for viewport interaction

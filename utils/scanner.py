@@ -379,6 +379,18 @@ def get_mod_info(settings: dict, target_mod: str = None):
             except Exception:
                 pass
 
+        # Check skipped variants state from .palbaker_state.json
+        parent_fmodel_dir = fmodel_path
+        if is_variant and fmodel_base:
+            cat_dir = data.get("category", "Monster")
+            parent_fmodel_dir = os.path.normpath(os.path.join(
+                fmodel_base, "Exports", "Pal", "Content", "Pal", "Model", "Character", cat_dir, base_pal
+            ))
+
+        from .state import get_skipped_variants
+        skipped_variants = get_skipped_variants(parent_fmodel_dir) if parent_fmodel_dir and os.path.exists(parent_fmodel_dir) else []
+        include_in_pak = not (is_variant and mod_name in skipped_variants)
+
         # State modifications tracking
         source_modified = False
         ue_modified = False
@@ -527,6 +539,8 @@ def get_mod_info(settings: dict, target_mod: str = None):
             "active_vanilla_replacer": active_vanilla_replacer,
             "custom_blacklist": custom_blacklist,
             "custom_animations": custom_animations, 
+            "include_in_pak": include_in_pak,
+            "skipped_variants": skipped_variants,
             "physical_variants": [],
             "fmodel_path": fmodel_path,
             "ue_path": ue_path

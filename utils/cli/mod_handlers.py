@@ -221,7 +221,7 @@ def handle_mod_command(args, settings):
         
     if action == "extract":
         is_valid, err_msg = validate_settings(settings, ["fmodel_output", "palworld_exe"])
-    elif action in ["create-blend", "set-icon", "open-source", "set-preserve-materials", "set-push-setting", "set-blacklist", "toggle-anims"]:
+    elif action in ["create-blend", "set-icon", "open-source", "set-preserve-materials", "set-push-setting", "set-blacklist", "toggle-anims", "set-variant-pack"]:
         is_valid, err_msg = validate_settings(settings, ["fmodel_output"])
     elif action in ["open-ue", "open-pak"]:
         is_valid, err_msg = validate_settings(settings, ["uproject"])
@@ -584,6 +584,32 @@ def handle_mod_command(args, settings):
         except Exception as e:
             error_print(f"Failed to save blacklist setting: {e}")
             sys.exit(1)
+
+    elif action == "set-variant-pack":
+        val_str = getattr(args, "path", "true") or "true"
+        include_bool = str(val_str).lower() in ["true", "1", "yes", "on"]
+
+        fmodel_base = settings.get("fmodel_output", "")
+        category = mod_data.get("category", "Monster") if mod_data else "Monster"
+        parent_dir = os.path.normpath(os.path.join(
+            fmodel_base, "Exports", "Pal", "Content", "Pal", "Model", "Character", category, base_pal
+        )) if fmodel_base else ""
+
+        if not parent_dir or not os.path.exists(parent_dir):
+            if mod_data and mod_data.get("fmodel_path"):
+                parent_dir = os.path.dirname(mod_data["fmodel_path"]) if mod_data.get("is_variant") else mod_data["fmodel_path"]
+
+        if not parent_dir or not os.path.exists(parent_dir):
+            error_print(f"Parent directory for base pal '{base_pal}' not found on disk.")
+            sys.exit(1)
+
+        from utils.state import set_variant_pack_state
+        state = set_variant_pack_state(parent_dir, mod_name, include_bool)
+        json_print({
+            "status": "success",
+            "message": f"Updated packaging status for variant '{mod_name}' (include_in_pak: {include_bool}).",
+            "skipped_variants": state.get("skipped_variants", [])
+        })
 
     elif action == "browse-ue":
         ue_path_disk = mod_data.get("ue_path", "") if mod_data else ""

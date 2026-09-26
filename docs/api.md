@@ -1,11 +1,12 @@
 # API & Configuration Formats
 
 ## 1. State Tracking (`.palbaker_state.json`)
-Generated inside the FModel output directory for a specific mod after a successful Push operation. Used to detect manual modifications.
+Generated inside the FModel output directory for a specific mod after a successful Push operation. Used to detect manual modifications and track packaging exclusions.
 ```json
 {
     "last_ue_mtime": 1716750000.0,
-    "last_source_mtime": 1716740000.0
+    "last_source_mtime": 1716740000.0,
+    "skipped_variants": ["VariantB"]
 }
 ```
 

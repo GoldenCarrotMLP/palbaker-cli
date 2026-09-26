@@ -1,6 +1,26 @@
 import unreal  # type: ignore
 import os
 
+def _safe_float(val, default=0.0):
+    if val is None or val == "" or val == "+0" or val == "-0":
+        return float(default)
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return float(default)
+
+def _extract_struct_value(prop):
+    if not prop or not isinstance(prop, dict):
+        return {}
+    val = prop.get("Value")
+    if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+        inner = val[0].get("Value")
+        if isinstance(inner, dict):
+            return inner
+    elif isinstance(val, dict):
+        return val
+    return {}
+
 def harvest_materials(ue_path, target_mesh_name):
     harvested = {}
     path = f"{ue_path}/{target_mesh_name}"
@@ -71,17 +91,32 @@ def inject_vanilla_skeleton_metadata(palbaker_root, custom_skel_path, template_i
                 sock_exp = exports[exp_idx - 1]
                 sock_info = {}
                 for p in sock_exp.get("Data", []):
-                    if p.get("Name") == "SocketName": sock_info["SocketName"] = p.get("Value")
-                    elif p.get("Name") == "BoneName": sock_info["BoneName"] = p.get("Value")
-                    elif p.get("Name") == "RelativeLocation":
-                        vec = p.get("Value", [{}])[0].get("Value", {})
-                        sock_info["Loc"] = (vec.get("X",0), vec.get("Y",0), vec.get("Z",0))
-                    elif p.get("Name") == "RelativeRotation":
-                        rot = p.get("Value", [{}])[0].get("Value", {})
-                        sock_info["Rot"] = (rot.get("Roll",0), rot.get("Pitch",0), rot.get("Yaw",0))
-                    elif p.get("Name") == "RelativeScale":
-                        scale = p.get("Value", [{}])[0].get("Value", {})
-                        sock_info["Scale"] = (scale.get("X",1), scale.get("Y",1), scale.get("Z",1))
+                    p_name = p.get("Name")
+                    if p_name == "SocketName": 
+                        sock_info["SocketName"] = str(p.get("Value", ""))
+                    elif p_name == "BoneName": 
+                        sock_info["BoneName"] = str(p.get("Value", ""))
+                    elif p_name == "RelativeLocation":
+                        vec = _extract_struct_value(p)
+                        sock_info["Loc"] = (
+                            _safe_float(vec.get("X", 0.0), 0.0),
+                            _safe_float(vec.get("Y", 0.0), 0.0),
+                            _safe_float(vec.get("Z", 0.0), 0.0)
+                        )
+                    elif p_name == "RelativeRotation":
+                        rot = _extract_struct_value(p)
+                        sock_info["Rot"] = (
+                            _safe_float(rot.get("Roll", 0.0), 0.0),
+                            _safe_float(rot.get("Pitch", 0.0), 0.0),
+                            _safe_float(rot.get("Yaw", 0.0), 0.0)
+                        )
+                    elif p_name == "RelativeScale":
+                        scale = _extract_struct_value(p)
+                        sock_info["Scale"] = (
+                            _safe_float(scale.get("X", 1.0), 1.0),
+                            _safe_float(scale.get("Y", 1.0), 1.0),
+                            _safe_float(scale.get("Z", 1.0), 1.0)
+                        )
                 if "SocketName" in sock_info and "BoneName" in sock_info:
                     sockets_data.append(sock_info)
 
@@ -119,12 +154,22 @@ def inject_vanilla_skeleton_metadata(palbaker_root, custom_skel_path, template_i
     scales = []
 
     for s_data in sockets_data:
-        socket_names.append(s_data["SocketName"])
-        bone_names.append(s_data["BoneName"])
-        locs.append(unreal.Vector(*s_data.get("Loc", (0, 0, 0))))
-        r, p, yaw = s_data.get("Rot", (0, 0, 0))
-        rots.append(unreal.Rotator(r, p, yaw))
-        scales.append(unreal.Vector(*s_data.get("Scale", (1, 1, 1))))
+        s_name = s_data.get("SocketName")
+        b_name = s_data.get("BoneName")
+        if not s_name or not b_name:
+            continue
+
+        socket_names.append(str(s_name))
+        bone_names.append(str(b_name))
+        
+        lx, ly, lz = s_data.get("Loc", (0.0, 0.0, 0.0))
+        locs.append(unreal.Vector(_safe_float(lx, 0.0), _safe_float(ly, 0.0), _safe_float(lz, 0.0)))
+        
+        r, p, yaw = s_data.get("Rot", (0.0, 0.0, 0.0))
+        rots.append(unreal.Rotator(roll=_safe_float(r, 0.0), pitch=_safe_float(p, 0.0), yaw=_safe_float(yaw, 0.0)))
+        
+        sx, sy, sz = s_data.get("Scale", (1.0, 1.0, 1.0))
+        scales.append(unreal.Vector(_safe_float(sx, 1.0), _safe_float(sy, 1.0), _safe_float(sz, 1.0)))
 
     if socket_names:
         report_socks = unreal.AnimScriptingLibrary.inject_sockets(

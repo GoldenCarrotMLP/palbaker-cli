@@ -150,10 +150,14 @@ def is_path_blacklisted(game_virtual_path: str, custom_blacklist: list[str] | No
 def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[str] = None) -> list[tuple[str, str]]:
     folders_to_pack = []
     blacklist = getattr(workspace, "custom_blacklist", [])
+    skipped_variants = getattr(workspace, "skipped_variants", [])
 
     # 1. Pack the primary targeted directory (whether base pal or nested mod folder)
-    if os.path.exists(workspace.cooked_dir):
-        folders_to_pack.append((workspace.cooked_dir, workspace.ue_virtual_path.replace("/Game/", "")))
+    if not (workspace.is_variant and workspace.mod_name in skipped_variants):
+        if os.path.exists(workspace.cooked_dir):
+            folders_to_pack.append((workspace.cooked_dir, workspace.ue_virtual_path.replace("/Game/", "")))
+    else:
+        print(f"  [Packer] Skipping '{workspace.mod_name}' (marked as skipped in .palbaker_state.json).", flush=True)
         
     # 2. DYNAMIC RECURSIVE DISCOVERY AND GATHERING
     category_sanitized = workspace.category.replace(" ", "_").replace("\\", "/")
@@ -183,6 +187,10 @@ def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[
                 discovered_subs.add(sub)
 
     for sub in sorted(list(discovered_subs)):
+        if sub in skipped_variants:
+            print(f"  [Recursive Pack] Skipping variant subfolder '{sub}' (marked as skipped in .palbaker_state.json).", flush=True)
+            continue
+
         variant_rel = f"Pal/Model/Character/{category_sanitized}/{workspace.base_pal}/{sub}"
         
         if is_path_blacklisted(f"/Game/{variant_rel}", blacklist):
