@@ -89,16 +89,88 @@ class SaddleManagerMixin:
         var_name = preset["var_name"]
         comp_pkg = preset["pkg"]
         comp_class = preset["class_name"]
-        pos_type = ride_position_type or preset["default_position"]
-        bare_pos = pos_type.split("::")[-1] if "::" in pos_type else pos_type
 
-        # --- CRITICAL FIX FOR D3D11 RENDER CRASH ---
-        # The Mounting Overhaul mod leaves this component's data completely empty in the .uasset.
-        # In UE 5.1 Unversioned Packages, serializing EnumPropertyData (EPalRidePositionType) 
-        # inside an inherited archetype component shifts the byte mask of the Class Default Object.
-        # This causes the skeletal mesh pointer to read garbage memory, crashing D3D11 with E_INVALIDARG.
-        # We leave template_props empty. You can fine-tune coordinates using UE4SS Lua scripts.
+        # Clean up any conflicting ride marker components if switching types
+        for other_preset in self.RIDE_MARKER_PRESETS.values():
+            if other_preset["var_name"] != var_name and self.has_component(other_preset["var_name"]):
+                self.remove_component(other_preset["var_name"])
+
         template_props = []
+
+        # --- CRITICAL SAFETY BOUNDARY ---
+        # Injecting serialized properties into a dynamically added template shifts the byte alignment 
+        # of the unversioned CDO, causing D3D11 'CreateBuffer E_INVALIDARG' crashes on CharacterMesh0.
+        # We only apply these relative offsets if the component already exists natively (e.g. Boar).
+        if self.has_component(var_name):
+            if relative_location:
+                template_props.append({
+                    "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
+                    "StructType": "Vector",
+                    "SerializeNone": True,
+                    "StructGUID": "{00000000-0000-0000-0000-000000000000}",
+                    "SerializationControl": "NoExtension",
+                    "Operation": "None",
+                    "Name": "RelativeLocation",
+                    "ArrayIndex": 0,
+                    "PropertyGuid": None,
+                    "IsZero": False,
+                    "PropertyTagFlags": "None",
+                    "PropertyTypeName": None,
+                    "PropertyTagExtensions": "NoExtension",
+                    "Value": [
+                        {
+                            "$type": "UAssetAPI.PropertyTypes.Structs.VectorPropertyData, UAssetAPI",
+                            "Name": "RelativeLocation",
+                            "ArrayIndex": 0,
+                            "PropertyGuid": None,
+                            "IsZero": False,
+                            "PropertyTagFlags": "None",
+                            "PropertyTypeName": None,
+                            "PropertyTagExtensions": "NoExtension",
+                            "Value": {
+                                "$type": "UAssetAPI.UnrealTypes.FVector, UAssetAPI",
+                                "X": float(relative_location.get("X", 0.0)),
+                                "Y": float(relative_location.get("Y", 0.0)),
+                                "Z": float(relative_location.get("Z", 10.0))
+                            }
+                        }
+                    ]
+                })
+
+            if relative_rotation:
+                template_props.append({
+                    "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
+                    "StructType": "Rotator",
+                    "SerializeNone": True,
+                    "StructGUID": "{00000000-0000-0000-0000-000000000000}",
+                    "SerializationControl": "NoExtension",
+                    "Operation": "None",
+                    "Name": "RelativeRotation",
+                    "ArrayIndex": 0,
+                    "PropertyGuid": None,
+                    "IsZero": False,
+                    "PropertyTagFlags": "None",
+                    "PropertyTypeName": None,
+                    "PropertyTagExtensions": "NoExtension",
+                    "Value": [
+                        {
+                            "$type": "UAssetAPI.PropertyTypes.Structs.RotatorPropertyData, UAssetAPI",
+                            "Name": "RelativeRotation",
+                            "ArrayIndex": 0,
+                            "PropertyGuid": None,
+                            "IsZero": False,
+                            "PropertyTagFlags": "None",
+                            "PropertyTypeName": None,
+                            "PropertyTagExtensions": "NoExtension",
+                            "Value": {
+                                "$type": "UAssetAPI.UnrealTypes.FRotator, UAssetAPI",
+                                "Pitch": float(relative_rotation.get("Pitch", 0.0)),
+                                "Yaw": float(relative_rotation.get("Yaw", 0.0)),
+                                "Roll": float(relative_rotation.get("Roll", 0.0))
+                            }
+                        }
+                    ]
+                })
 
         node_idx = self.add_component(
             var_name=var_name,
@@ -173,10 +245,51 @@ class SaddleManagerMixin:
 
     def add_speed_collision(self, var_name: str = "PalSpeedCollision") -> int:
         """Injects PalSpeedCollisionComponent for mounted dash/trample damage."""
+        template_props = []
+
+        if self.has_component(var_name):
+            template_props.append({
+                "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
+                "StructType": "Vector",
+                "SerializeNone": True,
+                "StructGUID": "{00000000-0000-0000-0000-000000000000}",
+                "SerializationControl": "NoExtension",
+                "Operation": "None",
+                "Name": "RelativeScale3D",
+                "ArrayIndex": 0,
+                "PropertyGuid": None,
+                "IsZero": False,
+                "PropertyTagFlags": "None",
+                "PropertyTypeName": None,
+                "PropertyTagExtensions": "NoExtension",
+                "Value": [
+                    {
+                        "$type": "UAssetAPI.PropertyTypes.Structs.VectorPropertyData, UAssetAPI",
+                        "Name": "RelativeScale3D",
+                        "ArrayIndex": 0,
+                        "PropertyGuid": None,
+                        "IsZero": False,
+                        "PropertyTagFlags": "None",
+                        "PropertyTypeName": None,
+                        "PropertyTagExtensions": "NoExtension",
+                        "Value": {
+                            "$type": "UAssetAPI.UnrealTypes.FVector, UAssetAPI",
+                            "X": 2.5,
+                            "Y": 2.5,
+                            "Z": 2.0
+                        }
+                    }
+                ]
+            })
+
         return self.add_component(
             var_name=var_name,
             comp_class_package="/Script/Pal",
-            comp_class_name="PalSpeedCollisionComponent"
+            comp_class_name="PalSpeedCollisionComponent",
+            template_properties=template_props,
+            attach_to_name="root",
+            parent_var_name="CharacterMesh0",
+            b_is_parent_native=True
         )
 
     def has_speed_collision(self, var_name: str = "PalSpeedCollision") -> bool:

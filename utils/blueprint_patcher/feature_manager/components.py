@@ -42,28 +42,55 @@ class ComponentManagerMixin:
             self.find_or_add_import("/Script/Engine", "Package", "/Script/CoreUObject", 0)
         )
 
-        # Dynamic resolution of TemplateIndex for Blueprint classes vs Native Classes
-        is_blueprint_class = comp_class_package.startswith("/Game/") or comp_class_package.startswith("Pal/Content/")
-        template_idx = 0
-
-        if is_blueprint_class:
-            clean_pkg = comp_class_package.replace("\\", "/").strip()
-            pkg_idx = self.find_or_add_import(clean_pkg, "Package", "/Script/CoreUObject", 0)
-            template_idx = self.find_or_add_import(
-                object_name=f"Default__{comp_class_name}",
-                class_name=comp_class_name,
-                class_package=clean_pkg,
-                outer_index=pkg_idx
-            )
+        # Resolution of TemplateIndex for both Blueprint classes and Native C++ classes
+        clean_pkg = comp_class_package.replace("\\", "/").strip()
+        pkg_idx = self.find_or_add_import(clean_pkg, "Package", "/Script/CoreUObject", 0)
+        template_idx = self.find_or_add_import(
+            object_name=f"Default__{comp_class_name}",
+            class_name=comp_class_name,
+            class_package=clean_pkg,
+            outer_index=pkg_idx
+        )
 
         # Prevent duplicate component templates and SCS nodes if component already exists
         if self.has_component(var_name):
+            template_idx_val = None
             for exp in self.exports:
                 if exp.get("ObjectName") == f"{var_name}_GEN_VARIABLE":
                     if template_properties:
                         exp["Data"] = template_properties
-                    return self.exports.index(exp) + 1
+                    template_idx_val = self.exports.index(exp) + 1
+                    break
 
+            # Update the existing SCS_Node's AttachToName socket linkage
+            if attach_to_name:
+                for exp in self.exports:
+                    data_props = exp.get("Data")
+                    if isinstance(data_props, list):
+                        is_target_node = any(
+                            isinstance(p, dict) and p.get("Name") == "InternalVariableName" and p.get("Value") == var_name
+                            for p in data_props
+                        )
+                        if is_target_node:
+                            attach_prop = next((p for p in data_props if isinstance(p, dict) and p.get("Name") == "AttachToName"), None)
+                            if attach_prop:
+                                attach_prop["Value"] = attach_to_name
+                            else:
+                                data_props.insert(2, {
+                                    "$type": "UAssetAPI.PropertyTypes.Objects.NamePropertyData, UAssetAPI",
+                                    "Name": "AttachToName",
+                                    "ArrayIndex": 0,
+                                    "PropertyGuid": None,
+                                    "IsZero": False,
+                                    "PropertyTagFlags": "None",
+                                    "PropertyTypeName": None,
+                                    "PropertyTagExtensions": "NoExtension",
+                                    "Value": attach_to_name
+                                })
+                            break
+
+            sync_namemap(self.data)
+            return template_idx_val or 1
         # 1. Register in LoadedProperties (matches native UE5 schema)
         loaded_props = self.class_export.setdefault("LoadedProperties", [])
         if not any(isinstance(p, dict) and p.get("Name") == var_name for p in loaded_props):
