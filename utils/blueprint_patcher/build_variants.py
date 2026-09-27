@@ -211,3 +211,58 @@ def build_predator_variant(template_id: str, pal_id: str, generate_boss: bool, s
         return True
 
     return False
+
+def build_raid_variant(template_id: str, pal_id: str, settings: dict, temp_dir: str, cooked_dir: str, uasset_gui: str, flags: int, log, usmap_path: str = None) -> bool:
+    """Builds BP_{pal_id}_RAID if the template has an official RAID variant (such as LegendDeer, Bellanoir, etc.)."""
+    raid_candidates = [
+        f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}_RAID.uasset"
+    ]
+    
+    from utils.uasset_helper import decompile_uasset, compile_uasset, sync_namemap
+
+    for cand in raid_candidates:
+        cand_disk = os.path.join(temp_dir, cand)
+        if not os.path.exists(cand_disk):
+            for root, _, files in os.walk(temp_dir):
+                for f in files:
+                    if f.lower() == f"bp_{template_id.lower()}_raid.uasset":
+                        cand_disk = os.path.join(root, f)
+                        break
+                if cand_disk and os.path.exists(cand_disk):
+                    break
+
+        if cand_disk and os.path.exists(cand_disk):
+            log(f"  [Action: Variant] Generating Raid Boss blueprint: BP_{pal_id}_RAID...", "standard")
+            temp_raid_json = os.path.join(temp_dir, "raid_blueprint.json")
+            if decompile_uasset(uasset_gui, cand_disk, temp_raid_json, usmap_path):
+                with open(temp_raid_json, "r", encoding="utf-8") as f:
+                    raid_str = f.read()
+
+                cand_name = f"BP_{template_id}_RAID"
+                raid_str = raid_str.replace(cand, f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{pal_id}/BP_{pal_id}_RAID.uasset")
+                raid_str = raid_str.replace(f"/PalActorBP/{template_id}/{cand_name}", f"/PalActorBP/{pal_id}/BP_{pal_id}_RAID")
+                raid_str = raid_str.replace(f"/PalActorBP/{template_id}/BP_{template_id}", f"/PalActorBP/{pal_id}/BP_{pal_id}")
+                raid_str = raid_str.replace(f"SK_{template_id}", f"SK_{pal_id}")
+                raid_str = raid_str.replace(f"PA_{template_id}", f"PA_{pal_id}")
+
+                raid_str = re.sub(rf"Default__{cand_name}_C(?![a-zA-Z0-9_])", f"Default__BP_{pal_id}_RAID_C", raid_str)
+                raid_str = re.sub(rf"Default__{cand_name}(?![a-zA-Z0-9_])", f"Default__BP_{pal_id}_RAID", raid_str)
+                raid_str = re.sub(rf"Default__BP_{template_id}_C(?![a-zA-Z0-9_])", f"Default__BP_{pal_id}_C", raid_str)
+                raid_str = re.sub(rf"(?<![a-zA-Z0-9_]){cand_name}_C(?![a-zA-Z0-9_])", f"BP_{pal_id}_RAID_C", raid_str)
+                raid_str = re.sub(rf"(?<![a-zA-Z0-9_]){cand_name}(?![a-zA-Z0-9_])", f"BP_{pal_id}_RAID", raid_str)
+                raid_str = re.sub(rf"(?<![a-zA-Z0-9_])BP_{template_id}_C(?![a-zA-Z0-9_])", f"BP_{pal_id}_C", raid_str)
+
+                try:
+                    raid_data = json.loads(raid_str)
+                    sync_namemap(raid_data)
+                    with open(temp_raid_json, "w", encoding="utf-8") as f:
+                        json.dump(raid_data, f, indent=4)
+                except Exception:
+                    with open(temp_raid_json, "w", encoding="utf-8") as f:
+                        f.write(raid_str)
+
+                dest_raid_uasset = os.path.join(cooked_dir, f"BP_{pal_id}_RAID.uasset")
+                compile_uasset(uasset_gui, temp_raid_json, dest_raid_uasset, usmap_path)
+                log(f"  ✓ Compiled Raid Boss blueprint: BP_{pal_id}_RAID.uasset", "success")
+                return True
+    return False

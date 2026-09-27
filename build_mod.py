@@ -164,6 +164,27 @@ def main():
             print("ERROR: No raw model sources found in workspaces to push.", flush=True)
             sys.exit(1)
 
+        # Ingest any detected AnimBlueprint JSON into the sidecars before pushing
+        from utils.abp_parser import identify_abp_json, parse_abp_nodes
+        detected_abp = identify_abp_json(workspace.fmodel_dir)
+        if detected_abp:
+            abp_payload = parse_abp_nodes(detected_abp)
+            print(
+                f"[PalBaker ABP] Ingesting AnimBlueprint ({os.path.basename(detected_abp)}): "
+                f"{len(abp_payload['jiggle_bones'])} springs, {len(abp_payload['lookat_bones'])} lookats, "
+                f"{len(abp_payload['copy_bones'])} copies, {len(abp_payload['offset_bones'])} offsets into sidecar...",
+                flush=True
+            )
+            for target_dir, _ in import_targets:
+                blend_files = glob.glob(os.path.join(target_dir, "*.blend"))
+                for blend_file in blend_files:
+                    base_name = os.path.splitext(os.path.basename(blend_file))[0]
+                    output_json = os.path.normpath(os.path.join(target_dir, f"{base_name}_blend.json"))
+                    sidecar_data = load_sidecar(output_json)
+                    sidecar_data.update(abp_payload)
+                    sidecar_data["has_replicated_abp"] = True
+                    save_sidecar(output_json, sidecar_data)
+
         from utils.dynamic_pals_helper import sync_sidecar_metadata
 
         for target_dir, _ in import_targets:
@@ -267,6 +288,26 @@ def main():
         if not blend_files:
             print("ERROR: No .blend files found in workspace to refresh.", flush=True)
             sys.exit(1)
+
+        # Ingest any detected AnimBlueprint JSON into the sidecars before extracting
+        from utils.abp_parser import identify_abp_json, parse_abp_nodes
+        detected_abp = identify_abp_json(workspace.fmodel_dir)
+        if detected_abp:
+            abp_payload = parse_abp_nodes(detected_abp)
+            print(
+                f"[PalBaker ABP] Ingesting AnimBlueprint ({os.path.basename(detected_abp)}): "
+                f"{len(abp_payload['jiggle_bones'])} springs, {len(abp_payload['lookat_bones'])} lookats, "
+                f"{len(abp_payload['copy_bones'])} copies, {len(abp_payload['offset_bones'])} offsets into sidecar...",
+                flush=True
+            )
+            for blend_file in blend_files:
+                parent_dir = os.path.dirname(blend_file)
+                base_name = os.path.splitext(os.path.basename(blend_file))[0]
+                output_json = os.path.normpath(os.path.join(parent_dir, f"{base_name}_blend.json"))
+                sidecar_data = load_sidecar(output_json)
+                sidecar_data.update(abp_payload)
+                sidecar_data["has_replicated_abp"] = True
+                save_sidecar(output_json, sidecar_data)
 
         extractor_script = os.path.normpath(os.path.join(os.path.dirname(__file__), "utils", "blender_extractor.py"))
         for blend_file in blend_files:

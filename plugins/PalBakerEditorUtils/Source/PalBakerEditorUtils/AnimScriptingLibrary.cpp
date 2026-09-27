@@ -21,6 +21,31 @@
 #include "Animation/BlendProfile.h"
 
 
+static void ApplyAlphaScaleBiasClamp(FInputScaleBiasClamp& Clamp, const TSharedPtr<FJsonObject>& ClampObj)
+{
+    if (!ClampObj.IsValid()) return;
+    if (ClampObj->HasField(TEXT("b_map_range"))) Clamp.bMapRange = ClampObj->GetBoolField(TEXT("b_map_range"));
+    if (ClampObj->HasField(TEXT("b_clamp_result"))) Clamp.bClampResult = ClampObj->GetBoolField(TEXT("b_clamp_result"));
+    if (ClampObj->HasField(TEXT("b_interp_result"))) Clamp.bInterpResult = ClampObj->GetBoolField(TEXT("b_interp_result"));
+    if (ClampObj->HasField(TEXT("scale"))) Clamp.Scale = ClampObj->GetNumberField(TEXT("scale"));
+    if (ClampObj->HasField(TEXT("bias"))) Clamp.Bias = ClampObj->GetNumberField(TEXT("bias"));
+    if (ClampObj->HasField(TEXT("clamp_min"))) Clamp.ClampMin = ClampObj->GetNumberField(TEXT("clamp_min"));
+    if (ClampObj->HasField(TEXT("clamp_max"))) Clamp.ClampMax = ClampObj->GetNumberField(TEXT("clamp_max"));
+    if (ClampObj->HasField(TEXT("interp_speed_increasing"))) Clamp.InterpSpeedIncreasing = ClampObj->GetNumberField(TEXT("interp_speed_increasing"));
+    if (ClampObj->HasField(TEXT("interp_speed_decreasing"))) Clamp.InterpSpeedDecreasing = ClampObj->GetNumberField(TEXT("interp_speed_decreasing"));
+
+    const TSharedPtr<FJsonObject>* InRangeObj;
+    if (ClampObj->TryGetObjectField(TEXT("in_range"), InRangeObj)) {
+        Clamp.InRange.Min = (*InRangeObj)->GetNumberField(TEXT("min"));
+        Clamp.InRange.Max = (*InRangeObj)->GetNumberField(TEXT("max"));
+    }
+    const TSharedPtr<FJsonObject>* OutRangeObj;
+    if (ClampObj->TryGetObjectField(TEXT("out_range"), OutRangeObj)) {
+        Clamp.OutRange.Min = (*OutRangeObj)->GetNumberField(TEXT("min"));
+        Clamp.OutRange.Max = (*OutRangeObj)->GetNumberField(TEXT("max"));
+    }
+}
+
 bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const FString& JsonPath)
 {
     if (!AnimBP) return false;
@@ -133,13 +158,64 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
                 }
             }
 
-            ModBone->Node.TranslationMode = EBoneModificationMode::BMM_Additive;
-            ModBone->Node.RotationMode = EBoneModificationMode::BMM_Additive;
-            ModBone->Node.ScaleMode = EBoneModificationMode::BMM_Replace;
-            
-            ModBone->Node.TranslationSpace = EBoneControlSpace::BCS_ParentBoneSpace;
-            ModBone->Node.RotationSpace = EBoneControlSpace::BCS_ParentBoneSpace;
-            ModBone->Node.ScaleSpace = EBoneControlSpace::BCS_BoneSpace;
+            if (BoneObj->HasField(TEXT("translation_mode"))) {
+                FString ModeStr = BoneObj->GetStringField(TEXT("translation_mode"));
+                if (ModeStr == TEXT("BMM_Ignore")) ModBone->Node.TranslationMode = EBoneModificationMode::BMM_Ignore;
+                else if (ModeStr == TEXT("BMM_Replace")) ModBone->Node.TranslationMode = EBoneModificationMode::BMM_Replace;
+                else if (ModeStr == TEXT("BMM_Additive")) ModBone->Node.TranslationMode = EBoneModificationMode::BMM_Additive;
+            } else {
+                ModBone->Node.TranslationMode = EBoneModificationMode::BMM_Additive;
+            }
+
+            if (BoneObj->HasField(TEXT("rotation_mode"))) {
+                FString ModeStr = BoneObj->GetStringField(TEXT("rotation_mode"));
+                if (ModeStr == TEXT("BMM_Ignore")) ModBone->Node.RotationMode = EBoneModificationMode::BMM_Ignore;
+                else if (ModeStr == TEXT("BMM_Replace")) ModBone->Node.RotationMode = EBoneModificationMode::BMM_Replace;
+                else if (ModeStr == TEXT("BMM_Additive")) ModBone->Node.RotationMode = EBoneModificationMode::BMM_Additive;
+            } else {
+                ModBone->Node.RotationMode = EBoneModificationMode::BMM_Additive;
+            }
+
+            if (BoneObj->HasField(TEXT("scale_mode"))) {
+                FString ModeStr = BoneObj->GetStringField(TEXT("scale_mode"));
+                if (ModeStr == TEXT("BMM_Ignore")) ModBone->Node.ScaleMode = EBoneModificationMode::BMM_Ignore;
+                else if (ModeStr == TEXT("BMM_Replace")) ModBone->Node.ScaleMode = EBoneModificationMode::BMM_Replace;
+                else if (ModeStr == TEXT("BMM_Additive")) ModBone->Node.ScaleMode = EBoneModificationMode::BMM_Additive;
+            } else {
+                ModBone->Node.ScaleMode = EBoneModificationMode::BMM_Replace;
+            }
+
+            if (BoneObj->HasField(TEXT("translation_space"))) {
+                FString SpaceStr = BoneObj->GetStringField(TEXT("translation_space"));
+                if (SpaceStr == TEXT("BCS_ComponentSpace")) ModBone->Node.TranslationSpace = EBoneControlSpace::BCS_ComponentSpace;
+                else if (SpaceStr == TEXT("BCS_BoneSpace")) ModBone->Node.TranslationSpace = EBoneControlSpace::BCS_BoneSpace;
+                else if (SpaceStr == TEXT("BCS_ParentBoneSpace")) ModBone->Node.TranslationSpace = EBoneControlSpace::BCS_ParentBoneSpace;
+            } else {
+                ModBone->Node.TranslationSpace = EBoneControlSpace::BCS_ParentBoneSpace;
+            }
+
+            if (BoneObj->HasField(TEXT("rotation_space"))) {
+                FString SpaceStr = BoneObj->GetStringField(TEXT("rotation_space"));
+                if (SpaceStr == TEXT("BCS_ComponentSpace")) ModBone->Node.RotationSpace = EBoneControlSpace::BCS_ComponentSpace;
+                else if (SpaceStr == TEXT("BCS_BoneSpace")) ModBone->Node.RotationSpace = EBoneControlSpace::BCS_BoneSpace;
+                else if (SpaceStr == TEXT("BCS_ParentBoneSpace")) ModBone->Node.RotationSpace = EBoneControlSpace::BCS_ParentBoneSpace;
+            } else {
+                ModBone->Node.RotationSpace = EBoneControlSpace::BCS_ParentBoneSpace;
+            }
+
+            if (BoneObj->HasField(TEXT("scale_space"))) {
+                FString SpaceStr = BoneObj->GetStringField(TEXT("scale_space"));
+                if (SpaceStr == TEXT("BCS_ComponentSpace")) ModBone->Node.ScaleSpace = EBoneControlSpace::BCS_ComponentSpace;
+                else if (SpaceStr == TEXT("BCS_BoneSpace")) ModBone->Node.ScaleSpace = EBoneControlSpace::BCS_BoneSpace;
+                else if (SpaceStr == TEXT("BCS_ParentBoneSpace")) ModBone->Node.ScaleSpace = EBoneControlSpace::BCS_ParentBoneSpace;
+            } else {
+                ModBone->Node.ScaleSpace = EBoneControlSpace::BCS_BoneSpace;
+            }
+
+            const TSharedPtr<FJsonObject>* ModClampObj;
+            if (BoneObj->TryGetObjectField(TEXT("alpha_scale_bias_clamp"), ModClampObj)) {
+                ApplyAlphaScaleBiasClamp(ModBone->Node.AlphaScaleBiasClamp, *ModClampObj);
+            }
 
             ModBone->FindPin(TEXT("ComponentPose"))->MakeLinkTo(CurrentOutputPin);
             CurrentOutputPin = ModBone->FindPin(TEXT("Pose"));
@@ -185,6 +261,11 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
                 if (AlphaPin) {
                     AlphaPin->DefaultValue = FString::Printf(TEXT("%f"), AlphaVal);
                 }
+            }
+
+            const TSharedPtr<FJsonObject>* SpringClampObj;
+            if (BoneObj->TryGetObjectField(TEXT("alpha_scale_bias_clamp"), SpringClampObj)) {
+                ApplyAlphaScaleBiasClamp(SpringBone->Node.AlphaScaleBiasClamp, *SpringClampObj);
             }
 
             SpringBone->FindPin(TEXT("ComponentPose"))->MakeLinkTo(CurrentOutputPin);
@@ -273,8 +354,22 @@ bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const F
             CopyNode->Node.bCopyTranslation = bCopyTrans;
             CopyNode->Node.bCopyRotation = bCopyRot;
             CopyNode->Node.bCopyScale = bCopyScale;
-            CopyNode->Node.ControlSpace = EBoneControlSpace::BCS_ComponentSpace;
+
+            if (BoneObj->HasField(TEXT("control_space"))) {
+                FString SpaceStr = BoneObj->GetStringField(TEXT("control_space"));
+                if (SpaceStr == TEXT("BCS_ComponentSpace")) CopyNode->Node.ControlSpace = EBoneControlSpace::BCS_ComponentSpace;
+                else if (SpaceStr == TEXT("BCS_BoneSpace")) CopyNode->Node.ControlSpace = EBoneControlSpace::BCS_BoneSpace;
+                else if (SpaceStr == TEXT("BCS_ParentBoneSpace")) CopyNode->Node.ControlSpace = EBoneControlSpace::BCS_ParentBoneSpace;
+            } else {
+                CopyNode->Node.ControlSpace = EBoneControlSpace::BCS_ComponentSpace;
+            }
+
             CopyNode->Node.Alpha = AlphaVal;
+
+            const TSharedPtr<FJsonObject>* CopyClampObj;
+            if (BoneObj->TryGetObjectField(TEXT("alpha_scale_bias_clamp"), CopyClampObj)) {
+                ApplyAlphaScaleBiasClamp(CopyNode->Node.AlphaScaleBiasClamp, *CopyClampObj);
+            }
 
             // 2. Allocate default pins
             CopyNode->AllocateDefaultPins();

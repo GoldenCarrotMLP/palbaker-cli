@@ -458,7 +458,6 @@ def extract_metadata(output_path: str, fbx_path: str = None):
         "lookat_bones": merged_lookat_bones,
         "copy_bones": merged_copy_bones,
         "offset_bones": merged_offset_bones,
-        "offset_bones": offset_bones,
         "materials": merged_materials,
         "morph_targets": [],
         "default_shapekeys": default_shapekeys,

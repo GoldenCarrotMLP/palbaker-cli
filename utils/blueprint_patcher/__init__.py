@@ -8,8 +8,8 @@ import glob
 import subprocess
 
 from utils.extractor.core import extract_game_files
-from utils.uasset_helper import decompile_uasset, compile_uasset, sync_namemap, patch_montage_ast
-from .build_variants import build_boss_variant, build_predator_variant
+from utils.uasset_helper import decompile_uasset, compile_uasset, sync_namemap, patch_montage_ast, encode_guid_to_extras
+from .build_variants import build_boss_variant, build_predator_variant, build_raid_variant
 from .feature_manager import (
     BlueprintFeatureManager,
     synthesize_funnel_character_ast,
@@ -37,6 +37,113 @@ def find_skeleton_guid_in_json(json_path: str) -> str:
         return search(data) or ""
     except Exception:
         return ""
+
+def _retarget_additive_hit_animations(
+    settings: dict,
+    template_id: str,
+    pal_id: str,
+    category: str,
+    base_pal: str,
+    is_variant: bool,
+    custom_guid: str,
+    has_anims: bool,
+    temp_dir: str,
+    cooked_anims_dir: str,
+    uasset_gui_exe: str,
+    usmap_path: str,
+    log
+):
+    """
+    Extracts pristine additive Hit animations (AS_*_Hit and AM_*_Hit) from the parent template,
+    retargets them to the target Pal's skeleton and package paths, and writes them to the
+    cooked animations folder, guaranteeing that additive mesh-space hit flinches work 1:1.
+    """
+    cat_sanitized = category.replace(" ", "_")
+    target_skel_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
+    target_anims_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
+
+    v_new_anim_pkg = f"/Game/Pal/Animation/Character/{cat_sanitized}/{target_anims_folder}"
+    v_new_skel_pkg = f"/Game/Pal/Model/Character/Skeleton/{target_skel_folder}"
+
+    extract_patterns = [
+        f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/AS_{template_id}_Hit*.uasset",
+        f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/AS_{template_id}_Hit*.uexp",
+        f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/AM_{template_id}_Hit*.uasset",
+        f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/AM_{template_id}_Hit*.uexp",
+        f"Pal/Content/Pal/Animation/Character/Pending_Monster/{template_id}/AS_{template_id}_Hit*.uasset",
+        f"Pal/Content/Pal/Animation/Character/Pending_Monster/{template_id}/AS_{template_id}_Hit*.uexp",
+        f"Pal/Content/Pal/Animation/Character/Pending_Monster/{template_id}/AM_{template_id}_Hit*.uasset",
+        f"Pal/Content/Pal/Animation/Character/Pending_Monster/{template_id}/AM_{template_id}_Hit*.uexp",
+    ]
+    extract_game_files(settings, extract_patterns, temp_dir, format_type="raw")
+
+    hit_uassets = []
+    for root, _, files in os.walk(temp_dir):
+        for f in files:
+            f_lower = f.lower()
+            if (f_lower.startswith(f"as_{template_id.lower()}_hit") or f_lower.startswith(f"am_{template_id.lower()}_hit")) and f_lower.endswith(".uasset"):
+                hit_uassets.append(os.path.join(root, f))
+
+    if not hit_uassets:
+        return
+
+    log(f"  [Hit Retargeting] Discovered {len(hit_uassets)} parent Hit asset(s) to retarget...", "standard")
+
+    for uasset_path in hit_uassets:
+        base_fname = os.path.splitext(os.path.basename(uasset_path))[0]
+        new_fname = base_fname.replace(template_id, pal_id)
+        json_path = os.path.join(temp_dir, f"{base_fname}_retarget.json")
+
+        if not decompile_uasset(uasset_gui_exe, uasset_path, json_path, usmap_path):
+            continue
+
+        with open(json_path, "r", encoding="utf-8") as f_json:
+            content = f_json.read()
+
+        # Retarget asset and sequence names
+        content = content.replace(f"AS_{template_id}_", f"AS_{pal_id}_")
+        content = content.replace(f"AM_{template_id}_", f"AM_{pal_id}_")
+
+        # Retarget animation package paths
+        content = content.replace(
+            f"/Game/Pal/Animation/Character/{cat_sanitized}/{template_id}/",
+            f"{v_new_anim_pkg}/"
+        )
+        content = content.replace(
+            f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/",
+            f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{target_anims_folder}/"
+        )
+
+        # Retarget skeleton references if custom animations / dedicated skeleton is active
+        if has_anims:
+            content = content.replace(
+                f"/Game/Pal/Model/Character/Skeleton/{template_id}/SK_{template_id}_Skeleton",
+                f"{v_new_skel_pkg}/SK_{pal_id}_Skeleton"
+            )
+            content = content.replace(f"SK_{template_id}_Skeleton", f"SK_{pal_id}_Skeleton")
+
+        try:
+            data = json.loads(content)
+            if data.get("Exports") and len(data["Exports"]) > 0:
+                data["Exports"][0]["ObjectName"] = new_fname
+                if base_fname.startswith("AM_") and has_anims and custom_guid:
+                    data["Exports"][0]["Extras"] = encode_guid_to_extras(custom_guid)
+
+            sync_namemap(data)
+            with open(json_path, "w", encoding="utf-8") as f_json:
+                json.dump(data, f_json, indent=2)
+        except Exception:
+            with open(json_path, "w", encoding="utf-8") as f_json:
+                f_json.write(content)
+
+        dest_uasset = os.path.join(cooked_anims_dir, f"{new_fname}.uasset")
+        # Overwrite whatever file is in cooked_anims_dir
+        if os.path.exists(dest_uasset):
+            try: os.remove(dest_uasset)
+            except OSError: pass
+
+        if compile_uasset(uasset_gui_exe, json_path, dest_uasset, usmap_path):
+            log(f"  ✓ Retargeted & compiled pristine additive hit asset: {new_fname}.uasset", "success")
 
 def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_data: dict = None, log_callback=None, has_anims: bool = False, category: str = "Monster", base_pal: str = "", keep_temp: bool = False) -> bool:
     def log(msg, cat="standard"):
@@ -98,25 +205,29 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
 
     try:
         # -----------------------------------------------------------------
-        # STEP 1: Extract Parent Template Actor Blueprint
+        # STEP 1: Extract Parent Template Actor Blueprint & Variants
         # -----------------------------------------------------------------
-        log(f"Extracting template blueprint for {template_id}...", "standard")
-        success, msg = extract_game_files(settings, [
-            f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}.uasset",
-            f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}.uexp"
-        ], temp_dir, format_type="raw")
+        log(f"Extracting template blueprints and wazas for {template_id}...", "standard")
+        bp_extract_patterns = [
+            f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}*.uasset",
+            f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}*.uexp",
+            f"Pal/Content/Pal/Blueprint/Action/Waza/{template_id}/*"
+        ]
+        success, msg = extract_game_files(settings, bp_extract_patterns, temp_dir, format_type="raw")
 
         if not success:
             log(f"Failed to extract base blueprint: {msg}", "error")
             return False
 
         src_base_uasset = None
+        other_variant_uassets = []
         for root, _, files in os.walk(temp_dir):
             for f in files:
-                if f.lower() == f"bp_{template_id.lower()}.uasset":
+                f_lower = f.lower()
+                if f_lower == f"bp_{template_id.lower()}.uasset":
                     src_base_uasset = os.path.join(root, f)
-                    break
-            if src_base_uasset: break
+                elif f_lower.startswith(f"bp_{template_id.lower()}_") and f_lower.endswith(".uasset"):
+                    other_variant_uassets.append(os.path.join(root, f))
 
         if not src_base_uasset or not os.path.exists(src_base_uasset):
             log(f"Base blueprint BP_{template_id}.uasset missing from extracted files.", "error")
@@ -128,21 +239,111 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
             return False
 
         with open(temp_base_json, "r", encoding="utf-8") as f:
-            base_json_str = f.read()
+            base_json_data = json.load(f)
+
+        # -----------------------------------------------------------------
+        # STEP 1b: Merge WazaActionDeclarationMap from all variants (_RAID, _BOSS)
+        # -----------------------------------------------------------------
+        COMBINE_ALL_VARIANT_WAZAS = True  # Set to False to disable merging variant wazas into base blueprint
+
+        if COMBINE_ALL_VARIANT_WAZAS and other_variant_uassets:
+            import copy
+
+            def _is_waza_entry_populated(val_prop: dict) -> bool:
+                if not val_prop or not isinstance(val_prop, dict):
+                    return False
+                val = val_prop.get("Value")
+                if isinstance(val, dict):
+                    asset_path = val.get("AssetPath")
+                    if isinstance(asset_path, dict):
+                        pkg = asset_path.get("PackageName", "")
+                        return bool(pkg and pkg != "None" and pkg != "")
+                    path_name = val.get("AssetPathName", "")
+                    return bool(path_name and path_name != "None" and path_name != "")
+                elif isinstance(val, str):
+                    return bool(val and val != "None" and val != "")
+                return False
+
+            def _get_waza_map_from_ast(ast_data: dict) -> list | None:
+                for exp in ast_data.get("Exports", []):
+                    if exp.get("ObjectName") == "StaticCharacterParameterComponent":
+                        for p in exp.get("Data", []):
+                            if p.get("Name") == "WazaActionDeclarationMap" and isinstance(p.get("Value"), list):
+                                return p["Value"]
+                return None
+
+            base_waza_map = _get_waza_map_from_ast(base_json_data)
+
+            for var_uasset in other_variant_uassets:
+                var_name = os.path.splitext(os.path.basename(var_uasset))[0]
+                var_json = os.path.join(temp_dir, f"{var_name}.json")
+                if decompile_uasset(uasset_gui_exe, var_uasset, var_json, usmap_path):
+                    try:
+                        with open(var_json, "r", encoding="utf-8") as f_var:
+                            var_ast = json.load(f_var)
+                        var_waza_map = _get_waza_map_from_ast(var_ast)
+
+                        if var_waza_map and base_waza_map is not None:
+                            for var_entry in var_waza_map:
+                                if not isinstance(var_entry, list) or len(var_entry) < 2:
+                                    continue
+                                waza_key = var_entry[0].get("Value", "") if isinstance(var_entry[0], dict) else ""
+                                if not waza_key:
+                                    continue
+
+                                if _is_waza_entry_populated(var_entry[1]):
+                                    existing = next((
+                                        e for e in base_waza_map 
+                                        if isinstance(e, list) and len(e) >= 1 and isinstance(e[0], dict) and e[0].get("Value") == waza_key
+                                    ), None)
+
+                                    if existing:
+                                        if not _is_waza_entry_populated(existing[1]):
+                                            existing[1] = copy.deepcopy(var_entry[1])
+                                            log(f"  [Waza Merge] Filled empty {waza_key} into base from {var_name}", "standard")
+                                    else:
+                                        base_waza_map.append(copy.deepcopy(var_entry))
+                                        log(f"  [Waza Merge] Merged variant {waza_key} into base from {var_name}", "standard")
+                    except Exception as e:
+                        log(f"Warning merging wazas from {var_name}: {e}", "warning")
+
+        base_json_str = json.dumps(base_json_data, indent=4)
 
         # -----------------------------------------------------------------
         # STEP 2: Extract Dynamic Dependencies (Actions, Modules, ABP, BS, AM)
         # -----------------------------------------------------------------
-        # Support both /Game/ and Pal/Content/ formats in the string dump
-        action_pattern = re.compile(rf'((?:/Game|Pal/Content)/Pal/Blueprint/Action/[\w/]*/(BP_Action_[a-zA-Z0-9_]+))', re.IGNORECASE)
-        discovered_actions = sorted(list(set(action_pattern.findall(base_json_str))))
+        # Support BP_Action_, BP_UniqueAction_, and any Action blueprint under Pal/Blueprint/Action/
+        action_pattern = re.compile(rf'((?:/Game|Pal/Content)/Pal/Blueprint/Action/[\w/]*/(BP_[a-zA-Z0-9_]*Action[a-zA-Z0-9_]*))', re.IGNORECASE)
+        
+        combined_scanned_str = base_json_str
+        for var_uasset in other_variant_uassets:
+            v_json = var_uasset.replace(".uasset", ".json")
+            if os.path.exists(v_json):
+                try:
+                    with open(v_json, "r", encoding="utf-8") as f_vj:
+                        combined_scanned_str += "\n" + f_vj.read()
+                except Exception: pass
+
+        discovered_actions = sorted(list(set(action_pattern.findall(combined_scanned_str))))
         
         valid_actions = []
         for p_core, a_name in discovered_actions:
             norm_core = p_core.replace("/Game/", "Pal/Content/")
-            if f"/{template_id}/" in norm_core or template_id in a_name:
+            if f"/{template_id}/" in norm_core or template_id.lower() in a_name.lower():
                 if (norm_core, a_name) not in valid_actions:
                     valid_actions.append((norm_core, a_name))
+
+        # Also automatically ingest all physical action blueprints extracted in Pal/Blueprint/Action/Waza/{template_id}/
+        waza_disk_dir = os.path.join(temp_dir, "Pal", "Content", "Pal", "Blueprint", "Action", "Waza", template_id)
+        if os.path.exists(waza_disk_dir):
+            for root, _, files in os.walk(waza_disk_dir):
+                for f in files:
+                    if f.endswith(".uasset"):
+                        a_name = os.path.splitext(f)[0]
+                        rel_core = os.path.relpath(os.path.join(root, a_name), temp_dir).replace("\\", "/")
+                        if (rel_core, a_name) not in valid_actions:
+                            valid_actions.append((rel_core, a_name))
+                            log(f"  [Waza Discovery] Found physical action blueprint: {a_name}", "standard")
 
         discovered_blendspaces = set()
         discovered_montages = set()
@@ -455,6 +656,25 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                 dest_am_uasset = os.path.join(cooked_anims_dir, f"{new_am_name}.uasset")
                 compile_uasset(uasset_gui_exe, am_json, dest_am_uasset, usmap_path)
                 log(f"  ✓ Compiled AnimMontage: {new_am_name}.uasset")
+
+        # -----------------------------------------------------------------
+        # STEP 4e: Retarget Pristine Additive Hit Reaction Animations (AS_*_Hit & AM_*_Hit)
+        # -----------------------------------------------------------------
+        _retarget_additive_hit_animations(
+            settings=settings,
+            template_id=template_id,
+            pal_id=pal_id,
+            category=category,
+            base_pal=base_pal,
+            is_variant=is_variant,
+            custom_guid=custom_guid,
+            has_anims=has_anims,
+            temp_dir=temp_dir,
+            cooked_anims_dir=cooked_anims_dir,
+            uasset_gui_exe=uasset_gui_exe,
+            usmap_path=usmap_path,
+            log=log
+        )
 
         # -----------------------------------------------------------------
         # STEP 5: Ingest Features into Host Actor Blueprint via AST Manager
@@ -851,6 +1071,9 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
             build_boss_variant(base_json_str, template_id, pal_id, boss_scale, settings, temp_dir, cooked_bp_dir, uasset_gui_exe, flags, log, usmap_path=usmap_path)
         if generate_predator:
             build_predator_variant(template_id, pal_id, generate_boss, settings, temp_dir, cooked_bp_dir, uasset_gui_exe, flags, log, usmap_path=usmap_path)
+            
+        # Automatically compile Raid Boss variant if template contains BP_{template_id}_RAID
+        build_raid_variant(template_id, pal_id, settings, temp_dir, cooked_bp_dir, uasset_gui_exe, flags, log, usmap_path=usmap_path)
 
         # Retain temp folder if requested for debugging
         if not (keep_temp or "--keep-temp" in sys.argv):

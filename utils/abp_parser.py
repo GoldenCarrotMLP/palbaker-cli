@@ -4,8 +4,9 @@ import json
 
 def identify_abp_json(workspace_dir: str) -> str | None:
     """
-    Scans the workspace directory for any JSON file whose internal content
-    matches an Unreal Engine Animation Blueprint signature.
+    Scans the workspace directory (and parent character directory) for any JSON file 
+    whose internal content matches an Unreal Engine Animation Blueprint signature.
+    Prioritizes rich ABP source definitions over auto-generated output files.
     """
     if not workspace_dir or not os.path.exists(workspace_dir):
         return None
@@ -18,39 +19,56 @@ def identify_abp_json(workspace_dir: str) -> str | None:
         "bone_data.json"
     }
 
-    for root, _, files in os.walk(workspace_dir):
-        for f in files:
-            if not f.endswith(".json") or f in ignored_files or f.startswith("."):
-                continue
-            if f.endswith("_dynamic_pals.json") or f.endswith("_blend.json") or f.startswith("MI_"):
-                continue
+    # Search both the active workspace directory and the base character parent directory
+    search_dirs = [workspace_dir]
+    parent = os.path.dirname(workspace_dir)
+    if parent and os.path.exists(parent) and "Character" in parent.replace("\\", "/"):
+        search_dirs.append(parent)
 
-            full_path = os.path.join(root, f)
-            try:
-                # Read initial segment for fast signature verification
-                with open(full_path, "r", encoding="utf-8-sig", errors="ignore") as file_in:
-                    sample = file_in.read(16384)
+    candidates = []
 
-                # Signature 1: FModel format
-                is_fmodel_abp = (
-                    "Class'AnimInstance'" in sample and 
-                    "AnimBlueprintGeneratedClass" in sample
-                )
+    for s_dir in search_dirs:
+        for root, _, files in os.walk(s_dir):
+            for f in files:
+                if not f.endswith(".json") or f in ignored_files or f.startswith("."):
+                    continue
+                if f.endswith("_dynamic_pals.json") or f.endswith("_blend.json") or f.startswith("MI_"):
+                    continue
 
-                # Signature 2: UAssetGUI format
-                is_uassetgui_abp = (
-                    "AnimBlueprintGeneratedClass" in sample and 
-                    ("AnimGraphNode_" in sample or "AnimNode_" in sample)
-                )
+                full_path = os.path.join(root, f)
+                try:
+                    with open(full_path, "r", encoding="utf-8-sig", errors="ignore") as file_in:
+                        sample = file_in.read(32768)
 
-                if is_fmodel_abp or is_uassetgui_abp:
-                    print(f"[PalBaker ABP] Detected AnimBlueprint by content signature: {os.path.basename(full_path)}", flush=True)
-                    return full_path
+                    is_abp = (
+                        "AnimBlueprintGeneratedClass" in sample and
+                        ("AnimGraphNode_" in sample or "AnimNode_" in sample or "Class'AnimInstance'" in sample)
+                    )
+                    if not is_abp:
+                        continue
 
-            except Exception:
-                continue
+                    # Score candidates: prioritize rich source files over minimal generated files
+                    score = sample.count("AnimGraphNode_")
+                    if "AnimGraphNode_CopyBone" in sample:
+                        score += 15
+                    if "AnimGraphNode_ModifyBone" in sample:
+                        score += 15
+                    if f.startswith("ABP_") or "JigglePhysics" in f:
+                        score += 10
+                    if f.endswith("_BP.json"):
+                        score -= 5
 
-    return None
+                    candidates.append((score, full_path))
+                except Exception:
+                    continue
+
+    if not candidates:
+        return None
+
+    # Sort descending by score to pick the most complete AnimBlueprint
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    best_path = candidates[0][1]
+    return best_path
 
 
 def _normalize_uassetgui_value(val):
@@ -92,10 +110,16 @@ def parse_abp_nodes(json_path: str) -> dict:
 
     props = {}
     
-    # Determine format and normalize to FModel-style flat dictionary
-    if isinstance(raw, list) and len(raw) > 0:
-        # FModel format
-        props = raw[0].get("Properties", {})
+    # Determine format and normalize to flat dictionary
+    if isinstance(raw, list):
+        # FModel format: scan ALL exported objects (especially the CDO Default__... where nodes live)
+        for obj in raw:
+            if isinstance(obj, dict):
+                obj_props = obj.get("Properties", {})
+                if isinstance(obj_props, dict):
+                    for k, v in obj_props.items():
+                        if k.startswith("AnimGraphNode_"):
+                            props[k] = v
     elif isinstance(raw, dict):
         if "Properties" in raw:
             # FModel format (single object)
@@ -116,6 +140,32 @@ def parse_abp_nodes(json_path: str) -> dict:
         "offset_bones": []
     }
 
+    def _parse_clamp(val_dict):
+        clamp_raw = val_dict.get("AlphaScaleBiasClamp")
+        if not isinstance(clamp_raw, dict):
+            return None
+        in_range = clamp_raw.get("InRange", {})
+        out_range = clamp_raw.get("OutRange", {})
+        return {
+            "b_map_range": bool(clamp_raw.get("bMapRange", False)),
+            "b_clamp_result": bool(clamp_raw.get("bClampResult", False)),
+            "b_interp_result": bool(clamp_raw.get("bInterpResult", False)),
+            "scale": float(clamp_raw.get("Scale", 1.0)),
+            "bias": float(clamp_raw.get("Bias", 0.0)),
+            "clamp_min": float(clamp_raw.get("ClampMin", 0.0)),
+            "clamp_max": float(clamp_raw.get("ClampMax", 1.0)),
+            "interp_speed_increasing": float(clamp_raw.get("InterpSpeedIncreasing", 10.0)),
+            "interp_speed_decreasing": float(clamp_raw.get("InterpSpeedDecreasing", 10.0)),
+            "in_range": {
+                "min": float(in_range.get("Min", 0.0)),
+                "max": float(in_range.get("Max", 1.0))
+            },
+            "out_range": {
+                "min": float(out_range.get("Min", 0.0)),
+                "max": float(out_range.get("Max", 1.0))
+            }
+        }
+
     for key, val in props.items():
         if not isinstance(val, dict):
             continue
@@ -124,7 +174,8 @@ def parse_abp_nodes(json_path: str) -> dict:
         if key.startswith("AnimGraphNode_SpringBone"):
             bone_name = val.get("SpringBone", {}).get("BoneName", "")
             if bone_name:
-                parsed["jiggle_bones"].append({
+                clamp_data = _parse_clamp(val)
+                bone_entry = {
                     "bone_name": bone_name,
                     "spring_stiffness": float(val.get("SpringStiffness", 200.0)),
                     "spring_damping": float(val.get("SpringDamping", 8.0)),
@@ -139,7 +190,10 @@ def parse_abp_nodes(json_path: str) -> dict:
                     "rotate_z": bool(val.get("bRotateZ", False)),
                     "alpha": float(val.get("Alpha", 1.0)),
                     "abp_replicated": True
-                })
+                }
+                if clamp_data:
+                    bone_entry["alpha_scale_bias_clamp"] = clamp_data
+                parsed["jiggle_bones"].append(bone_entry)
 
         # --- 2. LOOK AT ---
         elif key.startswith("AnimGraphNode_LookAt"):
@@ -149,7 +203,8 @@ def parse_abp_nodes(json_path: str) -> dict:
             if bone_name and target_bone:
                 look_axis = val.get("LookAt_Axis", {}).get("Axis", {"X": 0.0, "Y": -1.0, "Z": 0.0})
                 up_axis = val.get("LookUp_Axis", {}).get("Axis", {"X": 1.0, "Y": 0.0, "Z": 0.0})
-                parsed["lookat_bones"].append({
+                clamp_data = _parse_clamp(val)
+                bone_entry = {
                     "bone_name": bone_name,
                     "target_bone": target_bone,
                     "clamp": float(val.get("LookAtClamp", 50.0)),
@@ -157,22 +212,30 @@ def parse_abp_nodes(json_path: str) -> dict:
                     "look_at_axis": look_axis,
                     "look_up_axis": up_axis,
                     "abp_replicated": True
-                })
+                }
+                if clamp_data:
+                    bone_entry["alpha_scale_bias_clamp"] = clamp_data
+                parsed["lookat_bones"].append(bone_entry)
 
         # --- 3. COPY BONE ---
         elif key.startswith("AnimGraphNode_CopyBone"):
             source_bone = val.get("SourceBone", {}).get("BoneName", "")
             target_bone = val.get("TargetBone", {}).get("BoneName", "")
             if source_bone and target_bone:
-                parsed["copy_bones"].append({
+                clamp_data = _parse_clamp(val)
+                bone_entry = {
                     "source_bone": source_bone,
                     "target_bone": target_bone,
                     "copy_translation": bool(val.get("bCopyTranslation", False)),
                     "copy_rotation": bool(val.get("bCopyRotation", False)),
                     "copy_scale": bool(val.get("bCopyScale", False)),
+                    "control_space": str(val.get("ControlSpace", "BCS_ComponentSpace")),
                     "alpha": float(val.get("Alpha", 1.0)),
                     "abp_replicated": True
-                })
+                }
+                if clamp_data:
+                    bone_entry["alpha_scale_bias_clamp"] = clamp_data
+                parsed["copy_bones"].append(bone_entry)
 
         # --- 4. MODIFY BONE ---
         elif key.startswith("AnimGraphNode_ModifyBone"):
@@ -181,12 +244,24 @@ def parse_abp_nodes(json_path: str) -> dict:
                 trans = val.get("Translation", {})
                 rot = val.get("Rotation", {})
                 scale = val.get("Scale", {})
-                parsed["offset_bones"].append({
+                clamp_data = _parse_clamp(val)
+
+                bone_entry = {
                     "bone_name": bone_name,
                     "translation": [float(trans.get("X", 0.0)), float(trans.get("Y", 0.0)), float(trans.get("Z", 0.0))],
                     "rotation": [float(rot.get("Roll", 0.0)), float(rot.get("Pitch", 0.0)), float(rot.get("Yaw", 0.0))],
                     "scale": [float(scale.get("X", 1.0)), float(scale.get("Y", 1.0)), float(scale.get("Z", 1.0))],
+                    "translation_mode": str(val.get("TranslationMode", "BMM_Additive")),
+                    "rotation_mode": str(val.get("RotationMode", "BMM_Ignore")),
+                    "scale_mode": str(val.get("ScaleMode", "BMM_Ignore")),
+                    "translation_space": str(val.get("TranslationSpace", "BCS_ComponentSpace")),
+                    "rotation_space": str(val.get("RotationSpace", "BCS_ComponentSpace")),
+                    "scale_space": str(val.get("ScaleSpace", "BCS_ComponentSpace")),
+                    "alpha": float(val.get("Alpha", 1.0)),
                     "abp_replicated": True
-                })
+                }
+                if clamp_data:
+                    bone_entry["alpha_scale_bias_clamp"] = clamp_data
+                parsed["offset_bones"].append(bone_entry)
 
     return parsed
