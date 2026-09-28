@@ -186,10 +186,14 @@ def main():
                     save_sidecar(output_json, sidecar_data)
 
         from utils.dynamic_pals_helper import sync_sidecar_metadata
+        from utils.fmodel_helper import sync_sidecar_material_baselines
 
         for target_dir, _ in import_targets:
             blend_files = glob.glob(os.path.join(target_dir, "*.blend"))
             for blend_file in blend_files:
+                base_name = os.path.splitext(os.path.basename(blend_file))[0]
+                output_json = os.path.normpath(os.path.join(target_dir, f"{base_name}_blend.json"))
+                sync_sidecar_material_baselines(output_json, workspace.base_pal, workspace.category, workspace.fmodel_root, settings)
                 print(f"Pre-import synchronizing layout metadata for {os.path.basename(blend_file)}...", flush=True)
                 sync_sidecar_metadata(workspace.blender_path, blend_file)
 
@@ -308,6 +312,14 @@ def main():
                 sidecar_data.update(abp_payload)
                 sidecar_data["has_replicated_abp"] = True
                 save_sidecar(output_json, sidecar_data)
+
+        # Sync missing baseline material settings from parent material instances
+        from utils.fmodel_helper import sync_sidecar_material_baselines
+        for blend_file in blend_files:
+            parent_dir = os.path.dirname(blend_file)
+            base_name = os.path.splitext(os.path.basename(blend_file))[0]
+            output_json = os.path.normpath(os.path.join(parent_dir, f"{base_name}_blend.json"))
+            sync_sidecar_material_baselines(output_json, workspace.base_pal, workspace.category, workspace.fmodel_root, settings)
 
         extractor_script = os.path.normpath(os.path.join(os.path.dirname(__file__), "utils", "blender_extractor.py"))
         for blend_file in blend_files:

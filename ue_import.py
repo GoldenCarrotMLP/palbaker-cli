@@ -90,7 +90,7 @@ def run_pipeline():
         # Only compile and bind Material Instances if push_materials is True
         if push_materials:
             sidecar_json_path = os.path.join(working_dir, bone_data_file)
-            mi_assets = build_materials(material_target_ue_path, sidecar_json_path, config["textures"], target_asset_path, preserve_materials)
+            mi_assets = build_materials(material_target_ue_path, sidecar_json_path, config["textures"], target_asset_path, preserve_materials, base_pal=base_pal, category=category)
             bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets, harvested_materials)
         else:
             print("[PalBaker] Selective Push: Skipped material compilation and binding.")

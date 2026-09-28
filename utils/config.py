@@ -19,7 +19,9 @@ def load_settings():
         "blender": "",
         "palworld_exe": "",
         "show_mapped": False,
-        "console_height": 200
+        "console_height": 200,
+        "notification_popup": True,
+        "notification_sound": True
     }
     
     if os.path.exists(SETTINGS_FILE):

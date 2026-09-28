@@ -229,9 +229,18 @@ def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[
         "Content", "Pal", "Blueprint"
     )
     if os.path.exists(blueprint_cooked_root):
+        # Explicitly pack the custom Waza directory for this mod
+        waza_cooked_dir = os.path.join(blueprint_cooked_root, "Action", "Waza", workspace.mod_name)
+        if os.path.exists(waza_cooked_dir):
+            waza_rel = f"Pal/Blueprint/Action/Waza/{workspace.mod_name}"
+            if not is_path_blacklisted(f"/Game/{waza_rel}", blacklist):
+                folders_to_pack.append((waza_cooked_dir, waza_rel))
+                print(f"  -> Custom Waza directory detected: Packing {waza_rel}", flush=True)
+
         for root, _, files in os.walk(blueprint_cooked_root):
-            # Skip the PalActorBP directory as it is handled separately
-            if "PalActorBP" in root:
+            # Skip PalActorBP and Action/Waza (handled as full directory)
+            clean_root = root.replace("\\", "/")
+            if "PalActorBP" in clean_root or "Action/Waza" in clean_root:
                 continue
             for file in files:
                 if workspace.mod_name.lower() in file.lower() and file.endswith((".uasset", ".uexp", ".ubulk")):

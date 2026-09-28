@@ -211,7 +211,7 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
         bp_extract_patterns = [
             f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}*.uasset",
             f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}*.uexp",
-            f"Pal/Content/Pal/Blueprint/Action/Waza/{template_id}/*"
+            f"Pal/Content/Pal/Blueprint/Action/Waza/{template_id}*"
         ]
         success, msg = extract_game_files(settings, bp_extract_patterns, temp_dir, format_type="raw")
 
@@ -394,8 +394,8 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
             dep_queue = []
 
         # Queue Actions for extraction
-        for path_core, _ in valid_actions:
-            dep_queue.extend([f"{path_core}.uasset", f"{path_core}.uexp"])
+        for path_core, a_name in valid_actions:
+            dep_queue.extend([f"{path_core}.uasset", f"{path_core}.uexp", f"*{a_name}*"])
 
         if dep_queue:
             log(f"  Extracting animation stack & action dependencies from game paks...", "standard")
@@ -539,8 +539,17 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
         # STEP 4: Retarget & Compile Action Blueprints & Modules
         # -----------------------------------------------------------------
         for path_core, a_name in valid_actions + valid_modules:
-            action_uasset = os.path.join(temp_dir, f"{path_core}.uasset")
-            if os.path.exists(action_uasset):
+            action_uasset = os.path.normpath(os.path.join(temp_dir, f"{path_core}.uasset"))
+            if not os.path.exists(action_uasset):
+                for root, _, files in os.walk(temp_dir):
+                    for f in files:
+                        if f.lower() == f"{a_name.lower()}.uasset":
+                            action_uasset = os.path.join(root, f)
+                            break
+                    if action_uasset and os.path.exists(action_uasset):
+                        break
+
+            if action_uasset and os.path.exists(action_uasset):
                 a_json = action_uasset.replace(".uasset", ".json")
                 decompile_uasset(uasset_gui_exe, action_uasset, a_json, usmap_path)
                 with open(a_json, "r", encoding="utf-8") as f_aj:
@@ -562,8 +571,13 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                 os.makedirs(action_dest_dir, exist_ok=True)
                 
                 dest_action_uasset = os.path.join(action_dest_dir, f"{new_name}.uasset")
-                compile_uasset(uasset_gui_exe, a_json, dest_action_uasset, usmap_path)
-                log(f"  ✓ Retargeted blueprint logic: {new_name}")
+                compile_ok = compile_uasset(uasset_gui_exe, a_json, dest_action_uasset, usmap_path)
+                if compile_ok and os.path.exists(dest_action_uasset):
+                    log(f"  ✓ Retargeted blueprint logic: {new_name}", "success")
+                else:
+                    log(f"  ❌ Failed to compile action blueprint: {new_name}", "error")
+            else:
+                log(f"  ❌ Action blueprint '{a_name}' not found in extracted files. Skipping.", "error")
 
         # -----------------------------------------------------------------
         # STEP 4b: Retarget & Compile AnimBlueprints (ABP_)

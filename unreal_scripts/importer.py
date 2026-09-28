@@ -46,7 +46,13 @@ def inject_vanilla_skeleton_metadata(palbaker_root, custom_skel_path, template_i
     import unreal # type: ignore
 
     settings_path = os.path.join(palbaker_root, "manager_settings.json")
-    if not os.path.exists(settings_path): return
+    if not os.path.exists(settings_path):
+        parent_candidate = os.path.join(os.path.dirname(palbaker_root), "manager_settings.json")
+        if os.path.exists(parent_candidate):
+            settings_path = parent_candidate
+    if not os.path.exists(settings_path): 
+        return
+    
     with open(settings_path, "r", encoding="utf-8") as f:
         settings = json.load(f)
         

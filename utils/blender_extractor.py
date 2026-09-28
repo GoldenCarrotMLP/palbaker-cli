@@ -369,7 +369,10 @@ def extract_metadata(output_path: str, fbx_path: str = None):
             parent_class = old_val.get("parent_class", v.get("parent_class"))
             if parent_class not in STANDARD_BASES:
                 parent_class = old_val.get("parent_class")
-            merged_materials[k] = { "parent_class": parent_class, "textures": textures }
+            merged_entry = { "parent_class": parent_class, "textures": textures }
+            if "baseline_settings" in old_val:
+                merged_entry["baseline_settings"] = old_val["baseline_settings"]
+            merged_materials[k] = merged_entry
         else:
             merged_materials[k] = v
 

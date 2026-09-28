@@ -8,13 +8,9 @@ datas = [
     ('plugins', 'plugins'),
     ('deps', 'deps'),
     ('unreal_scripts', 'unreal_scripts'),
-    ('utils/blender_utils', 'utils/blender_utils'),
-    ('utils/blender_reconstruct.py', 'utils'),
-    ('utils/blender_extractor.py', 'utils'),
-    ('utils/node_builder.py', 'utils'),
-    ('utils/fmodel_helper.py', 'utils'),
-    ('utils/sidecar_helper.py', 'utils'),   
-    ('utils/image_combiner.py', 'utils'),
+    ('utils', 'utils'),
+    ('assets', 'assets'),
+    ('templates', 'templates'),
     ('ue_import.py', '.'),
     ('ue_export.py', '.')
 ]

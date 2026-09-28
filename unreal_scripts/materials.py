@@ -176,7 +176,7 @@ def build_materials_heuristically(ue_path, textures, material_slots, preserve_ma
         
     return mi_assets
 
-def build_materials(ue_path, json_path, textures, target_asset_path, preserve_materials=False):
+def build_materials(ue_path, json_path, textures, target_asset_path, preserve_materials=False, base_pal="", category="Monster"):
     material_slots = []
     if target_asset_path:
         mesh = unreal.EditorAssetLibrary.load_asset(target_asset_path)
@@ -199,11 +199,62 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
             print(f"Warning: Failed to parse {json_path}: {e}")
 
     if materials_metadata:
-        print("Running Topological Material Binder...")
+        print("Running Topological Material Binder with Baseline Settings...")
         asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
         mi_assets = []
         
+        # Pre-resolve texture validation across all materials to catch missing textures early
+        local_tex_basenames = {os.path.splitext(os.path.basename(p))[0].lower() for p in textures}
+        cat_sanitized = category.replace(" ", "_")
+        parent_ue_dir = f"/Game/Pal/Model/Character/{cat_sanitized}/{base_pal}" if base_pal else ""
+
         for mat_name, data in materials_metadata.items():
+            baseline_cfg = data.get("baseline_settings", {})
+            baseline_textures = baseline_cfg.get("textures", {})
+            blender_textures = data.get("textures", {})
+
+            # 1. Resolve replaced textures FIRST to avoid fake alerts
+            active_textures = dict(baseline_textures)
+            for p_name, t_val in blender_textures.items():
+                if t_val:
+                    active_textures[p_name] = t_val
+
+            # 2. Validate all required textures exist in Unreal or local import queue
+            missing_textures = []
+            for p_name, t_name in active_textures.items():
+                if not t_name or t_name == "None":
+                    continue
+                clean_t = t_name.split(".")[0]
+                clean_t_lower = clean_t.lower()
+
+                # Search locations:
+                # A) Local PNG import buffer
+                if clean_t_lower in local_tex_basenames:
+                    continue
+                # B) Existing target UE path
+                if unreal.EditorAssetLibrary.does_asset_exist(f"{ue_path}/{clean_t}"):
+                    continue
+                # C) Parent Pal's UE path
+                if parent_ue_dir and unreal.EditorAssetLibrary.does_asset_exist(f"{parent_ue_dir}/{clean_t}"):
+                    continue
+                # D) Common texture library
+                if unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Texture/{clean_t}") or unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Texture/PalIcon/Normal/{clean_t}"):
+                    continue
+                # E) Full game path
+                if "/" in clean_t and unreal.EditorAssetLibrary.does_asset_exist(clean_t):
+                    continue
+
+                missing_textures.append((p_name, clean_t))
+
+            if missing_textures:
+                print("\n" + "=" * 70, flush=True)
+                print(f"❌ [PalBaker Material Error] Material '{mat_name}' validation failed!", flush=True)
+                print("The following required textures were not found in Unreal or the workspace:", flush=True)
+                for p_k, t_k in missing_textures:
+                    print(f"  • Parameter '{p_k}': Missing texture '{t_k}'", flush=True)
+                print("=" * 70 + "\n", flush=True)
+                raise RuntimeError(f"Missing required textures for material '{mat_name}': {[t for _, t in missing_textures]}")
+
             sanitized_name = sanitize_asset_name(mat_name)
             mi_path = f"{ue_path}/{sanitized_name}"
             mi_asset = None
@@ -213,12 +264,15 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                 
                 if preserve_materials and existing_asset:
                     print(f"  [Preserve] Preserving custom shaders for existing asset: {sanitized_name}")
-                    textures_dict = data.get("textures", {})
-                    if textures_dict:
-                        for param_name, tex_name in textures_dict.items():
-                            loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{tex_name}")
-                            if loaded_tex and isinstance(loaded_tex, unreal.Texture):
-                                unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(existing_asset, unreal.Name(param_name), loaded_tex)
+                    for param_name, tex_name in active_textures.items():
+                        clean_tex = tex_name.split(".")[0]
+                        loaded_tex = (
+                            unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{clean_tex}") or
+                            (unreal.EditorAssetLibrary.load_asset(f"{parent_ue_dir}/{clean_tex}") if parent_ue_dir else None) or
+                            unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Texture/{clean_tex}")
+                        )
+                        if loaded_tex and isinstance(loaded_tex, unreal.Texture):
+                            unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(existing_asset, unreal.Name(param_name), loaded_tex)
                     mi_assets.append((sanitized_name.lower(), existing_asset))
                     continue
                     
@@ -239,24 +293,21 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
             if not mi_asset or not isinstance(mi_asset, unreal.MaterialInstanceConstant):
                 continue
                 
-            # Check for Special Material match first!
-            parent_class_raw = data.get("parent_class", "")
+            # --- 1. SET PARENT MATERIAL (FLAT SIBLING COPY) ---
+            parent_path = baseline_cfg.get("parent_path") or data.get("parent_class", "")
             special_parent = (
                 resolve_special_parent_material(sanitized_name) or 
                 resolve_special_parent_material(mat_name) or
-                resolve_special_parent_material(parent_class_raw)
+                resolve_special_parent_material(parent_path)
             )
 
             if special_parent:
                 parent_path = special_parent
                 print(f"  [Special Material] Matched '{sanitized_name}' -> Parent: {parent_path}")
-            elif parent_class_raw.startswith("/Game/"):
-                parent_path = parent_class_raw
-            else:
+            elif not parent_path or not parent_path.startswith("/Game/"):
                 parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterBodyBase"
-                parent_class_lower = parent_class_raw.lower()
+                parent_class_lower = parent_path.lower()
                 mat_name_lower = sanitized_name.lower()
-                
                 if "eye" in parent_class_lower or "mouth" in parent_class_lower or "eye" in mat_name_lower or "mouth" in mat_name_lower:
                     parent_path = "/Game/Pal/Material/Character/Common/MI_PalLit_CharacterEyeBase"
                 elif "hair" in parent_class_lower or "hair" in mat_name_lower:
@@ -265,35 +316,77 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
             parent_mat = unreal.EditorAssetLibrary.load_asset(parent_path)
             if parent_mat:
                 unreal.MaterialEditingLibrary.set_material_instance_parent(mi_asset, parent_mat)
-                
-            textures_dict = data.get("textures", {})
-            if textures_dict:
-                for param_name, tex_name in textures_dict.items():
-                    loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{tex_name}")
-                    if loaded_tex:
-                        if isinstance(loaded_tex, unreal.Texture):
-                            unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name(param_name), loaded_tex)
-                            print(f"  Bound {param_name}: {tex_name}")
-            else:
-                print(f"  [!] No mapped textures found in sidecar for {sanitized_name}. Reverting to heuristic search...", flush=True)
-                
-                tex_b = find_best_texture_match(sanitized_name, textures, "B")
-                if tex_b:
-                    loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_b))[0]}")
-                    if loaded_tex and isinstance(loaded_tex, unreal.Texture):
-                        unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name("Base Texture"), loaded_tex)
-                        
-                tex_n = find_best_texture_match(sanitized_name, textures, "N")
-                if tex_n:
-                    loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_n))[0]}")
-                    if loaded_tex and isinstance(loaded_tex, unreal.Texture):
-                        unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name("Normal Map"), loaded_tex)
-                        
-                tex_m = find_best_texture_match(sanitized_name, textures, "M")
-                if tex_m:
-                    loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_m))[0]}")
-                    if loaded_tex and isinstance(loaded_tex, unreal.Texture):
-                        unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name("MetallicRoughnessOcclusionSpecularTexture"), loaded_tex)
+
+            # --- 2. APPLY SUBSURFACE PROFILE ---
+            sp_path = baseline_cfg.get("subsurface_profile")
+            if sp_path:
+                sp_asset = unreal.EditorAssetLibrary.load_asset(sp_path)
+                if sp_asset:
+                    try:
+                        mi_asset.set_editor_property("subsurface_profile", sp_asset)
+                        print(f"  [Baseline] Linked SubsurfaceProfile: {sp_asset.get_name()}")
+                    except Exception as e:
+                        print(f"  Warning setting SubsurfaceProfile: {e}")
+
+            # --- 3. APPLY BASE PROPERTY OVERRIDES ---
+            bpo = baseline_cfg.get("base_property_overrides", {})
+            if bpo:
+                try:
+                    overrides = mi_asset.get_editor_property("base_property_overrides")
+                    if bpo.get("bOverride_ShadingModel"):
+                        overrides.set_editor_property("override_shading_model", True)
+                        sm_str = str(bpo.get("ShadingModel", ""))
+                        if "Subsurface" in sm_str:
+                            overrides.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_SUBSURFACE)
+                        elif "DefaultLit" in sm_str:
+                            overrides.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
+                    if "BlendMode" in bpo:
+                        bm_str = str(bpo.get("BlendMode", ""))
+                        if "Masked" in bm_str:
+                            overrides.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+                        elif "Translucent" in bm_str:
+                            overrides.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+                    if "OpacityMaskClipValue" in bpo:
+                        overrides.set_editor_property("opacity_mask_clip_value", float(bpo["OpacityMaskClipValue"]))
+                    mi_asset.set_editor_property("base_property_overrides", overrides)
+                except Exception as e:
+                    print(f"  Warning setting BasePropertyOverrides: {e}")
+
+            # --- 4. APPLY SCALAR PARAMETERS ---
+            for s_name, s_val in baseline_cfg.get("scalars", {}).items():
+                try:
+                    unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(
+                        mi_asset, unreal.Name(s_name), float(s_val)
+                    )
+                except Exception: pass
+
+            # --- 5. APPLY VECTOR PARAMETERS ---
+            for v_name, v_val in baseline_cfg.get("vectors", {}).items():
+                try:
+                    linear_col = unreal.LinearColor(
+                        float(v_val.get("R", 0.0)),
+                        float(v_val.get("G", 0.0)),
+                        float(v_val.get("B", 0.0)),
+                        float(v_val.get("A", 1.0))
+                    )
+                    unreal.MaterialEditingLibrary.set_material_instance_vector_parameter_value(
+                        mi_asset, unreal.Name(v_name), linear_col
+                    )
+                except Exception: pass
+
+            # --- 6. APPLY RESOLVED TEXTURES (BASELINE + BLENDER OVERRIDES) ---
+            for param_name, tex_name in active_textures.items():
+                clean_tex = tex_name.split(".")[0]
+                loaded_tex = (
+                    unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{clean_tex}") or
+                    (unreal.EditorAssetLibrary.load_asset(f"{parent_ue_dir}/{clean_tex}") if parent_ue_dir else None) or
+                    unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Texture/{clean_tex}")
+                )
+                if loaded_tex and isinstance(loaded_tex, unreal.Texture):
+                    unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(
+                        mi_asset, unreal.Name(param_name), loaded_tex
+                    )
+                    print(f"  Bound {param_name}: {loaded_tex.get_name()}")
                     
             unreal.EditorAssetLibrary.save_loaded_asset(mi_asset)
             mi_assets.append((sanitized_name.lower(), mi_asset))

@@ -106,7 +106,7 @@ def verify_project_integrity(settings: dict) -> tuple[bool, str]:
         
     return True, ""
 
-def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action: str, preserve_override: bool = None):
+def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action: str, preserve_override: bool = None, settings: dict = None):
     is_frozen = getattr(sys, 'frozen', False)
     if is_frozen:
         cmd = [sys.executable, "internal-build-mod", base_pal, mod_name, category, action]
@@ -176,6 +176,9 @@ def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action
         proc.wait()
         if proc.returncode == 0:
             json_print({"type": "result", "status": "success", "message": f"Successfully completed action: {action}"})
+            if settings:
+                from utils.notifications import trigger_action_complete
+                trigger_action_complete(action, mod_name, settings, success=True)
         else:
                 err_msg = f"Pipeline action {action} failed with exit code: {proc.returncode}"
                 if error_context:
@@ -534,6 +537,9 @@ def handle_mod_command(args, settings):
             "status": "success",
             "message": f"Successfully imported animations into Unreal! Montages will compile on Cook."
         })
+        
+        from utils.notifications import trigger_action_complete
+        trigger_action_complete("push-anims", mod_name, settings, success=True)
 
     elif action == "set-preserve-materials":
         val_str = getattr(args, "path", "true")
@@ -679,7 +685,7 @@ def handle_mod_command(args, settings):
             "recursive-cook": "recursive_cook"
         }
         build_action = action_mapping.get(action, action)
-        run_build_mod_and_stream(base_pal, mod_name, category, build_action, preserve_override)
+        run_build_mod_and_stream(base_pal, mod_name, category, build_action, preserve_override, settings)
 
 
 def handle_audio_command(args, settings):
