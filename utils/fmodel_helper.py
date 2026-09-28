@@ -141,9 +141,12 @@ def parse_material_instance_json(json_path: str) -> dict | None:
                         elif inner.get("Name") == "ParameterValue":
                             tex_imp = inner.get("Value")
                     tex_raw = resolve_import_name(tex_imp)
+                    tex_pkg = resolve_import_package(tex_imp)
                     tex_obj = extract_clean_texture_name(tex_raw)
                     if name_val and tex_obj and tex_obj != "None":
                         result["textures"][name_val] = tex_obj
+                        if tex_pkg:
+                            result.setdefault("texture_paths", {})[name_val] = normalize_ue_package_path(tex_pkg)
 
             elif p_name == "BasePropertyOverrides" and isinstance(p.get("Value"), list):
                 for override in p["Value"]:
@@ -198,6 +201,13 @@ def parse_material_instance_json(json_path: str) -> dict | None:
             tex_name = extract_clean_texture_name(tex_val)
             if name and tex_name and tex_name != "None":
                 result["textures"][name] = tex_name
+                # Save exact Unreal package path for effect and shared textures
+                if isinstance(tex_val, dict) and tex_val.get("ObjectPath"):
+                    raw_pkg = tex_val["ObjectPath"].split(".")[0]
+                    result.setdefault("texture_paths", {})[name] = normalize_ue_package_path(raw_pkg)
+                elif isinstance(tex_val, str) and "/" in tex_val:
+                    raw_pkg = tex_val.split(".")[0]
+                    result.setdefault("texture_paths", {})[name] = normalize_ue_package_path(raw_pkg)
 
         bpo = props.get("BasePropertyOverrides", {})
         if isinstance(bpo, dict):
@@ -215,7 +225,7 @@ def match_material_to_parent(slot_name: str, available_parent_jsons: list[str]) 
     clean_slot = slot_name.lower().replace("mi_", "").replace("sk_", "").replace("m_", "")
     slot_tokens = set(re.split(r'[^a-zA-Z0-9]', clean_slot))
     
-    exclusive_keywords = {"body", "eye", "mouth", "hair", "tail", "head", "horn", "wing", "fur", "cloth", "armor"}
+    exclusive_keywords = {"body", "eye", "mouth", "hair", "tail", "head", "horn", "wing", "fur", "cloth", "armor", "extra", "vfx", "effect", "mane"}
     slot_exclusives = slot_tokens.intersection(exclusive_keywords)
 
     best_match = None

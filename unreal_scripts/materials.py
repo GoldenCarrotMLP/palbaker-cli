@@ -211,13 +211,17 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
         for mat_name, data in materials_metadata.items():
             baseline_cfg = data.get("baseline_settings", {})
             baseline_textures = baseline_cfg.get("textures", {})
+            baseline_paths = baseline_cfg.get("texture_paths", {})
             blender_textures = data.get("textures", {})
 
             # 1. Resolve replaced textures FIRST to avoid fake alerts
             active_textures = dict(baseline_textures)
+            active_paths = dict(baseline_paths)
             for p_name, t_val in blender_textures.items():
                 if t_val:
                     active_textures[p_name] = t_val
+                    # Clear baseline full path if overridden by Blender
+                    active_paths.pop(p_name, None)
 
             # 2. Validate all required textures exist in Unreal or local import queue
             missing_textures = []
@@ -227,7 +231,12 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                 clean_t = t_name.split(".")[0]
                 clean_t_lower = clean_t.lower()
 
-                # Search locations:
+                # Check known full package path from baseline first
+                known_full_path = active_paths.get(p_name)
+                if known_full_path and unreal.EditorAssetLibrary.does_asset_exist(known_full_path):
+                    continue
+
+                # Search candidate locations:
                 # A) Local PNG import buffer
                 if clean_t_lower in local_tex_basenames:
                     continue
@@ -237,8 +246,10 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                 # C) Parent Pal's UE path
                 if parent_ue_dir and unreal.EditorAssetLibrary.does_asset_exist(f"{parent_ue_dir}/{clean_t}"):
                     continue
-                # D) Common texture library
+                # D) Common texture library & Effect textures library
                 if unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Texture/{clean_t}") or unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Texture/PalIcon/Normal/{clean_t}"):
+                    continue
+                if unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Effect/Textures/{clean_t}") or unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Effect/Common/{clean_t}"):
                     continue
                 # E) Full game path
                 if "/" in clean_t and unreal.EditorAssetLibrary.does_asset_exist(clean_t):
@@ -333,21 +344,38 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
             if bpo:
                 try:
                     overrides = mi_asset.get_editor_property("base_property_overrides")
-                    if bpo.get("bOverride_ShadingModel"):
+                    if bpo.get("bOverride_ShadingModel") or "ShadingModel" in bpo:
                         overrides.set_editor_property("override_shading_model", True)
                         sm_str = str(bpo.get("ShadingModel", ""))
                         if "Subsurface" in sm_str:
                             overrides.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_SUBSURFACE)
                         elif "DefaultLit" in sm_str:
                             overrides.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
-                    if "BlendMode" in bpo:
+                        elif "Unlit" in sm_str:
+                            overrides.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+                        elif "ClearCoat" in sm_str:
+                            overrides.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_CLEAR_COAT)
+                            
+                    if bpo.get("bOverride_BlendMode") or "BlendMode" in bpo:
+                        overrides.set_editor_property("override_blend_mode", True)
                         bm_str = str(bpo.get("BlendMode", ""))
                         if "Masked" in bm_str:
                             overrides.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
                         elif "Translucent" in bm_str:
                             overrides.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
-                    if "OpacityMaskClipValue" in bpo:
-                        overrides.set_editor_property("opacity_mask_clip_value", float(bpo["OpacityMaskClipValue"]))
+                        elif "Opaque" in bm_str:
+                            overrides.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+                        elif "Additive" in bm_str:
+                            overrides.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+                            
+                    if bpo.get("bOverride_TwoSided") or "TwoSided" in bpo:
+                        overrides.set_editor_property("override_two_sided", True)
+                        overrides.set_editor_property("two_sided", bool(bpo.get("TwoSided", True)))
+                        
+                    if bpo.get("bOverride_OpacityMaskClipValue") or "OpacityMaskClipValue" in bpo:
+                        overrides.set_editor_property("override_opacity_mask_clip_value", True)
+                        overrides.set_editor_property("opacity_mask_clip_value", float(bpo.get("OpacityMaskClipValue", 0.3333)))
+                        
                     mi_asset.set_editor_property("base_property_overrides", overrides)
                 except Exception as e:
                     print(f"  Warning setting BasePropertyOverrides: {e}")
@@ -377,11 +405,21 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
             # --- 6. APPLY RESOLVED TEXTURES (BASELINE + BLENDER OVERRIDES) ---
             for param_name, tex_name in active_textures.items():
                 clean_tex = tex_name.split(".")[0]
-                loaded_tex = (
-                    unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{clean_tex}") or
-                    (unreal.EditorAssetLibrary.load_asset(f"{parent_ue_dir}/{clean_tex}") if parent_ue_dir else None) or
-                    unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Texture/{clean_tex}")
-                )
+                known_path = active_paths.get(param_name)
+                
+                loaded_tex = None
+                if known_path and unreal.EditorAssetLibrary.does_asset_exist(known_path):
+                    loaded_tex = unreal.EditorAssetLibrary.load_asset(known_path)
+                
+                if not loaded_tex:
+                    loaded_tex = (
+                        unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{clean_tex}") or
+                        (unreal.EditorAssetLibrary.load_asset(f"{parent_ue_dir}/{clean_tex}") if parent_ue_dir else None) or
+                        unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Texture/{clean_tex}") or
+                        unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Effect/Textures/{clean_tex}") or
+                        unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Effect/Common/{clean_tex}")
+                    )
+                    
                 if loaded_tex and isinstance(loaded_tex, unreal.Texture):
                     unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(
                         mi_asset, unreal.Name(param_name), loaded_tex
