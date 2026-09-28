@@ -374,27 +374,31 @@ def compile_material_instance_base(mat_name: str, parent_class: str, params: dic
         links.new(combine_node.outputs["Color"], sep_color.inputs["Color"])
 
         # --- DYNAMICALLY BAKE AND CONNECT COMBINED CHANNELS TO DISK AND SHADER TREE ---
-        try:
-            from image_combiner import build_mrao_texture
-            mrao_filename = f"T_{mat_name}_M"
-            out_filepath = os.path.join(working_dir, f"{mrao_filename}.png")
-            
-            print(f"[PalBaker] Baking combined MRAO channels to: {out_filepath}", flush=True)
-            build_mrao_texture(combine_node, out_filepath)
-            
-            # Replace combine network with baked texture node
-            nodes.remove(color_r)
-            nodes.remove(color_g)
-            nodes.remove(color_b)
-            nodes.remove(combine_node)
-            
-            mrao_tex = create_texture_node(nodes, working_dir, mrao_filename, -1200, 0, non_color=True)
-            links.new(mrao_tex.outputs["Color"], sep_color.inputs["Color"])
-            
-            # Add to params so downstream unreal import logic picks up on it
-            params["MetallicRoughnessOcclusionSpecularTexture"] = mrao_filename
-        except Exception as e:
-            print(f"[PalBaker Warning] Failed to bake combined MRAO texture: {e}", flush=True)
+        # Skip MRAO baking for special materials (unlit, fire, eye, etc.) that do not use MRAO
+        is_special_mat = resolve_special_parent_material(mat_name) or resolve_special_parent_material(parent_class)
+        if not is_special_mat:
+            try:
+                from image_combiner import build_mrao_texture
+                clean_base = re.sub(r'^(?:T_MI_|MI_|M_|T_)', '', mat_name, flags=re.IGNORECASE)
+                clean_base = re.sub(r'_[MSBN]$', '', clean_base, flags=re.IGNORECASE)
+                mrao_filename = f"T_{clean_base}_M"
+                out_filepath = os.path.join(working_dir, f"{mrao_filename}.png")
+                
+                print(f"[PalBaker] Baking combined MRAO channels to: {out_filepath}", flush=True)
+                build_mrao_texture(combine_node, out_filepath)
+                
+                # Replace combine network with baked texture node
+                nodes.remove(color_r)
+                nodes.remove(color_g)
+                nodes.remove(color_b)
+                nodes.remove(combine_node)
+                
+                mrao_tex = create_texture_node(nodes, working_dir, mrao_filename, -1200, 0, non_color=True)
+                links.new(mrao_tex.outputs["Color"], sep_color.inputs["Color"])
+                
+                params["MetallicRoughnessOcclusionSpecularTexture"] = mrao_filename
+            except Exception as e:
+                print(f"[PalBaker Warning] Failed to bake combined MRAO texture: {e}", flush=True)
 
     mix_node = translator.execute(
         "connect_mix_nodes", 
@@ -525,7 +529,9 @@ def get_material_textures_base(mat_name: str) -> dict:
                             working_dir = os.path.dirname(blend_path)
                             try:
                                 from image_combiner import build_mrao_texture
-                                mrao_filename = f"T_{mat_name}_M"
+                                clean_base = re.sub(r'^(?:T_MI_|MI_|M_|T_)', '', mat_name, flags=re.IGNORECASE)
+                                clean_base = re.sub(r'_[MSBN]$', '', clean_base, flags=re.IGNORECASE)
+                                mrao_filename = f"T_{clean_base}_M"
                                 out_filepath = os.path.join(working_dir, f"{mrao_filename}.png")
                                 
                                 print(f"[PalBaker] Auto-baking combined MRAO channels during export to: {out_filepath}", flush=True)

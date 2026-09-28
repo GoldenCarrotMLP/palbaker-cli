@@ -70,11 +70,12 @@ def run_pipeline():
         if redirect_folder:
             material_target_ue_path = f"{ue_path}/{redirect_folder}"
 
-       # Import FBX mesh directly (only importing textures if push_textures is True)
+        # Import FBX mesh directly (only importing textures if push_textures is True)
         target_asset_path, target_phys_path = import_assets(
         ue_path, config["textures"], fbx_file, import_name, base_pal, 
         template_id, is_custom_pal, import_tex=push_textures, 
-        has_custom_anims=has_custom_anims, palbaker_root=palbaker_root
+        has_custom_anims=has_custom_anims, palbaker_root=palbaker_root,
+        sidecar_path=os.path.join(working_dir, bone_data_file)
     )
         
         # Ensure Physics Asset is linked regardless of material push status

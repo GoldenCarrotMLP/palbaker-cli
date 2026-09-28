@@ -1,5 +1,5 @@
 # utils/node_builder.py
-import os
+import os, re
 
 # Import strictly from the dynamic translation facade (NO direct 'bpy' imports allowed!)
 from blender_utils import translator
@@ -51,7 +51,7 @@ def get_mapped_texture(params, role):
 
 def find_best_texture_match(slot_name, textures, suffix):
     """Calculates the highest token intersection between slot and file to map textures dynamically."""
-    clean_slot = slot_name.lower().replace("mi_", "").replace("sk_", "")
+    clean_slot = re.sub(r'^(?:t_mi_|mi_|m_|sk_)', '', slot_name.lower())
     slot_tokens = set(clean_slot.split("_"))
     
     best_match = None
@@ -90,8 +90,7 @@ def find_best_texture_match(slot_name, textures, suffix):
                 clean_tex_name = clean_tex_name[:-len(s)]
                 break
                 
-        if clean_tex_name.startswith("t_"):
-            clean_tex_name = clean_tex_name[2:]
+        clean_tex_name = re.sub(r'^(?:t_mi_|t_|mi_|m_)', '', clean_tex_name)
             
         tex_tokens = set(clean_tex_name.split("_"))
         

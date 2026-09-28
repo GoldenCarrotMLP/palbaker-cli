@@ -318,13 +318,27 @@ def get_mod_info(settings: dict, target_mod: str = None):
         is_variant = (mod_name != base_pal)
 
         has_fmodel = bool(fmodel_path and os.path.exists(fmodel_path))
-        
         has_ue = False
+        has_skeleton_ue = False
+        
         if ue_path and os.path.exists(ue_path):
             if is_variant and ue_path.replace("\\", "/").endswith(base_pal):
                 has_ue = any(f.lower() == f"sk_{mod_name.lower()}.uasset" for f in os.listdir(ue_path))
             else:
                 has_ue = any(f.startswith("SK_") and f.endswith(".uasset") and "_PhysicsAsset" not in f for f in os.listdir(ue_path))
+
+        if ue_base and os.path.exists(ue_base):
+            skel_base_dir = os.path.join(ue_base, "Skeleton")
+            if os.path.exists(skel_base_dir):
+                skel_candidates = [
+                    os.path.join(skel_base_dir, base_pal, mod_name, f"SK_{mod_name}_Skeleton.uasset"),
+                    os.path.join(skel_base_dir, mod_name, f"SK_{mod_name}_Skeleton.uasset"),
+                    os.path.join(skel_base_dir, base_pal, f"SK_{mod_name}_Skeleton.uasset"),
+                    os.path.join(skel_base_dir, base_pal, f"SK_{base_pal}_Skeleton.uasset"),
+                    os.path.join(skel_base_dir, "Human", "SK_PalHuman_Skeleton.uasset"),
+                    os.path.join(skel_base_dir, "Player", "SK_PalHuman_Skeleton.uasset"),
+                ]
+                has_skeleton_ue = any(os.path.exists(p) for p in skel_candidates)
 
         has_blend = False
         has_psk = False
@@ -521,6 +535,7 @@ def get_mod_info(settings: dict, target_mod: str = None):
             "has_blend": has_blend,
             "has_psk": has_psk,
             "has_ue": has_ue,
+            "has_skeleton_ue": has_skeleton_ue,
             "source_modified": source_modified,
             "ue_modified": ue_modified,
             "ue_modified_files": ue_modified_files,

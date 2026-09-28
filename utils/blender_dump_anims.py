@@ -120,7 +120,12 @@ def import_psas_to_nla(blend_path: str, psa_dir: str, sidecar_path: str, base_pa
                 mapping_cache = json.load(f_c)
         except Exception: pass
 
-    psa_files = [os.path.join(r, f) for r, _, fs in os.walk(psa_dir) for f in fs if f.lower().endswith(".psa")]
+    # Only import AS_ sequence files into Blender (AM_ files are montages and must not be imported as actions)
+    psa_files = [
+        os.path.join(r, f) for r, _, fs in os.walk(psa_dir) 
+        for f in fs 
+        if f.lower().endswith(".psa") and not f.startswith("AM_") and not f.startswith("am_")
+    ]
     imported_count = 0
     existing_track_names = {t.name for t in arm_obj.animation_data.nla_tracks}
 

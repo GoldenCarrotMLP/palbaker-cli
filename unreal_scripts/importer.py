@@ -229,7 +229,23 @@ def clear_cache(ue_path, fbx_file, target_mesh_name, is_custom_pal=False, has_cu
                     try: unreal.EditorAssetLibrary.delete_directory(folder)
                     except Exception as e: print(f"[PalBaker] Warning: Failed to delete {folder}: {e}")
 
-def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, template_id=None, is_custom_pal=False, import_tex=True, has_custom_anims=False, palbaker_root=""):
+def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, template_id=None, is_custom_pal=False, import_tex=True, has_custom_anims=False, palbaker_root="", sidecar_path=""):
+    # Pre-calculate shared baseline textures to avoid redundant imports
+    shared_textures = set()
+    if sidecar_path and os.path.exists(sidecar_path):
+        try:
+            import json
+            with open(sidecar_path, "r", encoding="utf-8") as f:
+                sc_data = json.load(f)
+                for mat_data in sc_data.get("materials", {}).values():
+                    baseline = mat_data.get("baseline_settings", {})
+                    for param_name, tex_pkg in baseline.get("texture_paths", {}).items():
+                        if tex_pkg and not tex_pkg.lower().startswith(ue_path.lower()):
+                            tex_asset_name = tex_pkg.split("/")[-1].lower()
+                            shared_textures.add(tex_asset_name)
+        except Exception as e:
+            print(f"[PalBaker] Warning reading sidecar for shared textures: {e}")
+
     # 1. Textures Import (Forced Overwrite)
     if import_tex and textures:
         print(f"[PalBaker] Importing {len(textures)} textures with forced overwrite...", flush=True)
@@ -241,6 +257,11 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
                 while "." in tex_name:
                     tex_name = os.path.splitext(tex_name)[0]
                 tex_name = tex_name.replace(" ", "_")
+
+                if tex_name.lower() in shared_textures:
+                    print(f"[PalBaker] Skipping local import of shared texture: {tex_name} (Using existing game asset). Rename your file if you want a custom override.", flush=True)
+                    continue
+
                 tex_asset_path = f"{ue_path}/{tex_name}"
 
                 try:

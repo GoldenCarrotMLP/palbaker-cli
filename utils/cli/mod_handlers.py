@@ -400,11 +400,11 @@ def handle_mod_command(args, settings):
         sidecar_data["custom_animations"]["blend_spaces"] = blend_spaces
         save_sidecar(sidecar_path, sidecar_data)
 
-        # Extract all .psa files from the source Pal's archives
+        # Extract only AS_ .psa sequence files from the source Pal's archives (skip AM_ montages)
         psa_dir = os.path.join(temp_dir, "psa")
         os.makedirs(psa_dir, exist_ok=True)
         from utils.extractor.core import extract_game_files
-        extract_game_files(settings, [f"*Animation/Character/*/{source_pal}/*"], psa_dir, format_type="auto")
+        extract_game_files(settings, [f"*Animation/Character/*/{source_pal}/AS_*"], psa_dir, format_type="auto")
 
         # Run headless Blender with source_pal to correctly clean track prefixes
         blend_file = os.path.join(mod_data["fmodel_path"], f"{mod_name}.blend")

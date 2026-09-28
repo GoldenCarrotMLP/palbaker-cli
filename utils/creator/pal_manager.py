@@ -90,6 +90,7 @@ LIGHT_TEMPLATES = {
 
 def infer_template_features(template_id: str, base_props: dict, parent_params: dict, saddle_item: str, partner_skill: str) -> dict:
     features = {
+        "CustomFeaturesEnabled": False,
         "Riding": { "Enabled": False },
         "Flight": { "Enabled": False },
         "CoopWeapon": { "Enabled": False },

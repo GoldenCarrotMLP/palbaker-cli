@@ -667,6 +667,32 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                         f.write(am_str)
 
                 new_am_name = am.replace(template_id, pal_id)
+
+                # Check if user assigned a custom sequence to this montage in the sidecar
+                anim_meta = custom_anims.get("anims", {}).get(new_am_name) or custom_anims.get("anims", {}).get(am)
+                if anim_meta and anim_meta.get("sequence_asset"):
+                    assigned_seq = anim_meta["sequence_asset"]
+                    default_seq = f"AS_{pal_id}_{extract_track_name(new_am_name)}"
+                    if assigned_seq != default_seq:
+                        try:
+                            with open(am_json, "r", encoding="utf-8") as f_am_read:
+                                am_data_obj = json.load(f_am_read)
+                            
+                            # Replace sequence references in AST
+                            for exp in am_data_obj.get("Exports", []):
+                                for p in exp.get("Data", []):
+                                    if p.get("Name") in ["CompositeSections", "SlotAnimTracks"]:
+                                        p_str = json.dumps(p)
+                                        p_str = p_str.replace(default_seq, assigned_seq)
+                                        p.update(json.loads(p_str))
+
+                            sync_namemap(am_data_obj)
+                            with open(am_json, "w", encoding="utf-8") as f_am_write:
+                                json.dump(am_data_obj, f_am_write, indent=4)
+                            log(f"  -> Linked custom sequence '{assigned_seq}' to montage '{new_am_name}'")
+                        except Exception as e:
+                            log(f"  Warning linking sequence to montage: {e}", "warning")
+
                 dest_am_uasset = os.path.join(cooked_anims_dir, f"{new_am_name}.uasset")
                 compile_uasset(uasset_gui_exe, am_json, dest_am_uasset, usmap_path)
                 log(f"  ✓ Compiled AnimMontage: {new_am_name}.uasset")
@@ -715,13 +741,19 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
             # ---> CRITICAL FIX: Only modify components if this is a Standalone Custom Pal!
             # Variants (even with custom animations) inherit their parent's exact layout.
             if is_custom_pal:
-                mgr = BlueprintFeatureManager(base_json_data)
                 features = pal_data.get("Features", {})
+                custom_features_enabled = bool(features.get("CustomFeaturesEnabled", False))
 
-                # Active partner skills are mutually exclusive (Keybind 'F'):
-                riding = features.get("Riding", {})
-                coop_weapon = features.get("CoopWeapon", {})
-                funnel = features.get("Funnel", {})
+                if not custom_features_enabled:
+                    log("  [Blueprint] Custom features switch is OFF: Preserving template's original components (applying vital renames only).", "standard")
+                else:
+                    log("  [Blueprint] Custom features switch is ON: Injecting customized feature components...", "standard")
+                    mgr = BlueprintFeatureManager(base_json_data)
+
+                    # Active partner skills are mutually exclusive (Keybind 'F'):
+                    riding = features.get("Riding", {})
+                    coop_weapon = features.get("CoopWeapon", {})
+                    funnel = features.get("Funnel", {})
 
                 is_riding_active = bool(riding.get("Enabled", False))
                 is_weapon_active = bool(coop_weapon.get("Enabled", False))

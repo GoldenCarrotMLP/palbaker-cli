@@ -39,7 +39,7 @@ def sanitize_asset_name(name):
     return sanitized.strip('_')
 
 def find_best_texture_match(slot_name, textures, suffix):
-    clean_slot = slot_name.lower().replace("mi_", "").replace("sk_", "")
+    clean_slot = re.sub(r'^(?:t_mi_|mi_|m_|sk_)', '', slot_name.lower())
     slot_tokens = set(clean_slot.split("_"))
     
     best_match = None
@@ -74,8 +74,7 @@ def find_best_texture_match(slot_name, textures, suffix):
                 clean_tex_name = clean_tex_name[:-len(s)]
                 break
                 
-        if clean_tex_name.startswith("t_"):
-            clean_tex_name = clean_tex_name[2:]
+        clean_tex_name = re.sub(r'^(?:t_mi_|t_|mi_|m_)', '', clean_tex_name)
             
         tex_tokens = set(clean_tex_name.split("_"))
         
@@ -218,10 +217,21 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
             active_textures = dict(baseline_textures)
             active_paths = dict(baseline_paths)
             for p_name, t_val in blender_textures.items():
-                if t_val:
-                    active_textures[p_name] = t_val
-                    # Clear baseline full path if overridden by Blender
-                    active_paths.pop(p_name, None)
+                if not t_val:
+                    continue
+
+                # Strip accidental T_MI_ prefix
+                if t_val.startswith("T_MI_") or t_val.startswith("t_mi_"):
+                    t_val = "T_" + t_val[5:]
+
+                # Prevent phantom Blender parameters on materials whose baseline shader doesn't use them
+                if baseline_textures and p_name not in baseline_textures:
+                    clean_check = t_val.split(".")[0].lower()
+                    if clean_check not in local_tex_basenames:
+                        continue
+
+                active_textures[p_name] = t_val
+                active_paths.pop(p_name, None)
 
             # 2. Validate all required textures exist in Unreal or local import queue
             missing_textures = []
@@ -250,6 +260,13 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                 if unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Texture/{clean_t}") or unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Texture/PalIcon/Normal/{clean_t}"):
                     continue
                 if unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Effect/Textures/{clean_t}") or unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Effect/Common/{clean_t}"):
+                    continue
+                # D2) Shared Material default textures & Engine fallbacks
+                if unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Material/{clean_t}") or unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Material/Character/Common/{clean_t}"):
+                    continue
+                if unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Pal/Texture/ModelCommon/FacialMask/{clean_t}") or unreal.EditorAssetLibrary.does_asset_exist(f"/Game/Mods/{clean_t}"):
+                    continue
+                if unreal.EditorAssetLibrary.does_asset_exist(f"/Engine/EngineResources/{clean_t}") or unreal.EditorAssetLibrary.does_asset_exist(f"/Engine/EngineMaterials/{clean_t}"):
                     continue
                 # E) Full game path
                 if "/" in clean_t and unreal.EditorAssetLibrary.does_asset_exist(clean_t):
@@ -415,9 +432,16 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                     loaded_tex = (
                         unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{clean_tex}") or
                         (unreal.EditorAssetLibrary.load_asset(f"{parent_ue_dir}/{clean_tex}") if parent_ue_dir else None) or
+                        unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Material/{clean_tex}") or
+                        unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Material/Character/Common/{clean_tex}") or
                         unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Texture/{clean_tex}") or
+                        unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Texture/PalIcon/Normal/{clean_tex}") or
+                        unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Texture/ModelCommon/FacialMask/{clean_tex}") or
                         unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Effect/Textures/{clean_tex}") or
-                        unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Effect/Common/{clean_tex}")
+                        unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Effect/Common/{clean_tex}") or
+                        unreal.EditorAssetLibrary.load_asset(f"/Game/Mods/{clean_tex}") or
+                        unreal.EditorAssetLibrary.load_asset(f"/Engine/EngineResources/{clean_tex}") or
+                        unreal.EditorAssetLibrary.load_asset(f"/Engine/EngineMaterials/{clean_tex}")
                     )
                     
                 if loaded_tex and isinstance(loaded_tex, unreal.Texture):

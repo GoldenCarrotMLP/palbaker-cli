@@ -67,10 +67,16 @@ class FeatureDependencyValidator:
         4. Animations and notifies baked in Blender NLA.
         """
         missing = []
+        features = pal_data.get("Features", {})
+        custom_features_enabled = bool(features.get("CustomFeaturesEnabled", False))
+
+        # If custom feature overrides are turned off, the Pal retains the native template's valid setup
+        if not custom_features_enabled:
+            return missing
+
         user_anims = sidecar_data.get("custom_animations", {}).get("anims", {})
         is_anim_active = bool(sidecar_data.get("custom_animations", {}).get("is_active", False))
         template_id = pal_data.get("TemplateID", "")
-        features = pal_data.get("Features", {})
 
         # --- 1. ATTACHMENT SOCKET VALIDATION ---
         available_bones = set()
