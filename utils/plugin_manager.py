@@ -62,8 +62,24 @@ def check_project_requirements(ue_root: str, uproject_path: str) -> dict:
         "missing_assets": []
     }
     
-    if not ue_root or not uproject_path or not os.path.exists(uproject_path):
-        result["error"] = "Unreal Engine Root or UProject path is missing or invalid."
+    if not ue_root or not os.path.exists(ue_root):
+        result["error"] = f"Unreal Engine Root directory does not exist: '{ue_root}'"
+        return result
+
+    if not uproject_path or not os.path.exists(uproject_path) or not os.path.isfile(uproject_path) or not uproject_path.lower().endswith(".uproject"):
+        result["error"] = f"UProject path is missing or does not point to a valid .uproject file: '{uproject_path}'"
+        return result
+
+    # Check for required Unreal binaries
+    bin_dir = os.path.join(ue_root, "Engine", "Binaries", "Win64")
+    required_binaries = ["UnrealEditor.exe", "UnrealEditor-Cmd.exe", "UnrealPak.exe"]
+    if os.name != 'nt':
+        bin_dir = os.path.join(ue_root, "Engine", "Binaries", "Linux")
+        required_binaries = ["UnrealEditor", "UnrealEditor-Cmd", "UnrealPak"]
+
+    missing_binaries = [b for b in required_binaries if not os.path.exists(os.path.join(bin_dir, b))]
+    if missing_binaries:
+        result["error"] = f"Unreal Engine is missing required binaries in '{bin_dir}': {', '.join(missing_binaries)}"
         return result
 
     project_dir = os.path.dirname(uproject_path)

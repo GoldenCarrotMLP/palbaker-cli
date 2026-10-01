@@ -210,6 +210,7 @@ def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action
 
 
 def handle_mod_command(args, settings):
+    mod_data = None
     action = args.action
     base_pal = getattr(args, "base_pal", "")
     mod_name = args.mod
@@ -228,6 +229,10 @@ def handle_mod_command(args, settings):
         is_valid, err_msg = validate_settings(settings, ["fmodel_output"])
     elif action in ["open-ue", "open-pak"]:
         is_valid, err_msg = validate_settings(settings, ["uproject"])
+    elif action in ["edit-anim", "save-notifies", "save-anims"]:
+        anim_key = getattr(args, "key", "") or ""
+        payload_data = getattr(args, "data", "") or getattr(args, "path", "") or "{}"
+        handle_edit_anim(settings, mod_data, base_pal, mod_name, anim_key, payload_data)
     else:
         is_valid, err_msg = validate_settings(settings, ["fmodel_output", "ue_root", "uproject"])
         
@@ -374,43 +379,79 @@ def handle_mod_command(args, settings):
 
         inventory, blend_spaces = harvest_pal_animation_inventory(settings, source_pal, temp_dir)
         sidecar_path = os.path.join(mod_data["fmodel_path"], f"{mod_name}_blend.json")
-        
-        # Load sidecar and preserve user notifies & rest properties
+
+        # 1. RETARGET INVENTORY & BLENDSPACES IF CUSTOM PAL OR VARIANT
+        if mod_name.lower() != source_pal.lower():
+            print(f"[PalBaker Anims] Retargeting animation inventory '{source_pal}' -> '{mod_name}'...", flush=True)
+            retargeted_inventory = {}
+            for inv_k, inv_v in inventory.items():
+                track = inv_v.get("nla_track_name", "")
+                seq_name = f"AS_{mod_name}_{track}"
+                mont_name = f"AM_{mod_name}_{track}"
+
+                inv_v["sequence_asset"] = seq_name
+                inv_v["montage_asset"] = mont_name
+                if source_pal in inv_v.get("enum_key", ""):
+                    inv_v["enum_key"] = inv_v["enum_key"].replace(source_pal, mod_name)
+                if source_pal in inv_v.get("display_name", ""):
+                    inv_v["display_name"] = inv_v["display_name"].replace(source_pal, mod_name)
+
+                retargeted_inventory[seq_name] = inv_v
+            inventory = retargeted_inventory
+
+            retargeted_blend_spaces = {}
+            for bs_k, bs_v in blend_spaces.items():
+                new_bs = dict(bs_v)
+                if source_pal in new_bs.get("asset_name", ""):
+                    new_bs["asset_name"] = new_bs["asset_name"].replace(source_pal, mod_name)
+                new_samples = []
+                for smp in new_bs.get("samples", []):
+                    smp_copy = dict(smp)
+                    t_smp = smp_copy.get("clean_name", "")
+                    smp_copy["animation"] = f"AS_{mod_name}_{t_smp}"
+                    new_samples.append(smp_copy)
+                new_bs["samples"] = new_samples
+                retargeted_blend_spaces[bs_k] = new_bs
+            blend_spaces = retargeted_blend_spaces
+
+        # 2. DEDUPLICATING MERGE: Preserve user notifies & rest properties on matching tracks
         from utils.sidecar_helper import load_sidecar, save_sidecar
         sidecar_data = load_sidecar(sidecar_path)
         existing_anims = sidecar_data.get("custom_animations", {}).get("anims", {})
-        
+
         for inv_k, inv_v in inventory.items():
-            # Try exact key or match by track name
-            existing_match = existing_anims.get(inv_k)
-            if not existing_match:
-                clean_t = inv_v.get("nla_track_name", "")
-                existing_match = next((v for v in existing_anims.values() if v.get("nla_track_name") == clean_t), None)
+            clean_t = inv_v.get("nla_track_name", "").lower()
+            existing_match = None
+            for ek, ev in existing_anims.items():
+                if ek.lower() == inv_k.lower() or (isinstance(ev, dict) and ev.get("nla_track_name", "").lower() == clean_t):
+                    existing_match = ev
+                    break
 
             if existing_match:
-                # ONLY preserve existing notifies if they are NOT empty (e.g. user customized them)
                 if existing_match.get("notifies"):
                     inv_v["notifies"] = existing_match["notifies"]
                 if "rest_props" in existing_match:
                     inv_v["rest_props"] = existing_match["rest_props"]
+                if "in_nla" in existing_match:
+                    inv_v["in_nla"] = existing_match["in_nla"]
 
-
+        # Clean replacement: eliminates duplicate template keys from the sidecar
         sidecar_data.setdefault("custom_animations", {})["is_active"] = True
         sidecar_data["custom_animations"]["anims"] = inventory
         sidecar_data["custom_animations"]["blend_spaces"] = blend_spaces
         save_sidecar(sidecar_path, sidecar_data)
 
-        # Extract only AS_ .psa sequence files from the source Pal's archives (skip AM_ montages)
+        # 3. Extract only AS_ .psa sequence files from the source Pal's archives
         psa_dir = os.path.join(temp_dir, "psa")
         os.makedirs(psa_dir, exist_ok=True)
         from utils.extractor.core import extract_game_files
         extract_game_files(settings, [f"*Animation/Character/*/{source_pal}/AS_*"], psa_dir, format_type="auto")
 
-        # Run headless Blender with source_pal to correctly clean track prefixes
+        # 4. Run headless Blender to import actions into NLA
         blend_file = os.path.join(mod_data["fmodel_path"], f"{mod_name}.blend")
         repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         importer_script = os.path.join(repo_root, "utils", "blender_dump_anims.py")
-        
+
         from utils.builder.blender_helper import run_headless_blender
         result = run_headless_blender(
             settings["blender"],
@@ -423,15 +464,14 @@ def handle_mod_command(args, settings):
 
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-        # Sync in_nla status back into blend_spaces samples
+        # 5. Sync in_nla status back into blend_spaces samples
         final_sidecar = load_sidecar(sidecar_path)
         anims_state = final_sidecar.get("custom_animations", {})
         final_anims = anims_state.get("anims", {})
-        
-        # Auto-disable framework if you deleted all animations from your Blender model
+
         has_any_nla = any(a.get("in_nla", False) for a in final_anims.values())
         anims_state["is_active"] = has_any_nla
-        
+
         for bs_key, bs_data in anims_state.get("blend_spaces", {}).items():
             for sample in bs_data.get("samples", []):
                 matching = final_anims.get(sample["animation"])
@@ -442,11 +482,10 @@ def handle_mod_command(args, settings):
         total_mapped = len(final_anims)
 
         json_print({
-            "status": "success", 
-            "message": f"Successfully dumped and mapped {total_mapped} animations into {mod_name}.blend!",
+            "status": "success",
+            "message": f"Successfully dumped and retargeted {total_mapped} animations for {mod_name}!",
             "custom_animations": final_sidecar.get("custom_animations")
         })
-
 
     elif action == "save-anims":
         payload_str = getattr(args, "path", "{}")
@@ -687,6 +726,157 @@ def handle_mod_command(args, settings):
         build_action = action_mapping.get(action, action)
         run_build_mod_and_stream(base_pal, mod_name, category, build_action, preserve_override, settings)
 
+def handle_edit_anim(settings: dict, mod_data: dict | None, base_pal: str, mod_name: str, anim_key: str, data_payload: str):
+    fmodel_path = mod_data.get("fmodel_path", "") if mod_data else ""
+    
+    # Self-healing path resolution if mod_data is empty
+    if not fmodel_path or not os.path.exists(fmodel_path):
+        fmodel_base = settings.get("fmodel_output", "")
+        if fmodel_base:
+            for cat in ["Monster", "Pending Monster", "Player", "NPC", "Palmi", "Normal", "RaidMonster", "RaidBoss"]:
+                c1 = os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Model", "Character", cat, base_pal, mod_name))
+                c2 = os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Model", "Character", cat, mod_name))
+                c3 = os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Model", "Character", cat, base_pal))
+                for c in [c1, c2, c3]:
+                    if os.path.exists(c):
+                        fmodel_path = c
+                        break
+                if fmodel_path:
+                    break
+
+    if not fmodel_path or not os.path.exists(fmodel_path):
+        error_print(f"Workspace path for '{mod_name}' does not exist on disk.")
+        sys.exit(1)
+
+    # Locate sidecar case-insensitively (supports EmberPup_blend.json or Emberpup_blend.json)
+    sidecar_path = None
+    for f in os.listdir(fmodel_path):
+        if f.lower() == f"{mod_name.lower()}_blend.json":
+            sidecar_path = os.path.join(fmodel_path, f)
+            break
+
+    if not sidecar_path or not os.path.exists(sidecar_path):
+        sidecar_path = os.path.join(fmodel_path, f"{mod_name}_blend.json")
+
+    from utils.sidecar_helper import load_sidecar, save_sidecar
+    sidecar_data = load_sidecar(sidecar_path)
+    custom_anims = sidecar_data.setdefault("custom_animations", {})
+    anims_dict = custom_anims.setdefault("anims", {})
+
+    # Parse incoming payload
+    try:
+        payload = json.loads(data_payload) if isinstance(data_payload, str) and data_payload else (data_payload or {})
+    except Exception as e:
+        error_print(f"Failed to parse JSON payload for edit-anim: {e}")
+        sys.exit(1)
+
+    op = payload.get("op", "upsert")
+
+    if not anim_key:
+        anim_key = payload.get("key") or payload.get("anim_key") or payload.get("animation") or ""
+
+    if not anim_key:
+        error_print("Missing target animation key (--key <anim_key>).")
+        sys.exit(1)
+
+    # Resolve target entry case-insensitively without corrupting slot keys
+    target_key = None
+    target_entry = None
+    anim_key_lower = anim_key.lower().strip()
+
+    for k, v in anims_dict.items():
+        if k.lower() == anim_key_lower:
+            target_key = k
+            target_entry = v
+            break
+
+    if not target_entry:
+        for k, v in anims_dict.items():
+            if isinstance(v, dict):
+                v_track = v.get("nla_track_name", "").lower()
+                v_seq = v.get("sequence_asset", "").lower()
+                v_mont = v.get("montage_asset", "").lower()
+                if anim_key_lower in [v_track, v_seq, v_mont]:
+                    target_key = k
+                    target_entry = v
+                    break
+
+    if not target_key:
+        target_key = anim_key
+
+    # 1. Action: Delete animation
+    if op in ["delete_anim", "remove_anim"]:
+        anims_dict.pop(target_key, None)
+        save_sidecar(sidecar_path, sidecar_data)
+        json_print({"status": "success", "message": f"Deleted animation '{target_key}' from sidecar."})
+        return
+
+    # 2. If not existing, create a fresh entry
+    if not target_entry:
+        from utils.blender_dump_anims import extract_track_name_simple
+        clean_t = extract_track_name_simple(anim_key, base_pal, mod_name)
+        target_entry = {
+            "category": payload.get("category", "GeneralMontage"),
+            "enum_key": payload.get("enum_key", clean_t),
+            "display_name": payload.get("display_name", clean_t.replace("_", " ")),
+            "sequence_asset": target_key,
+            "montage_asset": f"AM_{mod_name}_{clean_t}",
+            "nla_track_name": clean_t,
+            "in_nla": payload.get("in_nla", True),
+            "is_modified": True,
+            "notifies": []
+        }
+
+    # 3. Apply Granular Operations or Property Patches
+    if op == "add_notify":
+        new_items = payload.get("notifies") or ([payload["notify"]] if "notify" in payload else [])
+        target_entry.setdefault("notifies", []).extend(new_items)
+        target_entry["is_modified"] = True
+
+    elif op == "delete_notify":
+        idx = payload.get("index")
+        notifies = target_entry.get("notifies", [])
+        if isinstance(idx, int) and 0 <= idx < len(notifies):
+            notifies.pop(idx)
+            target_entry["is_modified"] = True
+
+    elif op == "update_notify":
+        idx = payload.get("index")
+        notify = payload.get("notify")
+        notifies = target_entry.setdefault("notifies", [])
+        if isinstance(idx, int) and 0 <= idx < len(notifies) and isinstance(notify, dict):
+            notifies[idx] = notify
+            target_entry["is_modified"] = True
+
+    elif op == "set_notifies":
+        target_entry["notifies"] = payload.get("notifies", [])
+        target_entry["is_modified"] = True
+
+    elif op == "set_rest":
+        target_entry["rest_props"] = payload.get("rest_props", {})
+        target_entry["category"] = "RandomRest"
+        target_entry["is_modified"] = True
+
+    else:
+        # Standard upsert: merge provided fields (sequence_asset, notifies, etc.)
+        fields = payload.get("patch") if "patch" in payload else payload
+        for f_name, f_val in fields.items():
+            if f_name in ["op", "key", "anim_key"]:
+                continue
+            target_entry[f_name] = f_val
+        target_entry["is_modified"] = True
+
+    anims_dict[target_key] = target_entry
+    custom_anims["is_active"] = True
+
+    save_sidecar(sidecar_path, sidecar_data)
+    json_print({
+        "status": "success",
+        "message": f"Successfully updated animation '{target_key}'.",
+        "key": target_key,
+        "entry": target_entry
+    })
+    sys.exit(0)
 
 def handle_audio_command(args, settings):
     base_pal = args.base_pal

@@ -35,6 +35,11 @@ def main():
 
     workspace = ModWorkspace(BASE_PAL, MOD_NAME, CATEGORY, settings)
     custom_blacklist = getattr(workspace, "custom_blacklist", [])
+    
+    # Pre-define category paths so they are always available for all actions (cook, pack, push, etc.)
+    category_sanitized = workspace.category.replace(" ", "_").replace("\\", "/")
+    cat_parts = workspace.category.replace("/", os.sep)
+
 
     # -------------------------------------------------------------
     # DETECT CUSTOM ANIMATIONS IN SIDECAR
@@ -348,11 +353,22 @@ def main():
     # -------------------------------------------------------------
     external_dependency_packages = []
     if ACTION in ["cook", "full", "cook_only", "recursive_cook"]:
-        from utils.builder.cooker_helper import verify_cooking_memory_limit
+        from utils.builder.cooker_helper import verify_cooking_memory_limit, verify_unreal_animation_assets
         
+        # 1. Physical Memory Guard
         is_safe, err_msg = verify_cooking_memory_limit(threshold_gb=2.5)
         if not is_safe:
             print(f"ERROR: {err_msg}", flush=True)
+            sys.exit(1)
+
+        # 2. Animation Sequences Integrity Guard
+        anims_valid, anim_errors = verify_unreal_animation_assets(workspace, sidecar_data)
+        if not anims_valid:
+            print("\n" + "=" * 70, flush=True)
+            print("❌ [PalBaker Animation Guard] Build Aborted: Missing Animation Assets in Unreal!", flush=True)
+            for err in anim_errors:
+                print(f"  {err}", flush=True)
+            print("=" * 70 + "\n", flush=True)
             sys.exit(1)
 
         restore_palbaker_backup(workspace.uproject_path)
@@ -363,24 +379,60 @@ def main():
         cat_parts = workspace.category.replace("/", os.sep)
         extra_cook_paths = []
 
-        # Automatically discover variant subfolders directly from the Unreal Project Content folder
-        ue_char_dir = os.path.normpath(os.path.join(
-            workspace.project_dir, "Content", "Pal", "Model", "Character", 
-            cat_parts, workspace.base_pal
-        )) if workspace.project_dir else ""
-        if os.path.exists(ue_char_dir):
-            for sub in os.listdir(ue_char_dir):
-                if hasattr(workspace, "skipped_variants") and sub in workspace.skipped_variants:
-                    print(f"  [Cook Queue] Skipping variant directory to cook: {sub} (in skipped_variants)", flush=True)
-                    continue
-                sub_p = os.path.join(ue_char_dir, sub)
-                if os.path.isdir(sub_p) and not sub.startswith(".") and sub.lower() not in ["sources", ".palbaker_audio"]:
-                    variant_vpath = f"/Game/Pal/Model/Character/{category_sanitized}/{workspace.base_pal}/{sub}"
-                    if variant_vpath not in extra_cook_paths:
-                        extra_cook_paths.append(variant_vpath)
-                        print(f"  [Cook Queue] Added variant directory to cook: {variant_vpath}", flush=True)
+        if not workspace.is_variant:
+            # PARENT MODE: Discover all enabled variants and queue their assets, skeletons, and anims
+            ue_char_dir = os.path.normpath(os.path.join(
+                workspace.project_dir, "Content", "Pal", "Model", "Character", 
+                cat_parts, workspace.base_pal
+            )) if workspace.project_dir else ""
 
-        # Ensure custom animations, skeletons, and unique attack actions are cooked
+            base_fmodel_dir = os.path.normpath(os.path.join(
+                workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
+                cat_parts, workspace.base_pal
+            )) if workspace.fmodel_root else ""
+
+            discovered_subs = set()
+            if os.path.exists(ue_char_dir):
+                discovered_subs.update(s for s in os.listdir(ue_char_dir) if os.path.isdir(os.path.join(ue_char_dir, s)) and not s.startswith("."))
+            if os.path.exists(base_fmodel_dir):
+                discovered_subs.update(s for s in os.listdir(base_fmodel_dir) if os.path.isdir(os.path.join(base_fmodel_dir, s)) and not s.startswith("."))
+
+            for sub in sorted(list(discovered_subs)):
+                if hasattr(workspace, "skipped_variants") and sub in workspace.skipped_variants:
+                    print(f"  [Cook Queue] Skipping variant: {sub} (in skipped_variants)", flush=True)
+                    continue
+                if sub.lower() in ["sources", ".palbaker_audio"]:
+                    continue
+
+                variant_vpath = f"/Game/Pal/Model/Character/{category_sanitized}/{workspace.base_pal}/{sub}"
+                if variant_vpath not in extra_cook_paths:
+                    extra_cook_paths.append(variant_vpath)
+                    print(f"  [Cook Queue] Added variant directory: {variant_vpath}", flush=True)
+
+                # Check if this child variant has custom animations
+                sub_sidecar = os.path.join(base_fmodel_dir, sub, f"{sub}_blend.json")
+                if not os.path.exists(sub_sidecar):
+                    sub_sidecar = os.path.join(base_fmodel_dir, f"{sub}_blend.json")
+
+                sub_data = load_sidecar(sub_sidecar) if os.path.exists(sub_sidecar) else {}
+                if sub_data.get("custom_animations", {}).get("is_active"):
+                    sub_skel = f"/Game/Pal/Model/Character/Skeleton/{workspace.base_pal}/{sub}"
+                    sub_anim = f"/Game/Pal/Animation/Character/{category_sanitized}/{workspace.base_pal}/{sub}"
+                    sub_bp = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{workspace.base_pal}/{sub}"
+                    sub_waza = f"/Game/Pal/Blueprint/Action/Waza/{sub}"
+                    for p in [sub_skel, sub_anim, sub_bp, sub_waza]:
+                        if p not in extra_cook_paths:
+                            extra_cook_paths.append(p)
+                            print(f"  [Cook Queue] Queued child variant animations & blueprints: {p}", flush=True)
+        else:
+            print(f"  [Cook Queue] Variant mode: Restricting queue strictly to '{MOD_NAME}'.", flush=True)
+
+        # For variants, always cook the dedicated skeleton directory so the mesh has its required skeleton
+        if workspace.is_variant:
+            if workspace.skeleton_virtual_path not in extra_cook_paths:
+                extra_cook_paths.append(workspace.skeleton_virtual_path)
+
+        # Ensure custom animations, actions, and blueprints are cooked
         if workspace.has_anims:
             if workspace.anims_virtual_path not in extra_cook_paths:
                 extra_cook_paths.append(workspace.anims_virtual_path)
@@ -389,6 +441,9 @@ def main():
             waza_virtual_dir = f"/Game/Pal/Blueprint/Action/Waza/{MOD_NAME}"
             if waza_virtual_dir not in extra_cook_paths:
                 extra_cook_paths.append(waza_virtual_dir)
+            if workspace.blueprint_virtual_path not in extra_cook_paths:
+                extra_cook_paths.append(workspace.blueprint_virtual_path)
+
 
         if workspace.has_custom_shader and not is_path_blacklisted("/Game/CartoonCelShader/Materials/CelShader", workspace.custom_blacklist):
             extra_cook_paths.append("/Game/CartoonCelShader/Materials/CelShader")
@@ -436,20 +491,87 @@ def main():
     # PHASE 3: PACK (Package only)
     # -------------------------------------------------------------
     if ACTION in ["cook", "full", "pack", "pack_only", "recursive_cook"]:
+        # Animation Sequences Integrity Guard for standalone packaging
+        from utils.builder.cooker_helper import verify_unreal_animation_assets
+        anims_valid, anim_errors = verify_unreal_animation_assets(workspace, sidecar_data)
+        if not anims_valid:
+            print("\n" + "=" * 70, flush=True)
+            print("❌ [PalBaker Animation Guard] Packaging Aborted: Missing Animation Assets in Unreal!", flush=True)
+            for err in anim_errors:
+                print(f"  {err}", flush=True)
+            print("=" * 70 + "\n", flush=True)
+            sys.exit(1)
+
         # Single Unified Blueprint Orchestration (Actor BP, AnimBP, BlendSpaces, Weapons, Bosses)
-        if workspace.is_custom_pal or workspace.has_anims:
-            print(f"[PalBaker Blueprints] Auto-generating unified blueprint stack (Actor BP, AnimBP, BlendSpaces)...", flush=True)
-            from utils.blueprint_patcher import patch_actor_blueprint
-            source_template = workspace.template_id if workspace.is_custom_pal else workspace.base_pal
-            patch_actor_blueprint(
-                settings,
-                MOD_NAME,
-                source_template,
-                has_anims=workspace.has_anims,
-                category=CATEGORY,
-                base_pal=BASE_PAL,
-                keep_temp=True 
-            )
+        from utils.blueprint_patcher import patch_actor_blueprint
+        source_template = workspace.template_id if workspace.is_custom_pal else workspace.base_pal
+
+        if workspace.is_variant:
+            # Variant Mode: Compile blueprint stack for this specific variant
+            if workspace.has_anims:
+                print(f"[PalBaker Blueprints] Auto-generating unified blueprint stack for variant '{MOD_NAME}'...", flush=True)
+                patch_actor_blueprint(
+                    settings,
+                    MOD_NAME,
+                    source_template,
+                    has_anims=True,
+                    category=CATEGORY,
+                    base_pal=BASE_PAL,
+                    keep_temp=True
+                )
+        else:
+            # Parent Mode: Compile blueprint stack for parent if custom or has anims
+            if workspace.is_custom_pal or workspace.has_anims:
+                print(f"[PalBaker Blueprints] Auto-generating unified blueprint stack for parent '{BASE_PAL}'...", flush=True)
+                patch_actor_blueprint(
+                    settings,
+                    BASE_PAL,
+                    source_template,
+                    has_anims=workspace.has_anims,
+                    category=CATEGORY,
+                    base_pal=BASE_PAL,
+                    keep_temp=True
+                )
+
+            # In Parent Mode: Compile blueprint stacks for ALL enabled child variants with custom anims!
+            base_fmodel_dir = os.path.normpath(os.path.join(
+                workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
+                cat_parts, workspace.base_pal
+            )) if workspace.fmodel_root else ""
+
+            ue_char_dir = os.path.normpath(os.path.join(
+                workspace.project_dir, "Content", "Pal", "Model", "Character", 
+                cat_parts, workspace.base_pal
+            )) if workspace.project_dir else ""
+
+            discovered_subs = set()
+            if os.path.exists(ue_char_dir):
+                discovered_subs.update(s for s in os.listdir(ue_char_dir) if os.path.isdir(os.path.join(ue_char_dir, s)) and not s.startswith("."))
+            if os.path.exists(base_fmodel_dir):
+                discovered_subs.update(s for s in os.listdir(base_fmodel_dir) if os.path.isdir(os.path.join(base_fmodel_dir, s)) and not s.startswith("."))
+
+            for sub in sorted(list(discovered_subs)):
+                if hasattr(workspace, "skipped_variants") and sub in workspace.skipped_variants:
+                    continue
+                if sub.lower() in ["sources", ".palbaker_audio"]:
+                    continue
+
+                sub_sidecar = os.path.join(base_fmodel_dir, sub, f"{sub}_blend.json")
+                if not os.path.exists(sub_sidecar):
+                    sub_sidecar = os.path.join(base_fmodel_dir, f"{sub}_blend.json")
+
+                sub_data = load_sidecar(sub_sidecar) if os.path.exists(sub_sidecar) else {}
+                if sub_data.get("custom_animations", {}).get("is_active"):
+                    print(f"[PalBaker Blueprints] Auto-generating unified blueprint stack for child variant '{sub}'...", flush=True)
+                    patch_actor_blueprint(
+                        settings,
+                        sub,
+                        BASE_PAL,
+                        has_anims=True,
+                        category=CATEGORY,
+                        base_pal=BASE_PAL,
+                        keep_temp=True
+                    )
 
         final_pak_path = workspace.output_pak_clean
         print(f"Preparing Pak (Target: {os.path.basename(final_pak_path)})...", flush=True)
@@ -467,9 +589,58 @@ def main():
             folders_to_pack, 
             workspace.has_anims,
             custom_blacklist,
-            is_custom_pal=workspace.is_custom_pal
+            is_custom_pal=workspace.is_custom_pal,
+            base_pal=workspace.base_pal,
+            is_variant=workspace.is_variant
         )
-        
+
+        # Parent Mode: Clean up redundant standalone child variant pak files now consolidated in this pak
+        if not workspace.is_variant and files_found > 0:
+            cat_parts = workspace.category.replace("/", os.sep)
+            base_fmodel_dir = os.path.normpath(os.path.join(
+                workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
+                cat_parts, workspace.base_pal
+            )) if workspace.fmodel_root else ""
+
+            ue_char_dir = os.path.normpath(os.path.join(
+                workspace.project_dir, "Content", "Pal", "Model", "Character", 
+                cat_parts, workspace.base_pal
+            )) if workspace.project_dir else ""
+
+            discovered_subs = set()
+            if os.path.exists(ue_char_dir):
+                discovered_subs.update(s for s in os.listdir(ue_char_dir) if os.path.isdir(os.path.join(ue_char_dir, s)) and not s.startswith("."))
+            if os.path.exists(base_fmodel_dir):
+                discovered_subs.update(s for s in os.listdir(base_fmodel_dir) if os.path.isdir(os.path.join(base_fmodel_dir, s)) and not s.startswith("."))
+
+            for sub in sorted(list(discovered_subs)):
+                if hasattr(workspace, "skipped_variants") and sub in workspace.skipped_variants:
+                    continue
+                if sub.lower() in ["sources", ".palbaker_audio"]:
+                    continue
+
+                standalone_candidates = [
+                    os.path.join(workspace.output_dir, f"{sub}_P.pak"),
+                    os.path.join(workspace.output_dir, f"{sub}_err_P.pak"),
+                ]
+                if workspace.palworld_exe and os.path.exists(workspace.palworld_exe):
+                    paks_dir = os.path.join(os.path.dirname(workspace.palworld_exe), "Pal", "Content", "Paks")
+                    standalone_candidates.extend([
+                        os.path.join(paks_dir, "palBaker", f"{sub}_P.pak"),
+                        os.path.join(paks_dir, "palBaker", f"{sub}_err_P.pak"),
+                        os.path.join(paks_dir, "~Mods", f"{sub}_P.pak"),
+                        os.path.join(paks_dir, "~mods", f"{sub}_P.pak"),
+                        os.path.join(paks_dir, f"{sub}_P.pak"),
+                    ])
+
+                for cand in set(standalone_candidates):
+                    if os.path.exists(cand):
+                        try:
+                            os.remove(cand)
+                            print(f"  [Deduplication] Removed redundant standalone pak: {os.path.basename(cand)} (Consolidated into {os.path.basename(final_pak_path)})", flush=True)
+                        except OSError as e:
+                            print(f"  [Deduplication Warning] Failed to delete standalone variant archive '{cand}': {e}", flush=True)
+
         if files_found == 0:
             has_other_outputs = bool(workspace.is_dynamic_pals_active or (hasattr(workspace, 'has_icon') and workspace.has_icon))
             if not has_other_outputs:
@@ -483,38 +654,43 @@ def main():
             else:
                 print("WARNING: No compiled uassets found to pack. Staging non-uasset files (Dynamic Pals configs/audio/icon) separately.", flush=True)
 
-        swap_json_dir = ""
         if workspace.palworld_exe and os.path.exists(workspace.palworld_exe):
-            swap_json_dir = os.path.join(os.path.dirname(workspace.palworld_exe), "Pal", "Content", "Paks", "~Mods", "SwapJSON")
-        
-        if swap_json_dir:
-            base_fmodel_dir = os.path.normpath(os.path.join(
-                workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
-                workspace.category, workspace.base_pal
-            ))
-            manifest_path = os.path.join(base_fmodel_dir, f"{workspace.base_pal}_dynamic_pals.json")
+            from utils.dynamic_pals_helper import (
+                get_model_json_dirs, sanitize_json_filename, compile_unified_dynamic_pals_json
+            )
+            model_json_dir, legacy_swap_json_dir = get_model_json_dirs(workspace.palworld_exe)
 
-            custom_name = ""
-            if os.path.exists(manifest_path):
-                try:
-                    with open(manifest_path, "r", encoding="utf-8") as f:
-                        custom_name = json.load(f).get("custom_json_name", "")
-                except Exception:
-                    pass
+            if model_json_dir:
+                base_fmodel_dir = os.path.normpath(os.path.join(
+                    workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
+                    workspace.category, workspace.base_pal
+                ))
+                manifest_path = os.path.join(base_fmodel_dir, f"{workspace.base_pal}_dynamic_pals.json")
 
-            from utils.dynamic_pals_helper import sanitize_json_filename, compile_unified_dynamic_pals_json
-            final_filename = sanitize_json_filename(custom_name, f"palbaker-{workspace.base_pal}")
-            target_deployed_json = os.path.join(swap_json_dir, f"{final_filename}.json")
-
-            if not workspace.is_dynamic_pals_active:
-                for p in [target_deployed_json, os.path.join(swap_json_dir, f"palbaker-{workspace.base_pal}.json")]:
-                    if os.path.exists(p):
-                        try: os.remove(p)
-                        except OSError: pass
-            else:
+                custom_name = ""
                 if os.path.exists(manifest_path):
-                    success, msg = compile_unified_dynamic_pals_json(workspace.base_pal, base_fmodel_dir, swap_json_dir)
-                    print(msg, flush=True)
+                    try:
+                        with open(manifest_path, "r", encoding="utf-8") as f:
+                            custom_name = json.load(f).get("custom_json_name", "")
+                    except Exception:
+                        pass
+
+                final_filename = sanitize_json_filename(custom_name, f"palbaker-{workspace.base_pal}")
+
+                if not workspace.is_dynamic_pals_active:
+                    for d in [model_json_dir, legacy_swap_json_dir]:
+                        if d and os.path.exists(d):
+                            for fn in [f"{final_filename}.json", f"palbaker-{workspace.base_pal}.json"]:
+                                p = os.path.join(d, fn)
+                                if os.path.exists(p):
+                                    try: os.remove(p)
+                                    except OSError: pass
+                else:
+                    if os.path.exists(manifest_path):
+                        success, msg = compile_unified_dynamic_pals_json(
+                            workspace.base_pal, base_fmodel_dir, model_json_dir, legacy_swap_json_dir
+                        )
+                        print(msg, flush=True)
 
 if __name__ == "__main__":
     main()

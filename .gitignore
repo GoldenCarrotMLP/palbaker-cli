@@ -55,3 +55,10 @@ deps/partner_skill_params_cache.json
 deps/monster_parameter_cache.json
 enum_to_anims.json
 diag_result.json
+aistudio_ingestion.txt
+aistudio_ingestion.json
+cli_queries_dump.json
+AM_CLI_NormalExport_Test.json
+ExportedManually.json
+Test_Mapped_Output.json
+test_creator.json

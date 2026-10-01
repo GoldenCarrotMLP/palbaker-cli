@@ -66,16 +66,13 @@ def _retarget_additive_hit_animations(
     v_new_skel_pkg = f"/Game/Pal/Model/Character/Skeleton/{target_skel_folder}"
 
     extract_patterns = [
-        f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/AS_{template_id}_Hit*.uasset",
-        f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/AS_{template_id}_Hit*.uexp",
-        f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/AM_{template_id}_Hit*.uasset",
-        f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/AM_{template_id}_Hit*.uexp",
-        f"Pal/Content/Pal/Animation/Character/Pending_Monster/{template_id}/AS_{template_id}_Hit*.uasset",
-        f"Pal/Content/Pal/Animation/Character/Pending_Monster/{template_id}/AS_{template_id}_Hit*.uexp",
-        f"Pal/Content/Pal/Animation/Character/Pending_Monster/{template_id}/AM_{template_id}_Hit*.uasset",
-        f"Pal/Content/Pal/Animation/Character/Pending_Monster/{template_id}/AM_{template_id}_Hit*.uexp",
-    ]
+            f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/*Hit*",
+            f"Pal/Content/Pal/Animation/Character/Monster/{template_id}/*Hit*",
+            f"Pal/Content/Pal/Animation/Character/Pending_Monster/{template_id}/*Hit*",
+            f"Pal/Content/Pal/Animation/Character/Pending Monster/{template_id}/*Hit*"
+        ]
     extract_game_files(settings, extract_patterns, temp_dir, format_type="raw")
+
 
     hit_uassets = []
     for root, _, files in os.walk(temp_dir):
@@ -124,6 +121,8 @@ def _retarget_additive_hit_animations(
 
         try:
             data = json.loads(content)
+            if "FolderName" in data:
+                data["FolderName"] = f"{v_new_anim_pkg}/{new_fname}"
             if data.get("Exports") and len(data["Exports"]) > 0:
                 data["Exports"][0]["ObjectName"] = new_fname
                 if base_fname.startswith("AM_") and has_anims and custom_guid:
@@ -209,9 +208,8 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
         # -----------------------------------------------------------------
         log(f"Extracting template blueprints and wazas for {template_id}...", "standard")
         bp_extract_patterns = [
-            f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}*.uasset",
-            f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BP_{template_id}*.uexp",
-            f"Pal/Content/Pal/Blueprint/Action/Waza/{template_id}*"
+            f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/*",
+            f"Pal/Content/Pal/Blueprint/Action/Waza/{template_id}/*"
         ]
         success, msg = extract_game_files(settings, bp_extract_patterns, temp_dir, format_type="raw")
 
@@ -381,14 +379,8 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
             discovered_abps.add(f"ABP_{template_id}")
 
             dep_queue = [
-                f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/ABP_{template_id}*.uasset",
-                f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/ABP_{template_id}*.uexp",
-                f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BS_*.uasset",
-                f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BS_*.uexp",
-                f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/AM_*.uasset",
-                f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/AM_*.uexp",
-                f"Pal/Content/Pal/Model/Character/Skeleton/{template_id}/SK_{template_id}_Skeleton.uasset",
-                f"Pal/Content/Pal/Model/Character/Skeleton/{template_id}/SK_{template_id}_Skeleton.uexp"
+                f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{template_id}/*",
+                f"Pal/Content/Pal/Model/Character/Skeleton/{template_id}/*"
             ]
         else:
             dep_queue = []
@@ -450,6 +442,11 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
         vanilla_guid = "BF21DEE0-4BCF0A09-60C97DA1-367595A0"
         custom_guid = "F3642458-43D36EB4-2B398F89-8DDC8313"
 
+        target_bp_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
+        target_skel_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
+        target_anims_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
+        target_mesh_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
+
         if has_anims:
             v_skel = None
             for root, _, files in os.walk(temp_dir):
@@ -463,10 +460,27 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                 decompile_uasset(uasset_gui_exe, v_skel, sk_json, usmap_path)
                 vanilla_guid = find_skeleton_guid_in_json(sk_json) or vanilla_guid
 
-        target_bp_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
-        target_skel_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
-        target_anims_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
-        target_mesh_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
+            # --- CRITICAL FIX: Extract actual Custom Skeleton GUID ---
+            custom_skel_candidates = [
+                os.path.normpath(os.path.join(project_dir, "Content", "Pal", "Model", "Character", "Skeleton", target_skel_folder, f"SK_{pal_id}_Skeleton.uasset")),
+                os.path.normpath(os.path.join(project_dir, "Saved", "Cooked", "Windows", project_name, "Content", "Pal", "Model", "Character", "Skeleton", target_skel_folder, f"SK_{pal_id}_Skeleton.uasset")),
+                os.path.normpath(os.path.join(project_dir, "Content", "Pal", "Model", "Character", "Skeleton", base_pal, f"SK_{pal_id}_Skeleton.uasset")),
+                os.path.normpath(os.path.join(project_dir, "Saved", "Cooked", "Windows", project_name, "Content", "Pal", "Model", "Character", "Skeleton", base_pal, f"SK_{pal_id}_Skeleton.uasset"))
+            ]
+            
+            c_skel = next((p for p in custom_skel_candidates if os.path.exists(p)), None)
+            if c_skel:
+                c_skel_json = os.path.join(temp_dir, "custom_skel.json")
+                if decompile_uasset(uasset_gui_exe, c_skel, c_skel_json, usmap_path):
+                    found_guid = find_skeleton_guid_in_json(c_skel_json)
+                    if found_guid:
+                        custom_guid = found_guid
+                        log(f"  [Skeleton Sync] Extracted custom skeleton GUID: {custom_guid}", "standard")
+                    try: os.remove(c_skel_json)
+                    except OSError: pass
+            else:
+                log(f"  [Skeleton Sync Warning] Custom skeleton not found on disk. Falling back to default GUID.", "warning")
+            # ---------------------------------------------------------
 
         def global_patch(content: str) -> str:
             # 1. Base Mesh & Physics Asset
@@ -566,6 +580,17 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                 new_path_core = path_core.replace(template_id, pal_id)
                 new_name = a_name.replace(template_id, pal_id)
                 
+                try:
+                    a_data = json.loads(a_str)
+                    if "FolderName" in a_data:
+                        a_data["FolderName"] = new_path_core.replace("Pal/Content/", "/Game/")
+                    sync_namemap(a_data)
+                    with open(a_json, "w", encoding="utf-8") as f_aj:
+                        json.dump(a_data, f_aj, indent=4)
+                except Exception:
+                    with open(a_json, "w", encoding="utf-8") as f_aj:
+                        f_aj.write(a_str)
+
                 stripped_new_core = new_path_core.replace("Pal/Content/", "")
                 action_dest_dir = os.path.join(cooked_base_content, os.path.dirname(stripped_new_core))
                 os.makedirs(action_dest_dir, exist_ok=True)
@@ -594,16 +619,18 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                 decompile_uasset(uasset_gui_exe, abp_uasset, abp_json, usmap_path)
                 with open(abp_json, "r", encoding="utf-8") as f:
                     abp_str = global_patch(f.read())
+                new_abp_name = abp.replace(template_id, pal_id)
+                
                 try:
                     abp_data = json.loads(abp_str)
+                    if "FolderName" in abp_data:
+                        abp_data["FolderName"] = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_abp_name}"
                     sync_namemap(abp_data)
                     with open(abp_json, "w", encoding="utf-8") as f:
                         json.dump(abp_data, f, indent=4)
                 except Exception:
                     with open(abp_json, "w", encoding="utf-8") as f:
                         f.write(abp_str)
-
-                new_abp_name = abp.replace(template_id, pal_id)
                 dest_abp_uasset = os.path.join(cooked_bp_dir, f"{new_abp_name}.uasset")
                 compile_uasset(uasset_gui_exe, abp_json, dest_abp_uasset, usmap_path)
                 log(f"  ✓ Compiled AnimBlueprint: {new_abp_name}.uasset")
@@ -623,16 +650,18 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                 decompile_uasset(uasset_gui_exe, bs_uasset, bs_json, usmap_path)
                 with open(bs_json, "r", encoding="utf-8") as f:
                     bs_str = global_patch(f.read())
+                new_bs_name = re.sub(rf"(BS_[a-zA-Z0-9_]*?)_{template_id}", rf"\1_{pal_id}", bs)
+                
                 try:
                     bs_data = json.loads(bs_str)
+                    if "FolderName" in bs_data:
+                        bs_data["FolderName"] = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_bs_name}"
                     sync_namemap(bs_data)
                     with open(bs_json, "w", encoding="utf-8") as f:
                         json.dump(bs_data, f, indent=4)
                 except Exception:
                     with open(bs_json, "w", encoding="utf-8") as f:
                         f.write(bs_str)
-
-                new_bs_name = re.sub(rf"(BS_[a-zA-Z0-9_]*?)_{template_id}", rf"\1_{pal_id}", bs)
                 dest_bs_uasset = os.path.join(cooked_bp_dir, f"{new_bs_name}.uasset")
                 compile_uasset(uasset_gui_exe, bs_json, dest_bs_uasset, usmap_path)
                 log(f"  ✓ Compiled BlendSpace: {new_bs_name}.uasset")
@@ -657,8 +686,52 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                 decompile_uasset(uasset_gui_exe, am_uasset, am_json, usmap_path)
                 with open(am_json, "r", encoding="utf-8") as f:
                     am_str = global_patch(f.read())
+                    
+                new_am_name = am.replace(template_id, pal_id)
+                
                 try:
                     am_data = json.loads(am_str)
+                    if "FolderName" in am_data:
+                        am_data["FolderName"] = f"/Game/Pal/Animation/Character/{cat_sanitized}/{target_anims_folder}/{new_am_name}"
+                        
+                    # Check if user assigned a custom sequence to this montage in the sidecar
+                    anim_meta = (
+                        custom_anims.get("anims", {}).get(new_am_name) or 
+                        custom_anims.get("anims", {}).get(new_am_name.replace("AM_", "AS_")) or
+                        custom_anims.get("anims", {}).get(am) or
+                        custom_anims.get("anims", {}).get(am.replace("AM_", "AS_"))
+                    )
+
+                    default_seq = f"AS_{pal_id}_{extract_track_name(new_am_name)}"
+                    assigned_seq = anim_meta.get("sequence_asset") if (anim_meta and isinstance(anim_meta, dict)) else default_seq
+
+                    # Check if the assigned sequence physically exists in Unreal
+                    target_uasset_name = f"{assigned_seq}.uasset"
+                    seq_exists = (
+                        os.path.exists(os.path.join(cooked_anims_dir, target_uasset_name)) or
+                        any(os.path.exists(os.path.join(r, target_uasset_name)) for r, _, fs in os.walk(cooked_base_content) if target_uasset_name in fs)
+                    )
+
+                    if seq_exists:
+                        if assigned_seq != default_seq:
+                            for exp in am_data.get("Exports", []):
+                                for p in exp.get("Data", []):
+                                    if p.get("Name") in ["CompositeSections", "SlotAnimTracks"]:
+                                        p_str = json.dumps(p)
+                                        p_str = p_str.replace(default_seq, assigned_seq)
+                                        p.update(json.loads(p_str))
+                            log(f"  -> Linked custom sequence '{assigned_seq}' to montage '{new_am_name}'", "standard")
+                    else:
+                        # If no custom sequence was pushed, preserve the vanilla template sequence to prevent cooker crash
+                        vanilla_seq = f"AS_{template_id}_{extract_track_name(am)}"
+                        for exp in am_data.get("Exports", []):
+                            for p in exp.get("Data", []):
+                                if p.get("Name") in ["CompositeSections", "SlotAnimTracks"]:
+                                    p_str = json.dumps(p)
+                                    p_str = p_str.replace(default_seq, vanilla_seq)
+                                    p.update(json.loads(p_str))
+                        log(f"  -> Preserving vanilla sequence '{vanilla_seq}' for unpushed montage '{new_am_name}'", "standard")
+
                     sync_namemap(am_data)
                     with open(am_json, "w", encoding="utf-8") as f:
                         json.dump(am_data, f, indent=4)
@@ -666,36 +739,10 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                     with open(am_json, "w", encoding="utf-8") as f:
                         f.write(am_str)
 
-                new_am_name = am.replace(template_id, pal_id)
-
-                # Check if user assigned a custom sequence to this montage in the sidecar
-                anim_meta = custom_anims.get("anims", {}).get(new_am_name) or custom_anims.get("anims", {}).get(am)
-                if anim_meta and anim_meta.get("sequence_asset"):
-                    assigned_seq = anim_meta["sequence_asset"]
-                    default_seq = f"AS_{pal_id}_{extract_track_name(new_am_name)}"
-                    if assigned_seq != default_seq:
-                        try:
-                            with open(am_json, "r", encoding="utf-8") as f_am_read:
-                                am_data_obj = json.load(f_am_read)
-                            
-                            # Replace sequence references in AST
-                            for exp in am_data_obj.get("Exports", []):
-                                for p in exp.get("Data", []):
-                                    if p.get("Name") in ["CompositeSections", "SlotAnimTracks"]:
-                                        p_str = json.dumps(p)
-                                        p_str = p_str.replace(default_seq, assigned_seq)
-                                        p.update(json.loads(p_str))
-
-                            sync_namemap(am_data_obj)
-                            with open(am_json, "w", encoding="utf-8") as f_am_write:
-                                json.dump(am_data_obj, f_am_write, indent=4)
-                            log(f"  -> Linked custom sequence '{assigned_seq}' to montage '{new_am_name}'")
-                        except Exception as e:
-                            log(f"  Warning linking sequence to montage: {e}", "warning")
-
                 dest_am_uasset = os.path.join(cooked_anims_dir, f"{new_am_name}.uasset")
                 compile_uasset(uasset_gui_exe, am_json, dest_am_uasset, usmap_path)
-                log(f"  ✓ Compiled AnimMontage: {new_am_name}.uasset")
+                log(f"  ✓ Compiled AnimMontage: {new_am_name}.uasset", "success")
+
 
         # -----------------------------------------------------------------
         # STEP 4e: Retarget Pristine Additive Hit Reaction Animations (AS_*_Hit & AM_*_Hit)
@@ -755,317 +802,310 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                     coop_weapon = features.get("CoopWeapon", {})
                     funnel = features.get("Funnel", {})
 
-                is_riding_active = bool(riding.get("Enabled", False))
-                is_weapon_active = bool(coop_weapon.get("Enabled", False))
-                is_funnel_active = bool(funnel.get("Enabled", False))
+                    is_riding_active = bool(riding.get("Enabled", False))
+                    is_weapon_active = bool(coop_weapon.get("Enabled", False))
+                    is_funnel_active = bool(funnel.get("Enabled", False))
 
-                if is_riding_active:
-                    is_weapon_active = False
+                    if is_riding_active:
+                        is_weapon_active = False
 
-                # 5a. Mounts & Riding
-                if is_riding_active:
-                    mgr.add_saddle(
-                        marker_type=riding.get("MarkerType", "Saddle"),
-                        ride_position_type=riding.get("RidePosition", "HorseRide"),
-                        attach_socket=riding.get("AttachSocket", "pelvis"),
-                        relative_rotation=riding.get("RelativeRotation", {"Pitch": 90.0, "Yaw": 0.0, "Roll": 0.0}),
-                        relative_location=riding.get("RelativeLocation", {"X": 0.0, "Y": 0.0, "Z": 40.0}),
-                        with_speed_collision=riding.get("WithSpeedCollision", False)
-                    )
-                    if riding.get("WithMountedShooter"):
-                        mgr.add_mounted_shooter()
+                    # 5a. Mounts & Riding
+                    if is_riding_active:
+                        mgr.add_saddle(
+                            marker_type=riding.get("MarkerType", "Saddle"),
+                            ride_position_type=riding.get("RidePosition", "HorseRide"),
+                            attach_socket=riding.get("AttachSocket", "pelvis"),
+                            relative_rotation=riding.get("RelativeRotation", {"Pitch": 90.0, "Yaw": 0.0, "Roll": 0.0}),
+                            relative_location=riding.get("RelativeLocation", {"X": 0.0, "Y": 0.0, "Z": 40.0}),
+                            with_speed_collision=riding.get("WithSpeedCollision", False)
+                        )
+                        if riding.get("WithMountedShooter"):
+                            mgr.add_mounted_shooter()
 
-                    # --- SYNTHESIZE PHYSICAL BS_Move_<Pal>_Riding.uasset ---
-                    new_bs_name = f"BS_Move_{pal_id}_Riding"
-                    dest_bs_uasset = os.path.join(cooked_bp_dir, f"{new_bs_name}.uasset")
+                        # --- SYNTHESIZE PHYSICAL BS_Move_<Pal>_Riding.uasset ---
+                        new_bs_name = f"BS_Move_{pal_id}_Riding"
+                        dest_bs_uasset = os.path.join(cooked_bp_dir, f"{new_bs_name}.uasset")
 
-                    seed_bs_rel = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BS_Move_{template_id}_Riding.uasset"
-                    extract_game_files(settings, [seed_bs_rel, seed_bs_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
-                    seed_bs_disk = os.path.join(temp_dir, seed_bs_rel)
-
-                    if not os.path.exists(seed_bs_disk):
-                        seed_bs_rel = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BS_Move_{template_id}.uasset"
+                        seed_bs_rel = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BS_Move_{template_id}_Riding.uasset"
                         extract_game_files(settings, [seed_bs_rel, seed_bs_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
                         seed_bs_disk = os.path.join(temp_dir, seed_bs_rel)
 
-                    if not os.path.exists(seed_bs_disk):
-                        seed_bs_rel = "Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/WeaselDragon/BS_Move_WeaselDragon_Riding.uasset"
-                        extract_game_files(settings, [seed_bs_rel, seed_bs_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
-                        seed_bs_disk = os.path.join(temp_dir, seed_bs_rel)
+                        if not os.path.exists(seed_bs_disk):
+                            seed_bs_rel = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BS_Move_{template_id}.uasset"
+                            extract_game_files(settings, [seed_bs_rel, seed_bs_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
+                            seed_bs_disk = os.path.join(temp_dir, seed_bs_rel)
 
-                    # Dynamic recursive search if exact relative path had case discrepancies
-                    if not os.path.exists(seed_bs_disk):
-                        for root, _, files in os.walk(temp_dir):
-                            for f in files:
-                                if f.lower().startswith("bs_move_") and f.lower().endswith(".uasset"):
-                                    seed_bs_disk = os.path.join(root, f)
+                        if not os.path.exists(seed_bs_disk):
+                            seed_bs_rel = "Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/WeaselDragon/BS_Move_WeaselDragon_Riding.uasset"
+                            extract_game_files(settings, [seed_bs_rel, seed_bs_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
+                            seed_bs_disk = os.path.join(temp_dir, seed_bs_rel)
+
+                        if not os.path.exists(seed_bs_disk):
+                            for root, _, files in os.walk(temp_dir):
+                                for f in files:
+                                    if f.lower().startswith("bs_move_") and f.lower().endswith(".uasset"):
+                                        seed_bs_disk = os.path.join(root, f)
+                                        break
+                                if seed_bs_disk and os.path.exists(seed_bs_disk):
                                     break
-                            if seed_bs_disk and os.path.exists(seed_bs_disk):
-                                break
 
-                    bs_compiled_ok = False
-                    if seed_bs_disk and os.path.exists(seed_bs_disk):
-                        old_bs_name = os.path.splitext(os.path.basename(seed_bs_disk))[0]
-                        temp_bs_json = os.path.join(temp_dir, f"{new_bs_name}.json")
-                        if decompile_uasset(uasset_gui_exe, seed_bs_disk, temp_bs_json, usmap_path):
-                            with open(temp_bs_json, "r", encoding="utf-8") as f_bs:
-                                bs_str = f_bs.read()
+                        bs_compiled_ok = False
+                        if seed_bs_disk and os.path.exists(seed_bs_disk):
+                            old_bs_name = os.path.splitext(os.path.basename(seed_bs_disk))[0]
+                            temp_bs_json = os.path.join(temp_dir, f"{new_bs_name}.json")
+                            if decompile_uasset(uasset_gui_exe, seed_bs_disk, temp_bs_json, usmap_path):
+                                with open(temp_bs_json, "r", encoding="utf-8") as f_bs:
+                                    bs_str = f_bs.read()
 
-                            seed_pal_id = template_id if template_id in old_bs_name else "WeaselDragon"
+                                seed_pal_id = template_id if template_id in old_bs_name else "WeaselDragon"
 
-                            bs_str = bs_str.replace(f"/PalActorBP/{seed_pal_id}/{old_bs_name}", f"/PalActorBP/{target_bp_folder}/{new_bs_name}")
-                            bs_str = bs_str.replace(f'"{old_bs_name}"', f'"{new_bs_name}"')
-                            bs_str = bs_str.replace(f"'{old_bs_name}'", f"'{new_bs_name}'")
-                            bs_str = bs_str.replace(f"/PalActorBP/{seed_pal_id}/", f"/PalActorBP/{target_bp_folder}/")
+                                bs_str = bs_str.replace(f"/PalActorBP/{seed_pal_id}/{old_bs_name}", f"/PalActorBP/{target_bp_folder}/{new_bs_name}")
+                                bs_str = bs_str.replace(f'"{old_bs_name}"', f'"{new_bs_name}"')
+                                bs_str = bs_str.replace(f"'{old_bs_name}'", f"'{new_bs_name}'")
+                                bs_str = bs_str.replace(f"/PalActorBP/{seed_pal_id}/", f"/PalActorBP/{target_bp_folder}/")
 
-                            if has_anims:
-                                bs_str = bs_str.replace(f"SK_{seed_pal_id}_Skeleton", f"SK_{pal_id}_Skeleton")
-                                bs_str = bs_str.replace(f"AS_{seed_pal_id}_", f"AS_{pal_id}_")
-                                bs_str = bs_str.replace(f"/Skeleton/{seed_pal_id}/", f"/Skeleton/{target_skel_folder}/")
-                                bs_str = bs_str.replace(f"/Monster/{seed_pal_id}/", f"/Monster/{target_anims_folder}/")
-                            else:
-                                bs_str = bs_str.replace(f"SK_{seed_pal_id}_Skeleton", f"SK_{template_id}_Skeleton")
-                                bs_str = bs_str.replace(f"/Skeleton/{seed_pal_id}/", f"/Skeleton/{template_id}/")
-                                bs_str = bs_str.replace(f"AS_{seed_pal_id}_", f"AS_{template_id}_")
-                                bs_str = bs_str.replace(f"/Monster/{seed_pal_id}/", f"/Monster/{template_id}/")
+                                if has_anims:
+                                    bs_str = bs_str.replace(f"SK_{seed_pal_id}_Skeleton", f"SK_{pal_id}_Skeleton")
+                                    bs_str = bs_str.replace(f"AS_{seed_pal_id}_", f"AS_{pal_id}_")
+                                    bs_str = bs_str.replace(f"/Skeleton/{seed_pal_id}/", f"/Skeleton/{target_skel_folder}/")
+                                    bs_str = bs_str.replace(f"/Monster/{seed_pal_id}/", f"/Monster/{target_anims_folder}/")
+                                else:
+                                    bs_str = bs_str.replace(f"SK_{seed_pal_id}_Skeleton", f"SK_{template_id}_Skeleton")
+                                    bs_str = bs_str.replace(f"/Skeleton/{seed_pal_id}/", f"/Skeleton/{template_id}/")
+                                    bs_str = bs_str.replace(f"AS_{seed_pal_id}_", f"AS_{template_id}_")
+                                    bs_str = bs_str.replace(f"/Monster/{seed_pal_id}/", f"/Monster/{template_id}/")
 
-                            # Normalize any riding-specific sequence references to template's existing sequences
-                            bs_str = bs_str.replace(f"AS_{seed_pal_id}_Run_Riding", f"AS_{template_id}_Run")
-                            bs_str = bs_str.replace(f"AS_{seed_pal_id}_Walk_Riding", f"AS_{template_id}_Walk")
-                            bs_str = bs_str.replace(f"AS_{template_id}_Run_Riding", f"AS_{template_id}_Run")
-                            bs_str = bs_str.replace(f"AS_{template_id}_Walk_Riding", f"AS_{template_id}_Walk")
+                                bs_str = bs_str.replace(f"AS_{seed_pal_id}_Run_Riding", f"AS_{template_id}_Run")
+                                bs_str = bs_str.replace(f"AS_{seed_pal_id}_Walk_Riding", f"AS_{template_id}_Walk")
+                                bs_str = bs_str.replace(f"AS_{template_id}_Run_Riding", f"AS_{template_id}_Run")
+                                bs_str = bs_str.replace(f"AS_{template_id}_Walk_Riding", f"AS_{template_id}_Walk")
 
-                            bs_data = json.loads(bs_str)
-                            bs_data["FolderName"] = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_bs_name}"
-                            if bs_data.get("Exports"):
-                                bs_data["Exports"][0]["ObjectName"] = new_bs_name
+                                bs_data = json.loads(bs_str)
+                                bs_data["FolderName"] = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_bs_name}"
+                                if bs_data.get("Exports"):
+                                    bs_data["Exports"][0]["ObjectName"] = new_bs_name
 
-                            sync_namemap(bs_data)
-                            with open(temp_bs_json, "w", encoding="utf-8") as f_bs:
-                                json.dump(bs_data, f_bs, indent=2)
+                                sync_namemap(bs_data)
+                                with open(temp_bs_json, "w", encoding="utf-8") as f_bs:
+                                    json.dump(bs_data, f_bs, indent=2)
 
-                            if compile_uasset(uasset_gui_exe, temp_bs_json, dest_bs_uasset, usmap_path):
-                                log(f"  ✓ Compiled standalone Riding BlendSpace: {dest_bs_uasset}", "success")
-                                bs_compiled_ok = True
+                                if compile_uasset(uasset_gui_exe, temp_bs_json, dest_bs_uasset, usmap_path):
+                                    log(f"  ✓ Compiled standalone Riding BlendSpace: {dest_bs_uasset}", "success")
+                                    bs_compiled_ok = True
 
-                    bs_pkg_path = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_bs_name}"
-                    bs_import_idx = mgr.ensure_import_chain(bs_pkg_path, new_bs_name, class_type="BlendSpace1D")
+                        bs_pkg_path = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_bs_name}"
+                        bs_import_idx = mgr.ensure_import_chain(bs_pkg_path, new_bs_name, class_type="BlendSpace1D")
 
-                    comp = mgr.find_static_char_param_export()
-                    if comp and isinstance(comp.get("Data"), list):
-                        # --- CRITICAL FIX: Register Import in EDL Dependencies to satisfy FAsyncLoadingThread ---
-                        comp_deps = comp.setdefault("CreateBeforeSerializationDependencies", [])
-                        if bs_import_idx not in comp_deps:
-                            comp_deps.append(bs_import_idx)
+                        comp = mgr.find_static_char_param_export()
+                        if comp and isinstance(comp.get("Data"), list):
+                            comp_deps = comp.setdefault("CreateBeforeSerializationDependencies", [])
+                            if bs_import_idx not in comp_deps:
+                                comp_deps.append(bs_import_idx)
 
-                        bs_map = next((p for p in comp["Data"] if isinstance(p, dict) and p.get("Name") == "GeneralBlendSpaceMap"), None)
-                        if bs_map and isinstance(bs_map.get("Value"), list):
-                            bs_map["Value"] = [
-                                e for e in bs_map["Value"]
-                                if not (isinstance(e, list) and len(e) >= 1 and isinstance(e[0], dict) and "RidingMove" in str(e[0].get("Value", "")))
-                            ]
-                            bs_map["Value"].append([
-                                {
-                                    "$type": "UAssetAPI.PropertyTypes.Objects.EnumPropertyData, UAssetAPI",
-                                    "EnumType": None,
-                                    "InnerType": None,
-                                    "Name": "GeneralBlendSpaceMap",
-                                    "ArrayIndex": 0,
-                                    "PropertyGuid": None,
-                                    "IsZero": False,
-                                    "PropertyTagFlags": "None",
-                                    "PropertyTypeName": None,
-                                    "PropertyTagExtensions": "NoExtension",
-                                    "Value": "EPalGeneralBlendSpaceType::RidingMove"
-                                },
-                                {
-                                    "$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
-                                    "Name": "GeneralBlendSpaceMap",
-                                    "ArrayIndex": 0,
-                                    "PropertyGuid": None,
-                                    "IsZero": False,
-                                    "PropertyTagFlags": "None",
-                                    "PropertyTypeName": None,
-                                    "PropertyTagExtensions": "NoExtension",
-                                    "Value": bs_import_idx
-                                }
-                            ])
-                else:
-                    mgr.remove_saddle()
+                            bs_map = next((p for p in comp["Data"] if isinstance(p, dict) and p.get("Name") == "GeneralBlendSpaceMap"), None)
+                            if bs_map and isinstance(bs_map.get("Value"), list):
+                                bs_map["Value"] = [
+                                    e for e in bs_map["Value"]
+                                    if not (isinstance(e, list) and len(e) >= 1 and isinstance(e[0], dict) and "RidingMove" in str(e[0].get("Value", "")))
+                                ]
+                                bs_map["Value"].append([
+                                    {
+                                        "$type": "UAssetAPI.PropertyTypes.Objects.EnumPropertyData, UAssetAPI",
+                                        "EnumType": None,
+                                        "InnerType": None,
+                                        "Name": "GeneralBlendSpaceMap",
+                                        "ArrayIndex": 0,
+                                        "PropertyGuid": None,
+                                        "IsZero": False,
+                                        "PropertyTagFlags": "None",
+                                        "PropertyTypeName": None,
+                                        "PropertyTagExtensions": "NoExtension",
+                                        "Value": "EPalGeneralBlendSpaceType::RidingMove"
+                                    },
+                                    {
+                                        "$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
+                                        "Name": "GeneralBlendSpaceMap",
+                                        "ArrayIndex": 0,
+                                        "PropertyGuid": None,
+                                        "IsZero": False,
+                                        "PropertyTagFlags": "None",
+                                        "PropertyTypeName": None,
+                                        "PropertyTagExtensions": "NoExtension",
+                                        "Value": bs_import_idx
+                                    }
+                                ])
+                    else:
+                        mgr.remove_saddle()
 
-                # 5b. Flight
-                flight = features.get("Flight", {})
-                if flight.get("Enabled"):
-                    mgr.add_fly_height_controller()
-                else:
-                    mgr.remove_fly_height_controller()
+                    # 5b. Flight
+                    flight = features.get("Flight", {})
+                    if flight.get("Enabled"):
+                        mgr.add_fly_height_controller()
+                    else:
+                        mgr.remove_fly_height_controller()
 
-                # 5c. Defensive Shield
-                shield = features.get("Shield", {})
-                if shield.get("Enabled"):
-                    mgr.add_shield(
-                        radius=shield.get("Radius", 90.0),
-                        attach_socket=shield.get("AttachSocket", "lowerarm_l"),
-                        relative_location=shield.get("RelativeLocation")
-                    )
-                else:
-                    mgr.remove_component("Shield")
-                    mgr.remove_component("BP_CoopParam_Sheild")
+                    # 5c. Defensive Shield
+                    shield = features.get("Shield", {})
+                    if shield.get("Enabled"):
+                        mgr.add_shield(
+                            radius=shield.get("Radius", 90.0),
+                            attach_socket=shield.get("AttachSocket", "lowerarm_l"),
+                            relative_location=shield.get("RelativeLocation")
+                        )
+                    else:
+                        mgr.remove_component("Shield")
+                        mgr.remove_component("BP_CoopParam_Sheild")
 
-                # 5d. Utility Actions
-                utility = features.get("CoopUtility", {})
-                if utility.get("SkillType") and utility.get("SkillType") != "None":
-                    mgr.set_coop_utility(utility["SkillType"])
+                    # 5d. Utility Actions
+                    utility = features.get("CoopUtility", {})
+                    if utility.get("SkillType") and utility.get("SkillType") != "None":
+                        mgr.set_coop_utility(utility["SkillType"])
 
-                # 5e. Combat Evasion
-                evasion = features.get("CombatEvasion", {})
-                if evasion.get("SideMoveStyle") and evasion.get("SideMoveStyle") != "None":
-                    mgr.set_evasion_style(evasion["SideMoveStyle"])
-                if evasion.get("LeaveStyle") and evasion.get("LeaveStyle") != "None":
-                    mgr.set_evasion_style(evasion["LeaveStyle"])
+                    # 5e. Combat Evasion
+                    evasion = features.get("CombatEvasion", {})
+                    if evasion.get("SideMoveStyle") and evasion.get("SideMoveStyle") != "None":
+                        mgr.set_evasion_style(evasion["SideMoveStyle"])
+                    if evasion.get("LeaveStyle") and evasion.get("LeaveStyle") != "None":
+                        mgr.set_evasion_style(evasion["LeaveStyle"])
 
-                # 5f. Night Point Light
-                light = features.get("TimerPointLight", {})
-                if light.get("Enabled"):
-                    mgr.add_timer_point_light()
+                    # 5f. Night Point Light
+                    light = features.get("TimerPointLight", {})
+                    if light.get("Enabled"):
+                        mgr.add_timer_point_light()
 
-                # 5g. Permanent VFX Particles
-                vfx_list = features.get("VFX", [])
-                for vfx in vfx_list:
-                    mgr.add_niagara_particle(
-                        var_name=vfx.get("VarName", f"VFX_{vfx.get('AttachSocket')}"),
-                        system_package=vfx.get("SystemPackage", "/Game/Pal/Effect/Common/Cooking/NS_CookingFlame"),
-                        system_name=vfx.get("SystemName", "NS_CookingFlame"),
-                        attach_socket=vfx.get("AttachSocket", "root")
-                    )
-
-                # 5h. Locomotion Leaning Calibration
-                leaning = features.get("LocomotionLeaning", {})
-                for mode, cfg in leaning.items():
-                    mgr.set_locomotion_leaning(
-                        mode=mode,
-                        pitch_intensity=cfg.get("PitchIntensity", 0.0),
-                        roll_intensity=cfg.get("RollIntensity", 0.0)
-                    )
-
-                # 5i. Co-op Partner Weapon Synthesis
-                if is_weapon_active:
-                    mode = coop_weapon.get("Mode", "Flamethrower")
-                    wp_name = f"BP_{pal_id}_{mode}" if mode != "ThrowBomb" else f"BP_{pal_id}_ThrowElecBomb"
-                    if mode == "Katana": wp_name = f"BP_{pal_id}_Katana"
-                    if mode == "Launcher": wp_name = f"BP_{pal_id}_Launcher"
-
-                    wp_pkg = f"/Game/Pal/Blueprint/Weapon/{wp_name}"
-                    wp_cls = f"{wp_name}_C"
-
-                    mgr.add_coop_weapon(
-                        mode=mode,
-                        weapon_class_package=wp_pkg,
-                        weapon_class_name=wp_cls,
-                        attach_socket=coop_weapon.get("AttachSocket", "Socket_Weapon_R"),
-                        skill_magnification=coop_weapon.get("SkillMagnification"),
-                        aim_blur_angles=coop_weapon.get("AimBlurAngles")
-                    )
-                    
-                    # --- CRITICAL FIX: Trigger actual Synthesis of the Weapon Blueprint ---
-                    from utils.blueprint_patcher.clone_weapons import clone_partner_weapons
-                    # We pass the dummy vars down to trigger the clone sequence into the cooked folder
-                    clone_partner_weapons({}, "", template_id, pal_id, settings, temp_dir, cooked_base_content, uasset_gui_exe, flags, log, pal_data=pal_data, usmap_path=usmap_path, has_anims=has_anims)
-                else:
-                    mgr.remove_component("BP_CoopParam_Weapon")
-                    mgr.remove_component("BP_CoopParam_AssaultRifleMode")
-                    mgr.remove_component("BP_CoopParam_ShotgunMode")
-                    mgr.remove_component("BP_CoopParam_OnHeadShot")
-
-                    for exp in base_json_data.get("Exports", []):
-                        if "ComponentDelegateBinding" in str(exp.get("ObjectName", "")):
-                            exp["Data"] = []
-
-                # 5j. Satellite Minion Funnel Synthesis
-                if is_funnel_active:
-                    funnel_preset = funnel.get("Preset", "DreamDemon")
-                    custom_waza = funnel.get("CustomWazaID", pal_data.get("FunnelWazaID", "EPalWazaID::Funnel_DreamDemon"))
-                    custom_satellite_path = f"/Game/Pal/Blueprint/Character/Funnel/BP_FunnelCharacter_{pal_id}.BP_FunnelCharacter_{pal_id}_C"
-
-                    mgr.set_partner_funnel(
-                        preset_name=funnel_preset,
-                        custom_waza_id=custom_waza,
-                        custom_character_class=custom_satellite_path
-                    )
-
-                    log(f"  [Action: Funnel] Synthesizing standalone Funnel Character BP_FunnelCharacter_{pal_id}...", "standard")
-                    funnel_base = "RaijinDaughter" if ("RaijinDaughter" in custom_waza or funnel_preset == "Dazzi") else ("FlowerRabbit" if funnel_preset == "Flopie" else "DreamDemon")
-                    source_funnel_name = f"BP_FunnelCharacter_{funnel_base}"
-
-                    seed_funnel_rel = f"Pal/Content/Pal/Blueprint/Character/Funnel/{source_funnel_name}.uasset"
-                    extract_game_files(settings, [seed_funnel_rel, seed_funnel_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
-                    seed_fn_uasset = os.path.join(temp_dir, seed_funnel_rel)
-                    seed_fn_json = os.path.join(temp_dir, f"{source_funnel_name}.json")
-
-                    funnel_cooked_dir = os.path.join(cooked_base_content, "Pal", "Blueprint", "Character", "Funnel")
-                    os.makedirs(funnel_cooked_dir, exist_ok=True)
-
-                    if decompile_uasset(uasset_gui_exe, seed_fn_uasset, seed_fn_json, usmap_path):
-                        with open(seed_fn_json, "r", encoding="utf-8") as f_sfn:
-                            seed_fn_data = json.load(f_sfn)
-
-                        funnel_ast = synthesize_funnel_character_ast(
-                            seed_funnel_data=seed_fn_data,
-                            target_pal_id=pal_id,
-                            template_pal_id=template_id,
-                            targeting_action=funnel.get("TargetingAction", "ShadowBall")
+                    # 5g. Permanent VFX Particles
+                    vfx_list = features.get("VFX", [])
+                    for vfx in vfx_list:
+                        mgr.add_niagara_particle(
+                            var_name=vfx.get("VarName", f"VFX_{vfx.get('AttachSocket')}"),
+                            system_package=vfx.get("SystemPackage", "/Game/Pal/Effect/Common/Cooking/NS_CookingFlame"),
+                            system_name=vfx.get("SystemName", "NS_CookingFlame"),
+                            attach_socket=vfx.get("AttachSocket", "root")
                         )
 
-                        out_fn_json = os.path.join(temp_dir, f"BP_FunnelCharacter_{pal_id}.json")
-                        with open(out_fn_json, "w", encoding="utf-8") as f_out_fn:
-                            json.dump(funnel_ast, f_out_fn, indent=2)
+                    # 5h. Locomotion Leaning Calibration
+                    leaning = features.get("LocomotionLeaning", {})
+                    for mode, cfg in leaning.items():
+                        mgr.set_locomotion_leaning(
+                            mode=mode,
+                            pitch_intensity=cfg.get("PitchIntensity", 0.0),
+                            roll_intensity=cfg.get("RollIntensity", 0.0)
+                        )
 
-                        dest_fn_uasset = os.path.join(funnel_cooked_dir, f"BP_FunnelCharacter_{pal_id}.uasset")
-                        compile_uasset(uasset_gui_exe, out_fn_json, dest_fn_uasset, usmap_path)
-                        log(f"  ✓ Compiled standalone funnel blueprint: {dest_fn_uasset}", "success")
+                    # 5i. Co-op Partner Weapon Synthesis
+                    if is_weapon_active:
+                        mode = coop_weapon.get("Mode", "Flamethrower")
+                        wp_name = f"BP_{pal_id}_{mode}" if mode != "ThrowBomb" else f"BP_{pal_id}_ThrowElecBomb"
+                        if mode == "Katana": wp_name = f"BP_{pal_id}_Katana"
+                        if mode == "Launcher": wp_name = f"BP_{pal_id}_Launcher"
 
-                    source_boss_name = f"{source_funnel_name}_BOSS2"
-                    seed_boss_rel = f"Pal/Content/Pal/Blueprint/Character/Funnel/{source_boss_name}.uasset"
-                    extract_game_files(settings, [seed_boss_rel, seed_boss_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
-                    seed_boss_uasset = os.path.join(temp_dir, seed_boss_rel)
-                    seed_boss_json = os.path.join(temp_dir, f"{source_boss_name}.json")
+                        wp_pkg = f"/Game/Pal/Blueprint/Weapon/{wp_name}"
+                        wp_cls = f"{wp_name}_C"
 
-                    if decompile_uasset(uasset_gui_exe, seed_boss_uasset, seed_boss_json, usmap_path):
-                        with open(seed_boss_json, "r", encoding="utf-8") as f_sb:
-                            boss_str = f_sb.read()
+                        mgr.add_coop_weapon(
+                            mode=mode,
+                            weapon_class_package=wp_pkg,
+                            weapon_class_name=wp_cls,
+                            attach_socket=coop_weapon.get("AttachSocket", "Socket_Weapon_R"),
+                            skill_magnification=coop_weapon.get("SkillMagnification"),
+                            aim_blur_angles=coop_weapon.get("AimBlurAngles")
+                        )
+                        
+                        from utils.blueprint_patcher.clone_weapons import clone_partner_weapons
+                        clone_partner_weapons({}, "", template_id, pal_id, settings, temp_dir, cooked_base_content, uasset_gui_exe, flags, log, pal_data=pal_data, usmap_path=usmap_path, has_anims=has_anims)
+                    else:
+                        mgr.remove_component("BP_CoopParam_Weapon")
+                        mgr.remove_component("BP_CoopParam_AssaultRifleMode")
+                        mgr.remove_component("BP_CoopParam_ShotgunMode")
+                        mgr.remove_component("BP_CoopParam_OnHeadShot")
 
-                        boss_str = boss_str.replace(source_boss_name, f"BP_FunnelCharacter_{pal_id}_BOSS")
-                        boss_str = boss_str.replace(source_funnel_name, f"BP_FunnelCharacter_{pal_id}")
-                        boss_str = boss_str.replace(f"SK_{funnel_base}", f"SK_{pal_id}")
+                        for exp in base_json_data.get("Exports", []):
+                            if "ComponentDelegateBinding" in str(exp.get("ObjectName", "")):
+                                exp["Data"] = []
 
-                        boss_ast = json.loads(boss_str)
-                        sync_namemap(boss_ast)
+                    # 5j. Satellite Minion Funnel Synthesis
+                    if is_funnel_active:
+                        funnel_preset = funnel.get("Preset", "DreamDemon")
+                        custom_waza = funnel.get("CustomWazaID", pal_data.get("FunnelWazaID", "EPalWazaID::Funnel_DreamDemon"))
+                        custom_satellite_path = f"/Game/Pal/Blueprint/Character/Funnel/BP_FunnelCharacter_{pal_id}.BP_FunnelCharacter_{pal_id}_C"
 
-                        out_boss_json = os.path.join(temp_dir, f"BP_FunnelCharacter_{pal_id}_BOSS.json")
-                        with open(out_boss_json, "w", encoding="utf-8") as f_out_boss:
-                            json.dump(boss_ast, f_out_boss, indent=2)
+                        mgr.set_partner_funnel(
+                            preset_name=funnel_preset,
+                            custom_waza_id=custom_waza,
+                            custom_character_class=custom_satellite_path
+                        )
 
-                        dest_boss_uasset = os.path.join(funnel_cooked_dir, f"BP_FunnelCharacter_{pal_id}_BOSS.uasset")
-                        compile_uasset(uasset_gui_exe, out_boss_json, dest_boss_uasset, usmap_path)
-                        log(f"  ✓ Compiled standalone funnel boss blueprint: {dest_boss_uasset}", "success")
-                else:
-                    mgr.clear_partner_funnel()
+                        log(f"  [Action: Funnel] Synthesizing standalone Funnel Character BP_FunnelCharacter_{pal_id}...", "standard")
+                        funnel_base = "RaijinDaughter" if ("RaijinDaughter" in custom_waza or funnel_preset == "Dazzi") else ("FlowerRabbit" if funnel_preset == "Flopie" else "DreamDemon")
+                        source_funnel_name = f"BP_FunnelCharacter_{funnel_base}"
 
-                # 5k. Cooperation Action Cleanup & Guaranteed Binding
-                has_coop = (
-                    is_riding_active or
-                    is_weapon_active or
-                    is_funnel_active or
-                    (utility.get("SkillType") and utility.get("SkillType") != "None")
-                )
-                if not has_coop:
-                    mgr.remove_ai_action("EPalAIActionType::Cooperation")
-                elif is_riding_active:
-                    mgr.set_ai_action("EPalAIActionType::Cooperation", "/Game/Pal/Blueprint/Controller/AIAction/Coop/BP_AIActionRideCall.BP_AIActionRideCall_C")
+                        seed_funnel_rel = f"Pal/Content/Pal/Blueprint/Character/Funnel/{source_funnel_name}.uasset"
+                        extract_game_files(settings, [seed_funnel_rel, seed_funnel_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
+                        seed_fn_uasset = os.path.join(temp_dir, seed_funnel_rel)
+                        seed_fn_json = os.path.join(temp_dir, f"{source_funnel_name}.json")
+
+                        funnel_cooked_dir = os.path.join(cooked_base_content, "Pal", "Blueprint", "Character", "Funnel")
+                        os.makedirs(funnel_cooked_dir, exist_ok=True)
+
+                        if decompile_uasset(uasset_gui_exe, seed_fn_uasset, seed_fn_json, usmap_path):
+                            with open(seed_fn_json, "r", encoding="utf-8") as f_sfn:
+                                seed_fn_data = json.load(f_sfn)
+
+                            funnel_ast = synthesize_funnel_character_ast(
+                                seed_funnel_data=seed_fn_data,
+                                target_pal_id=pal_id,
+                                template_pal_id=template_id,
+                                targeting_action=funnel.get("TargetingAction", "ShadowBall")
+                            )
+
+                            out_fn_json = os.path.join(temp_dir, f"BP_FunnelCharacter_{pal_id}.json")
+                            with open(out_fn_json, "w", encoding="utf-8") as f_out_fn:
+                                json.dump(funnel_ast, f_out_fn, indent=2)
+
+                            dest_fn_uasset = os.path.join(funnel_cooked_dir, f"BP_FunnelCharacter_{pal_id}.uasset")
+                            compile_uasset(uasset_gui_exe, out_fn_json, dest_fn_uasset, usmap_path)
+                            log(f"  ✓ Compiled standalone funnel blueprint: {dest_fn_uasset}", "success")
+
+                        source_boss_name = f"{source_funnel_name}_BOSS2"
+                        seed_boss_rel = f"Pal/Content/Pal/Blueprint/Character/Funnel/{source_boss_name}.uasset"
+                        extract_game_files(settings, [seed_boss_rel, seed_boss_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
+                        seed_boss_uasset = os.path.join(temp_dir, seed_boss_rel)
+                        seed_boss_json = os.path.join(temp_dir, f"{source_boss_name}.json")
+
+                        if decompile_uasset(uasset_gui_exe, seed_boss_uasset, seed_boss_json, usmap_path):
+                            with open(seed_boss_json, "r", encoding="utf-8") as f_sb:
+                                boss_str = f_sb.read()
+
+                            boss_str = boss_str.replace(source_boss_name, f"BP_FunnelCharacter_{pal_id}_BOSS")
+                            boss_str = boss_str.replace(source_funnel_name, f"BP_FunnelCharacter_{pal_id}")
+                            boss_str = boss_str.replace(f"SK_{funnel_base}", f"SK_{pal_id}")
+
+                            boss_ast = json.loads(boss_str)
+                            sync_namemap(boss_ast)
+
+                            out_boss_json = os.path.join(temp_dir, f"BP_FunnelCharacter_{pal_id}_BOSS.json")
+                            with open(out_boss_json, "w", encoding="utf-8") as f_out_boss:
+                                json.dump(boss_ast, f_out_boss, indent=2)
+
+                            dest_boss_uasset = os.path.join(funnel_cooked_dir, f"BP_FunnelCharacter_{pal_id}_BOSS.uasset")
+                            compile_uasset(uasset_gui_exe, out_boss_json, dest_boss_uasset, usmap_path)
+                            log(f"  ✓ Compiled standalone funnel boss blueprint: {dest_boss_uasset}", "success")
+                    else:
+                        mgr.clear_partner_funnel()
+
+                    # 5k. Cooperation Action Cleanup & Guaranteed Binding
+                    has_coop = (
+                        is_riding_active or
+                        is_weapon_active or
+                        is_funnel_active or
+                        (utility.get("SkillType") and utility.get("SkillType") != "None")
+                    )
+                    if not has_coop:
+                        mgr.remove_ai_action("EPalAIActionType::Cooperation")
+                    elif is_riding_active:
+                        mgr.set_ai_action("EPalAIActionType::Cooperation", "/Game/Pal/Blueprint/Controller/AIAction/Coop/BP_AIActionRideCall.BP_AIActionRideCall_C")
 
             # --- CRITICAL FIX: Repair Corrupted AST Pointers (Runs for ALL pals and variants!) ---
-            # UAssetAPI shifts import arrays during string replacements. We must explicitly
-            # re-link the SkeletalMesh and AnimClass pointers to prevent D3D11 Buffer Crashes.
             skel_mesh_idx = None
             anim_class_idx = None
             
@@ -1087,6 +1127,9 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
         # -----------------------------------------------------------------
         # STEP 6: Compile Host Actor Blueprint
         # -----------------------------------------------------------------
+        if "FolderName" in base_json_data:
+            base_json_data["FolderName"] = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/BP_{pal_id}"
+            
         sync_namemap(base_json_data)
         out_host_json = os.path.join(temp_dir, f"BP_{pal_id}.json")
         with open(out_host_json, "w", encoding="utf-8") as f:

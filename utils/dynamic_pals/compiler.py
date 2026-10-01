@@ -7,11 +7,14 @@ class DynamicPalsCompiler:
         self.c = controller
 
     def deploy_to_game(self, current_char_id: str, fmodel_target_dir: str):
-        """Compiles the memory states and deploys the Format V2 JSON directly to the game SwapJSON folder."""
+        """Compiles the memory states and deploys the Format V2 JSON directly to ~Mods/ModelJSON (migrating any legacy SwapJSON)."""
         palworld_exe = self.c.settings.get("palworld_exe", "")
         if palworld_exe and os.path.exists(palworld_exe):
-            swap_json_dir = os.path.join(os.path.dirname(palworld_exe), "Pal", "Content", "Paks", "~Mods", "SwapJSON")
-            success, msg = compile_unified_dynamic_pals_json(current_char_id, fmodel_target_dir, swap_json_dir)
+            from utils.dynamic_pals_helper import get_model_json_dirs
+            model_json_dir, legacy_swap_json_dir = get_model_json_dirs(palworld_exe)
+            success, msg = compile_unified_dynamic_pals_json(
+                current_char_id, fmodel_target_dir, model_json_dir, legacy_swap_json_dir
+            )
             if success:
                 self.c.view.write_log(f"Auto-deployed updated Dynamic Pals JSON: {msg}", "success")
             else:

@@ -68,6 +68,98 @@ def run_and_stream(cmd_args) -> bool:
         raise subprocess.CalledProcessError(process.returncode, cmd_args)
     return had_issues
 
+def verify_unreal_animation_assets(workspace, sidecar_data: dict) -> tuple[bool, list[str]]:
+    """
+    Validates that only animation sequences ACTUALLY REQUIRED by active
+    BlendSpaces or customized Montages exist in Unreal before cooking.
+    """
+    if not workspace.has_anims:
+        return True, []
+
+    errors = []
+    anims_dir = getattr(workspace, "anims_source_dir", "")
+    
+    if not anims_dir or not os.path.exists(anims_dir):
+        errors.append(
+            f"Custom animations are enabled, but the animation directory was not found in Unreal:\n"
+            f"  Expected: '{anims_dir}'\n"
+            f"  -> Please click 'Push Animations' first to export and ingest your animation sequences."
+        )
+        return False, errors
+
+    existing_uassets = {
+        os.path.splitext(f)[0].lower() 
+        for f in os.listdir(anims_dir) 
+        if f.endswith(".uasset")
+    }
+
+    if len(existing_uassets) == 0:
+        errors.append(
+            f"Custom animations are active for '{workspace.mod_name}', but 0 animation sequences (.uasset) "
+            f"were found in Unreal at '{anims_dir}'.\n"
+            f"  -> Please click 'Push Animations' before cooking!"
+        )
+        return False, errors
+
+    anims_dict = sidecar_data.get("custom_animations", {}).get("anims", {})
+    bs_dict = sidecar_data.get("custom_animations", {}).get("blend_spaces", {})
+    missing_sequences = []
+
+    IGNORED_ANIMATION_TRACKS = {"hit", "damageadditive"}
+
+    # 1. Collect sequences required by active BlendSpaces
+    required_sequences = {} # { seq_name_lower: (original_seq_name, requirement_description) }
+    for bs_name, bs_data in bs_dict.items():
+        for sample in bs_data.get("samples", []):
+            if sample.get("in_nla", True):
+                anim_name = sample.get("animation", "")
+                if anim_name:
+                    s_lower = anim_name.split(".")[0].lower()
+                    required_sequences[s_lower] = (anim_name, f"BlendSpace '{bs_name}' sample '{sample.get('clean_name')}'")
+
+    # 2. Collect sequences required by active / modified Montages
+    for anim_key, anim_meta in anims_dict.items():
+        if not isinstance(anim_meta, dict):
+            continue
+        if anim_meta.get("category") == "BlendSpaceSample":
+            continue
+
+        track = anim_meta.get("nla_track_name") or ""
+        if track.lower() in IGNORED_ANIMATION_TRACKS or anim_key.lower().endswith("_hit"):
+            continue
+
+        # If a montage is NOT in NLA and was never modified by the user,
+        # it is not custom-required (it will play the vanilla template animation safely)
+        if not anim_meta.get("in_nla", False) and not anim_meta.get("is_modified", False):
+            continue
+
+        seq_asset = anim_meta.get("sequence_asset")
+        if not seq_asset and track:
+            seq_asset = f"AS_{workspace.mod_name}_{track}"
+
+        # Only require the sequence the montage ACTUALLY references!
+        if seq_asset:
+            s_lower = seq_asset.split(".")[0].lower()
+            if s_lower not in required_sequences:
+                required_sequences[s_lower] = (seq_asset, f"Montage '{anim_meta.get('montage_asset', anim_key)}'")
+
+    # 3. Check required sequences against Unreal's files
+    for s_lower, (orig_name, req_source) in required_sequences.items():
+        if s_lower in IGNORED_ANIMATION_TRACKS or s_lower.endswith("_hit"):
+            continue
+        if s_lower not in existing_uassets:
+            missing_sequences.append(f"{orig_name}.uasset ({req_source})")
+
+    if missing_sequences:
+        errors.append(
+            f"The following required animation sequences are missing from your Unreal project:\n" +
+            "\n".join(f"  • {s}" for s in missing_sequences) +
+            f"\n  -> Push animations to Unreal to import the missing sequences before cooking."
+        )
+        return False, errors
+
+    return True, []
+
 def clean_cook_environment(workspace):
     for p in [workspace.output_pak_clean, workspace.output_pak_err]:
         if os.path.exists(p):
@@ -78,7 +170,52 @@ def clean_cook_environment(workspace):
                 print(f"CRITICAL ERROR: Cannot overwrite '{os.path.basename(p)}'. Close the game!", flush=True)
                 sys.exit(1)
 
-    # Note: We do NOT delete workspace.cooked_dir so that pre-cooked variant subfolders (like TestingA) are preserved!
+    # Parent Mode Deduplication: If packing parent, clean standalone paks of child variants included in this build
+    if not workspace.is_variant:
+        cat_parts = workspace.category.replace("/", os.sep)
+        base_fmodel_dir = os.path.normpath(os.path.join(
+            workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
+            cat_parts, workspace.base_pal
+        )) if workspace.fmodel_root else ""
+
+        ue_char_dir = os.path.normpath(os.path.join(
+            workspace.project_dir, "Content", "Pal", "Model", "Character", 
+            cat_parts, workspace.base_pal
+        )) if workspace.project_dir else ""
+
+        discovered_subs = set()
+        if os.path.exists(ue_char_dir):
+            discovered_subs.update(s for s in os.listdir(ue_char_dir) if os.path.isdir(os.path.join(ue_char_dir, s)) and not s.startswith("."))
+        if os.path.exists(base_fmodel_dir):
+            discovered_subs.update(s for s in os.listdir(base_fmodel_dir) if os.path.isdir(os.path.join(base_fmodel_dir, s)) and not s.startswith("."))
+
+        for sub in sorted(list(discovered_subs)):
+            if hasattr(workspace, "skipped_variants") and sub in workspace.skipped_variants:
+                continue
+            if sub.lower() in ["sources", ".palbaker_audio"]:
+                continue
+
+            standalone_candidates = [
+                os.path.join(workspace.output_dir, f"{sub}_P.pak"),
+                os.path.join(workspace.output_dir, f"{sub}_err_P.pak"),
+            ]
+            if workspace.palworld_exe and os.path.exists(workspace.palworld_exe):
+                paks_dir = os.path.join(os.path.dirname(workspace.palworld_exe), "Pal", "Content", "Paks")
+                standalone_candidates.extend([
+                    os.path.join(paks_dir, "palBaker", f"{sub}_P.pak"),
+                    os.path.join(paks_dir, "palBaker", f"{sub}_err_P.pak"),
+                ])
+
+            for cand in set(standalone_candidates):
+                if os.path.exists(cand):
+                    try:
+                        os.remove(cand)
+                        print(f"Cleaned redundant standalone variant pak: {os.path.basename(cand)} (Will consolidate into {os.path.basename(workspace.output_pak_clean)})", flush=True)
+                    except OSError:
+                        print(f"CRITICAL ERROR: Cannot remove redundant variant pak '{os.path.basename(cand)}'. Close the game!", flush=True)
+                        sys.exit(1)
+
+    # Note: We do NOT delete workspace.cooked_dir so that pre-cooked variant subfolders are preserved!
     if os.path.exists(workspace.cooked_skel_dir): 
         shutil.rmtree(workspace.cooked_skel_dir, ignore_errors=True)
     if os.path.exists(workspace.cooked_anims_dir): 
@@ -151,154 +288,245 @@ def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[
     folders_to_pack = []
     blacklist = getattr(workspace, "custom_blacklist", [])
     skipped_variants = getattr(workspace, "skipped_variants", [])
-
-    # 1. Pack the primary targeted directory (whether base pal or nested mod folder)
-    if not (workspace.is_variant and workspace.mod_name in skipped_variants):
-        if os.path.exists(workspace.cooked_dir):
-            folders_to_pack.append((workspace.cooked_dir, workspace.ue_virtual_path.replace("/Game/", "")))
-    else:
-        print(f"  [Packer] Skipping '{workspace.mod_name}' (marked as skipped in .palbaker_state.json).", flush=True)
-        
-    # 2. DYNAMIC RECURSIVE DISCOVERY AND GATHERING
     category_sanitized = workspace.category.replace(" ", "_").replace("\\", "/")
     cat_parts = workspace.category.replace("/", os.sep)
-    
-    # Check both FModel export directory AND Unreal Project Content folder
-    candidate_source_dirs = []
-    base_fmodel_dir = os.path.normpath(os.path.join(
-        workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
-        cat_parts, workspace.base_pal
-    )) if workspace.fmodel_root else ""
-    if os.path.exists(base_fmodel_dir):
-        candidate_source_dirs.append(base_fmodel_dir)
+    cooked_content = os.path.join(workspace.project_dir, "Saved", "Cooked", "Windows", workspace.target_project_name, "Content")
 
-    ue_project_char_dir = os.path.normpath(os.path.join(
-        workspace.project_dir, "Content", "Pal", "Model", "Character", 
-        cat_parts, workspace.base_pal
-    )) if workspace.project_dir else ""
-    if os.path.exists(ue_project_char_dir) and ue_project_char_dir not in candidate_source_dirs:
-        candidate_source_dirs.append(ue_project_char_dir)
+    if workspace.is_variant:
+        # =========================================================================
+        # VARIANT / CHILD MOD MODE: STRICTLY ISOLATED TO THIS VARIANT ONLY!
+        # =========================================================================
+        print(f"  [Pack Manifest] Variant mode: Building isolated package for '{workspace.mod_name}'...", flush=True)
 
-    discovered_subs = set()
-    for c_dir in candidate_source_dirs:
-        for sub in os.listdir(c_dir):
-            sub_path = os.path.join(c_dir, sub)
-            if os.path.isdir(sub_path) and not sub.startswith(".") and sub.lower() not in ["sources", ".palbaker_audio"]:
-                discovered_subs.add(sub)
+        # 1. Variant Mesh folder
+        if os.path.exists(workspace.cooked_dir):
+            folders_to_pack.append((workspace.cooked_dir, workspace.ue_virtual_path.replace("/Game/", "")))
 
-    for sub in sorted(list(discovered_subs)):
-        if sub in skipped_variants:
-            print(f"  [Recursive Pack] Skipping variant subfolder '{sub}' (marked as skipped in .palbaker_state.json).", flush=True)
-            continue
+        # 2. Variant Dedicated Skeleton (ALWAYS pack if present to satisfy mesh dependency)
+        if os.path.exists(workspace.cooked_skel_dir):
+            folders_to_pack.append((workspace.cooked_skel_dir, workspace.skeleton_virtual_path.replace("/Game/", "")))
+            print(f"  -> Packed variant dedicated skeleton: {workspace.skeleton_virtual_path}", flush=True)
 
-        variant_rel = f"Pal/Model/Character/{category_sanitized}/{workspace.base_pal}/{sub}"
-        
-        if is_path_blacklisted(f"/Game/{variant_rel}", blacklist):
-            print(f"  [Recursive Pack] Blacklisted variant folder excluded: {variant_rel}", flush=True)
-            continue
+        # 3. Variant Animations (if custom anims active)
+        if has_anims and os.path.exists(workspace.cooked_anims_dir):
+            folders_to_pack.append((workspace.cooked_anims_dir, workspace.anims_virtual_path.replace("/Game/", "")))
+            print(f"  -> Packed variant custom animations for {workspace.mod_name}.", flush=True)
 
-        variant_cooked_dir = os.path.join(
-            workspace.project_dir, "Saved", "Cooked", "Windows", workspace.target_project_name, 
-            "Content", os.path.normpath(variant_rel)
-        )
-        if os.path.exists(variant_cooked_dir):
-            folders_to_pack.append((variant_cooked_dir, variant_rel))
-            print(f"  [Recursive Pack] Bundled cooked assets for variant subfolder: {sub}", flush=True)
+        # 3. Variant PalActorBP folder (BP_, ABP_, BS_)
+        if os.path.exists(workspace.cooked_bp_dir):
+            for cf in glob.glob(os.path.join(workspace.cooked_bp_dir, "*.*")):
+                if cf.endswith((".uasset", ".uexp", ".ubulk")):
+                    fn = os.path.basename(cf)
+                    v_rel = f"{workspace.blueprint_virtual_path.replace('/Game/', '')}/{fn}"
+                    if not is_path_blacklisted(f"/Game/{v_rel}", blacklist):
+                        folders_to_pack.append((cf, v_rel))
+            print(f"  -> Packed variant Blueprint Stack for {workspace.mod_name}.", flush=True)
 
-    if os.path.exists(workspace.cooked_skel_dir):
-        folders_to_pack.append((workspace.cooked_skel_dir, workspace.skeleton_virtual_path.replace("/Game/", "")))
+        # 4. Variant Waza and Action Blueprints
+        blueprint_cooked_root = os.path.join(cooked_content, "Pal", "Blueprint")
+        if os.path.exists(blueprint_cooked_root):
+            waza_dir = os.path.join(blueprint_cooked_root, "Action", "Waza", workspace.mod_name)
+            if os.path.exists(waza_dir):
+                waza_vrel = f"Pal/Blueprint/Action/Waza/{workspace.mod_name}"
+                if not is_path_blacklisted(f"/Game/{waza_vrel}", blacklist):
+                    folders_to_pack.append((waza_dir, waza_vrel))
+                    print(f"  -> Packed variant Waza directory: {waza_vrel}", flush=True)
 
-    if hasattr(workspace, 'cooked_bp_dir') and os.path.exists(workspace.cooked_bp_dir):
-        bp_parts_found = False
-        # Pack Actor Blueprints (BP_), Animation Blueprints (ABP_), and BlendSpaces (BS_)
-        for cooked_file in glob.glob(os.path.join(workspace.cooked_bp_dir, "*.*")):
-            if cooked_file.endswith((".uasset", ".uexp", ".ubulk")):
-                filename = os.path.basename(cooked_file)
-                virtual_rel_path = workspace.blueprint_virtual_path.replace('/Game/', '')
-                virtual_file = f"{virtual_rel_path}/{filename}"
-                
-                if not is_path_blacklisted(f"/Game/{virtual_file}", blacklist):
-                    folders_to_pack.append((cooked_file, virtual_file))
-                    bp_parts_found = True
-        if bp_parts_found:
-            print(f"  -> Blueprint Stack detected: Packing {workspace.blueprint_virtual_path} (BP, ABP, BS)...", flush=True)
+            for root, _, files in os.walk(blueprint_cooked_root):
+                clean_r = root.replace("\\", "/")
+                if "PalActorBP" in clean_r or "Action/Waza" in clean_r:
+                    continue
+                for file in files:
+                    if workspace.mod_name.lower() in file.lower() and file.endswith((".uasset", ".uexp", ".ubulk")):
+                        cf = os.path.join(root, file)
+                        rel_bp = "Pal/Blueprint/" + os.path.relpath(cf, blueprint_cooked_root).replace("\\", "/")
+                        if not is_path_blacklisted(f"/Game/{rel_bp}", blacklist):
+                            folders_to_pack.append((cf, rel_bp))
 
-    # 3. Pack any custom weapon and player animation blueprints
-    blueprint_cooked_root = os.path.join(
-        workspace.project_dir, "Saved", "Cooked", "Windows", workspace.target_project_name, 
-        "Content", "Pal", "Blueprint"
-    )
-    if os.path.exists(blueprint_cooked_root):
-        # Explicitly pack the custom Waza directory for this mod
-        waza_cooked_dir = os.path.join(blueprint_cooked_root, "Action", "Waza", workspace.mod_name)
-        if os.path.exists(waza_cooked_dir):
-            waza_rel = f"Pal/Blueprint/Action/Waza/{workspace.mod_name}"
-            if not is_path_blacklisted(f"/Game/{waza_rel}", blacklist):
-                folders_to_pack.append((waza_cooked_dir, waza_rel))
-                print(f"  -> Custom Waza directory detected: Packing {waza_rel}", flush=True)
-
-        for root, _, files in os.walk(blueprint_cooked_root):
-            # Skip PalActorBP and Action/Waza (handled as full directory)
-            clean_root = root.replace("\\", "/")
-            if "PalActorBP" in clean_root or "Action/Waza" in clean_root:
-                continue
-            for file in files:
-                if workspace.mod_name.lower() in file.lower() and file.endswith((".uasset", ".uexp", ".ubulk")):
-                    cooked_file = os.path.join(root, file)
-                    rel_virtual_path = "Pal/Blueprint/" + os.path.relpath(cooked_file, blueprint_cooked_root).replace("\\", "/")
-                    if not is_path_blacklisted(f"/Game/{rel_virtual_path}", blacklist):
-                        folders_to_pack.append((cooked_file, rel_virtual_path))
-                        print(f"  -> Custom Blueprint detected: Packing {rel_virtual_path}", flush=True)
-
-    if has_anims:
-        folders_to_pack.append((workspace.cooked_anims_dir, workspace.anims_virtual_path.replace("/Game/", "")))
-        print("  -> Custom animations detected: Shipping complete Skeleton and Animations.", flush=True)
-    else:
-        print("  -> No custom animations: Shipping BP assets, but stripping Skeleton asset to prevent ragdoll glitches.", flush=True)
-
-    if workspace.has_custom_shader:
-        custom_shader_cooked = os.path.join(workspace.project_dir, "Saved", "Cooked", "Windows", workspace.target_project_name, "Content", "CartoonCelShader", "Materials", "CelShader")
-        if not is_path_blacklisted("/Game/CartoonCelShader/Materials/CelShader", blacklist):
-            folders_to_pack.append((custom_shader_cooked, "CartoonCelShader/Materials/CelShader"))
-
-    if workspace.has_icon:
-        icon_cooked_base = os.path.join(workspace.project_dir, "Saved", "Cooked", "Windows", workspace.target_project_name, "Content", "Pal", "Texture", "PalIcon", "Normal", f"T_{workspace.mod_name}_icon_normal")
-        icon_parts_found = False
-        for ext in [".uasset", ".uexp", ".ubulk"]:
-            cooked_file = icon_cooked_base + ext
-            if os.path.exists(cooked_file):
-                virtual_file = f"Pal/Texture/PalIcon/Normal/T_{workspace.mod_name}_icon_normal{ext}"
-                if not is_path_blacklisted(f"/Game/{virtual_file}", blacklist):
-                    folders_to_pack.append((cooked_file, virtual_file))
-                    icon_parts_found = True
-
-    audio_overrides = get_staged_audio_overrides(workspace)
-    if audio_overrides:
-        folders_to_pack.extend(audio_overrides)
-
-    # Resolve each external dependency package to its cooked binary files (strictly enforcing blacklist)
-    if extra_packages:
-        cooked_base = os.path.join(workspace.project_dir, "Saved", "Cooked", "Windows", workspace.target_project_name, "Content")
-        for pkg in extra_packages:
-            if is_path_blacklisted(pkg, blacklist):
-                print(f"  [Recursive Pack] Blacklisted dependency package excluded: {pkg}", flush=True)
-                continue
-
-            rel_pkg = pkg.replace("/Game/", "").replace("/", os.sep)
-            cooked_file_base = os.path.join(cooked_base, rel_pkg)
-            rel_virtual_dir = pkg.replace("/Game/", "").rsplit("/", 1)[0]
-            
+        # Variant Icon and Audio overrides
+        if workspace.has_icon:
+            icon_base = os.path.join(cooked_content, "Pal", "Texture", "PalIcon", "Normal", f"T_{workspace.mod_name}_icon_normal")
             for ext in [".uasset", ".uexp", ".ubulk"]:
-                candidate = cooked_file_base + ext
-                if os.path.exists(candidate):
-                    virtual_path = f"{rel_virtual_dir}/{os.path.basename(candidate)}"
-                    if not is_path_blacklisted(f"/Game/{virtual_path}", blacklist):
-                        folders_to_pack.append((candidate, virtual_path))
-                        print(f"  [Recursive Pack] Added dependency: {virtual_path}", flush=True)
+                cf = icon_base + ext
+                if os.path.exists(cf):
+                    folders_to_pack.append((cf, f"Pal/Texture/PalIcon/Normal/T_{workspace.mod_name}_icon_normal{ext}"))
 
-    return folders_to_pack
+        audio_overrides = get_staged_audio_overrides(workspace)
+        if audio_overrides:
+            folders_to_pack.extend(audio_overrides)
 
-def pack_cooked_assets(unrealpak_path: str, response_file: str, output_pak: str, folders_to_pack: list, has_anims: bool, custom_blacklist: list = None, is_custom_pal: bool = False) -> int:
+        return folders_to_pack
+
+    else:
+        # =========================================================================
+        # PARENT / BASE PAL MODE: PACK PARENT + ALL ENABLED CHILDREN COMBINED!
+        # =========================================================================
+        print(f"  [Pack Manifest] Parent mode: Bundling '{workspace.base_pal}' and all enabled child variants...", flush=True)
+
+        # 1. Base Pal Mesh folder
+        if os.path.exists(workspace.cooked_dir):
+            folders_to_pack.append((workspace.cooked_dir, workspace.ue_virtual_path.replace("/Game/", "")))
+
+        # 2. Base Pal Skeleton & Anims (if parent has anims)
+        if os.path.exists(workspace.cooked_skel_dir):
+            folders_to_pack.append((workspace.cooked_skel_dir, workspace.skeleton_virtual_path.replace("/Game/", "")))
+        if has_anims and os.path.exists(workspace.cooked_anims_dir):
+            folders_to_pack.append((workspace.cooked_anims_dir, workspace.anims_virtual_path.replace("/Game/", "")))
+
+        # 3. Base Pal PalActorBP folder
+        if os.path.exists(workspace.cooked_bp_dir):
+            for cf in glob.glob(os.path.join(workspace.cooked_bp_dir, "*.*")):
+                if cf.endswith((".uasset", ".uexp", ".ubulk")):
+                    fn = os.path.basename(cf)
+                    v_file = f"{workspace.blueprint_virtual_path.replace('/Game/', '')}/{fn}"
+                    if not is_path_blacklisted(f"/Game/{v_file}", blacklist):
+                        folders_to_pack.append((cf, v_file))
+
+        # 4. DISCOVER AND BUNDLE ALL ENABLED CHILD VARIANTS!
+        base_fmodel_dir = os.path.normpath(os.path.join(
+            workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
+            cat_parts, workspace.base_pal
+        )) if workspace.fmodel_root else ""
+
+        ue_char_dir = os.path.normpath(os.path.join(
+            workspace.project_dir, "Content", "Pal", "Model", "Character", 
+            cat_parts, workspace.base_pal
+        )) if workspace.project_dir else ""
+
+        discovered_subs = set()
+        if os.path.exists(ue_char_dir):
+            discovered_subs.update(s for s in os.listdir(ue_char_dir) if os.path.isdir(os.path.join(ue_char_dir, s)) and not s.startswith("."))
+        if os.path.exists(base_fmodel_dir):
+            discovered_subs.update(s for s in os.listdir(base_fmodel_dir) if os.path.isdir(os.path.join(base_fmodel_dir, s)) and not s.startswith("."))
+
+        from utils.sidecar_helper import load_sidecar
+
+        for sub in sorted(list(discovered_subs)):
+            if sub in skipped_variants or sub.lower() in ["sources", ".palbaker_audio"]:
+                print(f"  [Packer] Skipping child variant '{sub}' (marked as skipped in .palbaker_state.json).", flush=True)
+                continue
+
+            print(f"  [Packer] Bundling enabled child variant: '{sub}'", flush=True)
+
+            # Child variant mesh folder
+            variant_rel = f"Pal/Model/Character/{category_sanitized}/{workspace.base_pal}/{sub}"
+            variant_cooked = os.path.join(cooked_content, os.path.normpath(variant_rel))
+            if os.path.exists(variant_cooked) and not is_path_blacklisted(f"/Game/{variant_rel}", blacklist):
+                folders_to_pack.append((variant_cooked, variant_rel))
+
+            # Check if this child variant has custom animations / dedicated skeleton
+            sub_sidecar = os.path.join(base_fmodel_dir, sub, f"{sub}_blend.json")
+            if not os.path.exists(sub_sidecar):
+                sub_sidecar = os.path.join(base_fmodel_dir, f"{sub}_blend.json")
+            sub_data = load_sidecar(sub_sidecar) if os.path.exists(sub_sidecar) else {}
+            sub_has_anims = bool(sub_data.get("custom_animations", {}).get("is_active"))
+
+            # Child variant dedicated skeleton (pack if exists)
+            sub_skel_dir = os.path.join(cooked_content, "Pal", "Model", "Character", "Skeleton", workspace.base_pal, sub)
+            if os.path.exists(sub_skel_dir):
+                folders_to_pack.append((sub_skel_dir, f"Pal/Model/Character/Skeleton/{workspace.base_pal}/{sub}"))
+                print(f"  -> Packed child variant dedicated skeleton: {sub}", flush=True)
+
+            if sub_has_anims:
+
+                # Child variant animations
+                sub_anim_dir = os.path.join(cooked_content, "Pal", "Animation", "Character", category_sanitized, workspace.base_pal, sub)
+                if os.path.exists(sub_anim_dir):
+                    folders_to_pack.append((sub_anim_dir, f"Pal/Animation/Character/{category_sanitized}/{workspace.base_pal}/{sub}"))
+
+                # Child variant PalActorBP (BP_, ABP_, BS_)
+                sub_bp_dir = os.path.join(cooked_content, "Pal", "Blueprint", "Character", "Monster", "PalActorBP", workspace.base_pal, sub)
+                if os.path.exists(sub_bp_dir):
+                    for cf in glob.glob(os.path.join(sub_bp_dir, "*.*")):
+                        if cf.endswith((".uasset", ".uexp", ".ubulk")):
+                            fn = os.path.basename(cf)
+                            v_rel = f"Pal/Blueprint/Character/Monster/PalActorBP/{workspace.base_pal}/{sub}/{fn}"
+                            if not is_path_blacklisted(f"/Game/{v_rel}", blacklist):
+                                folders_to_pack.append((cf, v_rel))
+
+                # Child variant Waza folder
+                sub_waza_dir = os.path.join(cooked_content, "Pal", "Blueprint", "Action", "Waza", sub)
+                if os.path.exists(sub_waza_dir):
+                    w_rel = f"Pal/Blueprint/Action/Waza/{sub}"
+                    if not is_path_blacklisted(f"/Game/{w_rel}", blacklist):
+                        folders_to_pack.append((sub_waza_dir, w_rel))
+
+                # Child variant custom actions / blueprints
+                bp_cooked_root = os.path.join(cooked_content, "Pal", "Blueprint")
+                if os.path.exists(bp_cooked_root):
+                    for root, _, files in os.walk(bp_cooked_root):
+                        clean_r = root.replace("\\", "/")
+                        if "PalActorBP" in clean_r or "Action/Waza" in clean_r:
+                            continue
+                        for file in files:
+                            if sub.lower() in file.lower() and file.endswith((".uasset", ".uexp", ".ubulk")):
+                                cf = os.path.join(root, file)
+                                rel_bp = "Pal/Blueprint/" + os.path.relpath(cf, bp_cooked_root).replace("\\", "/")
+                                if not is_path_blacklisted(f"/Game/{rel_bp}", blacklist):
+                                    folders_to_pack.append((cf, rel_bp))
+
+        # 5. Base Pal Waza and Action Blueprints
+        blueprint_cooked_root = os.path.join(cooked_content, "Pal", "Blueprint")
+        if os.path.exists(blueprint_cooked_root):
+            waza_dir = os.path.join(blueprint_cooked_root, "Action", "Waza", workspace.mod_name)
+            if os.path.exists(waza_dir):
+                waza_vrel = f"Pal/Blueprint/Action/Waza/{workspace.mod_name}"
+                if not is_path_blacklisted(f"/Game/{waza_vrel}", blacklist):
+                    folders_to_pack.append((waza_dir, waza_vrel))
+
+            for root, _, files in os.walk(blueprint_cooked_root):
+                clean_r = root.replace("\\", "/")
+                if "PalActorBP" in clean_r or "Action/Waza" in clean_r:
+                    continue
+                for file in files:
+                    if workspace.mod_name.lower() in file.lower() and file.endswith((".uasset", ".uexp", ".ubulk")):
+                        cf = os.path.join(root, file)
+                        rel_bp = "Pal/Blueprint/" + os.path.relpath(cf, bp_cooked_root).replace("\\", "/")
+                        if not is_path_blacklisted(f"/Game/{rel_bp}", blacklist):
+                            folders_to_pack.append((cf, rel_bp))
+
+        # Audio, CelShader, Icons
+        if workspace.has_custom_shader:
+            cs_dir = os.path.join(cooked_content, "CartoonCelShader", "Materials", "CelShader")
+            if not is_path_blacklisted("/Game/CartoonCelShader/Materials/CelShader", blacklist):
+                folders_to_pack.append((cs_dir, "CartoonCelShader/Materials/CelShader"))
+
+        if workspace.has_icon:
+            icon_base = os.path.join(cooked_content, "Pal", "Texture", "PalIcon", "Normal", f"T_{workspace.mod_name}_icon_normal")
+            for ext in [".uasset", ".uexp", ".ubulk"]:
+                cf = icon_base + ext
+                if os.path.exists(cf):
+                    folders_to_pack.append((cf, f"Pal/Texture/PalIcon/Normal/T_{workspace.mod_name}_icon_normal{ext}"))
+
+        audio_overrides = get_staged_audio_overrides(workspace)
+        if audio_overrides:
+            folders_to_pack.extend(audio_overrides)
+
+        if extra_packages:
+            for pkg in extra_packages:
+                if is_path_blacklisted(pkg, blacklist):
+                    continue
+                rel_pkg = pkg.replace("/Game/", "").replace("/", os.sep)
+                cf_base = os.path.join(cooked_content, rel_pkg)
+                rel_v_dir = pkg.replace("/Game/", "").rsplit("/", 1)[0]
+                for ext in [".uasset", ".uexp", ".ubulk"]:
+                    cand = cf_base + ext
+                    if os.path.exists(cand):
+                        folders_to_pack.append((cand, f"{rel_v_dir}/{os.path.basename(cand)}"))
+
+        return folders_to_pack
+
+def pack_cooked_assets(
+    unrealpak_path: str, 
+    response_file: str, 
+    output_pak: str, 
+    folders_to_pack: list, 
+    has_anims: bool, 
+    custom_blacklist: list = None, 
+    is_custom_pal: bool = False,
+    base_pal: str = "",
+    is_variant: bool = False
+) -> int:
     os.makedirs(os.path.dirname(response_file), exist_ok=True)
     if custom_blacklist is None:
         custom_blacklist = []
@@ -319,8 +547,20 @@ def pack_cooked_assets(unrealpak_path: str, response_file: str, output_pak: str,
                                 # Standalone Custom Pals MUST package their physics assets to ragdoll properly
                                 if "PhysicsAsset" in file and not is_custom_pal:
                                     continue
-                                if "Skeleton" in file and not has_anims:
-                                    continue
+
+                                # Safe Skeleton Stripping:
+                                # Only strip the shared vanilla parent skeleton when no custom animations are shipped.
+                                # Dedicated variant skeletons (e.g. SK_SexyAzurmane_..._Skeleton) MUST be included
+                                # because the variant mesh directly depends on them!
+                                if "Skeleton" in file:
+                                    filename_lower = file.lower()
+                                    target_base = base_pal.lower() if base_pal else ""
+                                    is_root_vanilla_skel = (
+                                        (filename_lower == f"sk_{target_base}_skeleton.uasset" if target_base else False) and
+                                        not is_variant
+                                    )
+                                    if is_root_vanilla_skel and not has_anims:
+                                        continue
                                     
                                 abs_path = os.path.join(root, file)
                                 rel_to_cooked = os.path.relpath(abs_path, path_on_disk)
@@ -365,6 +605,13 @@ def pack_cooked_assets(unrealpak_path: str, response_file: str, output_pak: str,
                 sys.exit(1)
 
         clean_response_path = response_file.replace("\\", "/")
-        run_and_stream([unrealpak_path, output_pak, f"-Create={clean_response_path}"])
+        cmd_pack = [
+            unrealpak_path, 
+            output_pak, 
+            f"-Create={clean_response_path}",
+            "-compress",
+            "-compressionformats=Zlib"
+        ]
+        run_and_stream(cmd_pack)
             
     return files_found

@@ -7,6 +7,19 @@ from .names import get_localized_name, load_names_map
 from .audio_helper import get_pal_sound_metadata
 from .sidecar_helper import load_sidecar
 
+def clean_anim_name(name: str, base_pal: str = "", mod_name: str = "") -> str:
+    """Strips AS_, AM_, and mod/pal prefixes to return clean track names (e.g. Eat, Damage)."""
+    if not name:
+        return ""
+    clean = os.path.splitext(os.path.basename(name))[0]
+    m = re.match(r'^(?:AS|AM)_[a-zA-Z0-9]+?_(.+)$', clean)
+    if m:
+        clean = m.group(1)
+    for pfx in [f"{mod_name}_", f"{base_pal}_", "AS_", "AM_"]:
+        if pfx and clean.lower().startswith(pfx.lower()):
+            clean = clean[len(pfx):]
+    return clean
+
 def scan_character_folders(base_path: str, target_mod: str = None) -> list[dict]:
     """
     Scans character folders across Monsters, NPCs (including Bosses), and Player components.
@@ -303,6 +316,13 @@ def get_mod_info(settings: dict, target_mod: str = None):
         merged_mods[key]["ue_path"] = item["path"]
         merged_mods[key]["category"] = item["category"]
 
+    # Deduplicate: Remove dummy unextracted placeholder if a real variant entry exists for this mod
+    variant_names = {item["mod_name"].lower() for item in discovered_fmodel_norm if item["mod_name"] != item["base_pal"]}
+    for k in list(merged_mods.keys()):
+        m = merged_mods[k]
+        if m["base_pal"] == m["mod_name"] and not m["fmodel_path"] and not m["ue_path"] and m["mod_name"].lower() in variant_names:
+            del merged_mods[k]
+
     results = []
 
     for key, data in merged_mods.items():
@@ -320,6 +340,9 @@ def get_mod_info(settings: dict, target_mod: str = None):
         has_fmodel = bool(fmodel_path and os.path.exists(fmodel_path))
         has_ue = False
         has_skeleton_ue = False
+        anims_in_ue_count = 0
+        missing_anims_in_ue = False
+        custom_animations = None
         
         if ue_path and os.path.exists(ue_path):
             if is_variant and ue_path.replace("\\", "/").endswith(base_pal):
@@ -330,15 +353,41 @@ def get_mod_info(settings: dict, target_mod: str = None):
         if ue_base and os.path.exists(ue_base):
             skel_base_dir = os.path.join(ue_base, "Skeleton")
             if os.path.exists(skel_base_dir):
-                skel_candidates = [
-                    os.path.join(skel_base_dir, base_pal, mod_name, f"SK_{mod_name}_Skeleton.uasset"),
-                    os.path.join(skel_base_dir, mod_name, f"SK_{mod_name}_Skeleton.uasset"),
-                    os.path.join(skel_base_dir, base_pal, f"SK_{mod_name}_Skeleton.uasset"),
-                    os.path.join(skel_base_dir, base_pal, f"SK_{base_pal}_Skeleton.uasset"),
-                    os.path.join(skel_base_dir, "Human", "SK_PalHuman_Skeleton.uasset"),
-                    os.path.join(skel_base_dir, "Player", "SK_PalHuman_Skeleton.uasset"),
-                ]
+                if is_variant:
+                    # For a variant, the skeleton MUST belong to this specific variant
+                    skel_candidates = [
+                        os.path.join(skel_base_dir, base_pal, mod_name, f"SK_{mod_name}_Skeleton.uasset"),
+                        os.path.join(skel_base_dir, mod_name, f"SK_{mod_name}_Skeleton.uasset"),
+                        os.path.join(skel_base_dir, base_pal, f"SK_{mod_name}_Skeleton.uasset"),
+                    ]
+                else:
+                    # For a base pal or standalone custom pal
+                    skel_candidates = [
+                        os.path.join(skel_base_dir, base_pal, f"SK_{base_pal}_Skeleton.uasset"),
+                        os.path.join(skel_base_dir, mod_name, f"SK_{mod_name}_Skeleton.uasset"),
+                    ]
+                    if "human" in data.get("category", "").lower() or "player" in data.get("category", "").lower():
+                        skel_candidates.extend([
+                            os.path.join(skel_base_dir, "Human", "SK_PalHuman_Skeleton.uasset"),
+                            os.path.join(skel_base_dir, "Player", "SK_PalHuman_Skeleton.uasset"),
+                        ])
                 has_skeleton_ue = any(os.path.exists(p) for p in skel_candidates)
+
+
+            # Check for existing custom animation sequences in Unreal project Content directory
+            anims_ue_dir = os.path.normpath(os.path.join(
+                ue_base, "..", "Animation", "Character", data["category"].replace("/", os.sep), base_pal, mod_name
+            )) if is_variant else os.path.normpath(os.path.join(
+                ue_base, "..", "Animation", "Character", data["category"].replace("/", os.sep), mod_name
+            ))
+            
+            if os.path.exists(anims_ue_dir):
+                anims_in_ue_count = len([f for f in os.listdir(anims_ue_dir) if f.endswith(".uasset")])
+
+            if custom_animations and custom_animations.get("is_active"):
+                if anims_in_ue_count == 0:
+                    missing_anims_in_ue = True
+
 
         has_blend = False
         has_psk = False
@@ -378,8 +427,24 @@ def get_mod_info(settings: dict, target_mod: str = None):
         active_vanilla_replacer = ""
         custom_blacklist = []
         custom_animations = None 
-        sidecar_path = os.path.join(fmodel_path, f"{mod_name}_blend.json") if fmodel_path else ""
-        if os.path.exists(sidecar_path):
+        # Resilient Sidecar Path Resolution for both Variants and Base Pals
+        sidecar_candidates = []
+        if fmodel_path:
+            sidecar_candidates.append(os.path.join(fmodel_path, f"{mod_name}_blend.json"))
+            sidecar_candidates.append(os.path.join(fmodel_path, mod_name, f"{mod_name}_blend.json"))
+            if is_variant:
+                sidecar_candidates.append(os.path.join(os.path.dirname(fmodel_path), f"{mod_name}_blend.json"))
+                sidecar_candidates.append(os.path.join(os.path.dirname(fmodel_path), mod_name, f"{mod_name}_blend.json"))
+        if fmodel_base:
+            cat_rel = data.get("category", "Monster").replace("/", os.sep)
+            sidecar_candidates.extend([
+                os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Model", "Character", cat_rel, base_pal, mod_name, f"{mod_name}_blend.json")),
+                os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Model", "Character", cat_rel, base_pal, f"{mod_name}_blend.json")),
+                os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Model", "Character", cat_rel, mod_name, f"{mod_name}_blend.json")),
+            ])
+
+        sidecar_path = next((p for p in sidecar_candidates if p and os.path.exists(p)), "")
+        if sidecar_path and os.path.exists(sidecar_path):
             try:
                 with open(sidecar_path, "r", encoding="utf-8") as f:
                     sidecar_data = json.load(f)
@@ -393,6 +458,87 @@ def get_mod_info(settings: dict, target_mod: str = None):
             except Exception:
                 pass
 
+        # Resolve the true Unreal Animation Content directory (Content/Pal/Animation/...)
+        project_dir = os.path.dirname(uproject) if uproject else ""
+        existing_ue_anims = set()
+
+        if project_dir and os.path.exists(project_dir):
+            cat_rel = data["category"].replace("/", os.sep)
+            anims_ue_candidates = []
+
+            if is_variant:
+                anims_ue_candidates.append(os.path.normpath(os.path.join(
+                    project_dir, "Content", "Pal", "Animation", "Character", cat_rel, base_pal, mod_name
+                )))
+                anims_ue_candidates.append(os.path.normpath(os.path.join(
+                    project_dir, "Content", "Pal", "Animation", "Character", cat_rel, mod_name
+                )))
+            else:
+                anims_ue_candidates.append(os.path.normpath(os.path.join(
+                    project_dir, "Content", "Pal", "Animation", "Character", cat_rel, mod_name
+                )))
+
+            for candidate_dir in anims_ue_candidates:
+                if os.path.exists(candidate_dir):
+                    for f in os.listdir(candidate_dir):
+                        if f.endswith(".uasset"):
+                            existing_ue_anims.add(os.path.splitext(f)[0].lower())
+
+        anims_in_ue_count = len(existing_ue_anims)
+        missing_anims_in_ue = []
+
+        # Smart audit: only collect sequence clips ACTUALLY required by active BlendSpaces & Montages
+        IGNORED_TRACKS = {"hit", "damageadditive"}
+
+        if custom_animations and custom_animations.get("is_active"):
+            anims_dict = custom_animations.get("anims", {})
+            bs_dict = custom_animations.get("blend_spaces", {})
+
+            required_sequences = {}  # { seq_lower: display_track_name }
+
+            # 1. Sequences required by active BlendSpaces
+            for bs_name, bs_data in bs_dict.items():
+                for sample in bs_data.get("samples", []):
+                    if sample.get("in_nla", True):
+                        anim_name = sample.get("animation", "")
+                        clean_name = sample.get("clean_name", "")
+                        if anim_name:
+                            seq_lower = anim_name.split(".")[0].lower()
+                            required_sequences[seq_lower] = clean_name or anim_name
+
+            # 2. Sequences required by active / modified Montages
+            for anim_key, anim_meta in anims_dict.items():
+                if not isinstance(anim_meta, dict):
+                    continue
+                if anim_meta.get("category") == "BlendSpaceSample":
+                    continue
+
+                track = anim_meta.get("nla_track_name") or ""
+                if track.lower() in IGNORED_TRACKS or anim_key.lower().endswith("_hit"):
+                    continue
+
+                # Skip un-modified and inactive tracks (they fall back to vanilla template animation)
+                if not anim_meta.get("in_nla", False) and not anim_meta.get("is_modified", False):
+                    continue
+
+                seq_name = anim_meta.get("sequence_asset")
+                if not seq_name and track:
+                    seq_name = f"AS_{mod_name}_{track}"
+
+                if seq_name:
+                    seq_lower = seq_name.split(".")[0].lower()
+                    if seq_lower not in required_sequences:
+                        required_sequences[seq_lower] = track or clean_anim_name(seq_name, base_pal, mod_name)
+
+            # 3. Check against existing uassets
+            for seq_lower, display_track in required_sequences.items():
+                if seq_lower in IGNORED_TRACKS or seq_lower.endswith("_hit"):
+                    continue
+                if seq_lower not in existing_ue_anims:
+                    if display_track not in missing_anims_in_ue:
+                        missing_anims_in_ue.append(display_track)
+
+        missing_anims_in_ue.sort()
         # Check skipped variants state from .palbaker_state.json
         parent_fmodel_dir = fmodel_path
         if is_variant and fmodel_base:
@@ -424,9 +570,10 @@ def get_mod_info(settings: dict, target_mod: str = None):
         has_pak_err = False
         
         if palworld_exe and os.path.exists(palworld_exe):
-            pak_name = base_pal if is_variant else mod_name
+            pak_name = mod_name if is_variant else base_pal
             pak_path = os.path.normpath(os.path.join(os.path.dirname(palworld_exe), "Pal", "Content", "Paks", "palBaker", f"{pak_name}_P.pak"))
             pak_err_path = os.path.normpath(os.path.join(os.path.dirname(palworld_exe), "Pal", "Content", "Paks", "palBaker", f"{pak_name}_err_P.pak"))
+
             
             has_pak = os.path.exists(pak_path)
             has_pak_err = os.path.exists(pak_err_path)
@@ -536,6 +683,8 @@ def get_mod_info(settings: dict, target_mod: str = None):
             "has_psk": has_psk,
             "has_ue": has_ue,
             "has_skeleton_ue": has_skeleton_ue,
+            "anims_in_ue_count": anims_in_ue_count,
+            "missing_anims_in_ue": missing_anims_in_ue,
             "source_modified": source_modified,
             "ue_modified": ue_modified,
             "ue_modified_files": ue_modified_files,

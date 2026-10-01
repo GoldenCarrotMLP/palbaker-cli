@@ -188,8 +188,9 @@ class ModWorkspace:
         if self.palworld_exe and os.path.exists(self.palworld_exe):
             self.output_dir = os.path.join(os.path.dirname(self.palworld_exe), "Pal", "Content", "Paks", "palBaker")
 
-        # Compile the output pak into the BASE PAL'S namespace regardless of variant or not
-        self.output_pak_clean = os.path.join(self.output_dir, f"{base_pal}_P.pak")
-        self.output_pak_err = os.path.join(self.output_dir, f"{base_pal}_err_P.pak")
+       # Compile the output pak into mod_name for variants, or base_pal for parents
+        pak_name = mod_name if self.is_variant else base_pal
+        self.output_pak_clean = os.path.join(self.output_dir, f"{pak_name}_P.pak")
+        self.output_pak_err = os.path.join(self.output_dir, f"{pak_name}_err_P.pak")
 
         self.audio_media_dir = os.path.join(self.fmodel_dir, ".palbaker_audio", "WwiseAudio", "Media") if self.fmodel_dir else ""

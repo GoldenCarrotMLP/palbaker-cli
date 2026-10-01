@@ -164,17 +164,20 @@ def handle_dynamic_pals_command(args, settings):
         # REDIRECTOR / CLEANUP: Clean up previous file if name changed!
         palworld_exe = settings.get("palworld_exe", "")
         if palworld_exe and os.path.exists(palworld_exe):
-            swap_json_dir = os.path.join(os.path.dirname(palworld_exe), "Pal", "Content", "Paks", "~Mods", "SwapJSON")
-            from utils.dynamic_pals_helper import sanitize_json_filename, compile_unified_dynamic_pals_json
-            
+            from utils.dynamic_pals_helper import (
+                get_model_json_dirs, sanitize_json_filename, compile_unified_dynamic_pals_json
+            )
+            model_json_dir, legacy_swap_json_dir = get_model_json_dirs(palworld_exe)
             old_filename = sanitize_json_filename(old_custom_name, f"palbaker-{base_pal}")
-            old_path = os.path.join(swap_json_dir, f"{old_filename}.json")
-            if os.path.exists(old_path):
-                try: os.remove(old_path)
-                except OSError: pass
 
-            compile_unified_dynamic_pals_json(base_pal, fmodel_dir, swap_json_dir)
+            for d in [model_json_dir, legacy_swap_json_dir]:
+                if d and os.path.exists(d):
+                    old_path = os.path.join(d, f"{old_filename}.json")
+                    if os.path.exists(old_path):
+                        try: os.remove(old_path)
+                        except OSError: pass
 
+            compile_unified_dynamic_pals_json(base_pal, fmodel_dir, model_json_dir, legacy_swap_json_dir)
         json_print({"status": "success", "message": f"Updated deployed JSON name to '{custom_name or f'palbaker-{base_pal}'}.json'"})
 
     elif subcommand == "sidecar":

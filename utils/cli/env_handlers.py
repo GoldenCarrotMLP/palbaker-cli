@@ -26,12 +26,106 @@ def handle_env_command(args, settings):
         error_print(err_msg)
         sys.exit(1)
 
-    # 2. Handle 'env verify' (Exempts compiler toolsets & skips editor checks gracefully if empty)
+    # 2. Handle 'env verify' (Strong Path and Environment Verification)
     if subcommand == "verify":
         from utils.plugin_manager import check_project_requirements
         
         try:
-            # Check all required generated database and cache JSON files
+            path_errors = []
+            verified_paths = {
+                "uproject": False,
+                "ue_binaries": False,
+                "blender": False,
+                "palworld_exe": False,
+                "fmodel_output": False
+            }
+
+            # 1. Verify .uproject file
+            uproject = settings.get("uproject", "")
+            if not uproject:
+                path_errors.append("UProject path is not configured.")
+            elif not os.path.exists(uproject):
+                path_errors.append(f"UProject file does not exist on disk: '{uproject}'")
+            elif not os.path.isfile(uproject) or not uproject.lower().endswith(".uproject"):
+                path_errors.append(f"Configured UProject path is not a .uproject file: '{uproject}'")
+            else:
+                verified_paths["uproject"] = True
+
+            # 2. Verify Unreal Engine Binaries (UnrealEditor.exe, UnrealEditor-Cmd.exe, UnrealPak.exe)
+            ue_root = settings.get("ue_root", "")
+            if not ue_root:
+                path_errors.append("Unreal Engine Root is not configured.")
+            elif not os.path.exists(ue_root) or not os.path.isdir(ue_root):
+                path_errors.append(f"Unreal Engine Root directory does not exist: '{ue_root}'")
+            else:
+                bin_dir = os.path.join(ue_root, "Engine", "Binaries", "Win64")
+                required_binaries = ["UnrealEditor.exe", "UnrealEditor-Cmd.exe", "UnrealPak.exe"]
+                
+                if os.name != 'nt':
+                    bin_dir_posix = os.path.join(ue_root, "Engine", "Binaries", "Linux")
+                    if os.path.exists(bin_dir_posix):
+                        bin_dir = bin_dir_posix
+                        required_binaries = ["UnrealEditor", "UnrealEditor-Cmd", "UnrealPak"]
+
+                missing_binaries = [b for b in required_binaries if not os.path.exists(os.path.join(bin_dir, b))]
+                if missing_binaries:
+                    path_errors.append(
+                        f"Unreal Engine Root is missing binaries in '{bin_dir}': {', '.join(missing_binaries)}"
+                    )
+                else:
+                    verified_paths["ue_binaries"] = True
+
+            # 3. Verify Blender Executable
+            blender = settings.get("blender", "")
+            if not blender:
+                path_errors.append("Blender executable path is not configured.")
+            else:
+                # Check PATH fallback
+                if not os.path.exists(blender) and shutil.which(blender):
+                    blender = shutil.which(blender)
+
+                if not os.path.exists(blender):
+                    path_errors.append(f"Blender executable does not exist on disk: '{blender}'")
+                elif not os.path.isfile(blender):
+                    path_errors.append(f"Configured Blender path is a folder, not an executable: '{blender}'")
+                else:
+                    b_name = os.path.basename(blender).lower()
+                    if os.name == 'nt' and not b_name.endswith(".exe"):
+                        path_errors.append(f"Configured Blender path does not point to an .exe file: '{blender}'")
+                    else:
+                        verified_paths["blender"] = True
+
+            # 4. Verify Palworld Executable
+            pal_exe = settings.get("palworld_exe", "")
+            if not pal_exe:
+                path_errors.append("Palworld executable path is not configured.")
+            elif not os.path.exists(pal_exe):
+                path_errors.append(f"Palworld executable does not exist on disk: '{pal_exe}'")
+            elif not os.path.isfile(pal_exe):
+                path_errors.append(f"Configured Palworld path is a folder, not an executable: '{pal_exe}'")
+            else:
+                exe_name = os.path.basename(pal_exe).lower()
+                valid_exe_names = {
+                    "palworld.exe", "palworld-win64-shipping.exe",
+                    "palserver.exe", "palserver-win64-shipping.exe"
+                }
+                if os.name == 'nt' and exe_name not in valid_exe_names:
+                    path_errors.append(
+                        f"Configured Palworld executable name '{exe_name}' is invalid (expected Palworld.exe or Palworld-Win64-Shipping.exe)."
+                    )
+                else:
+                    verified_paths["palworld_exe"] = True
+
+            # 5. Verify Workspace Folder
+            fmodel_base = settings.get("fmodel_output", "")
+            if not fmodel_base:
+                path_errors.append("Workspace folder (fmodel_output) is not configured.")
+            elif not os.path.exists(fmodel_base) or not os.path.isdir(fmodel_base):
+                path_errors.append(f"Workspace folder does not exist on disk: '{fmodel_base}'")
+            else:
+                verified_paths["fmodel_output"] = True
+
+            # Check database and cache JSON files
             repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             deps_dir = os.path.join(repo_root, "deps")
 
@@ -55,29 +149,22 @@ def handle_env_command(args, settings):
                 "boss_spawners_cache.json"
             ]
 
-            missing_db_files = []
-            for db_file in EXPECTED_DB_FILES:
-                p = os.path.join(deps_dir, db_file)
-                if not os.path.exists(p) or os.path.getsize(p) == 0:
-                    missing_db_files.append(db_file)
-
+            missing_db_files = [
+                f for f in EXPECTED_DB_FILES 
+                if not os.path.exists(os.path.join(deps_dir, f)) or os.path.getsize(os.path.join(deps_dir, f)) == 0
+            ]
             needs_db_build = len(missing_db_files) > 0
 
-            fmodel_base = settings.get("fmodel_output", "")
             has_icons = False
-            if fmodel_base:
+            if verified_paths["fmodel_output"]:
                 icon_dir = os.path.normpath(os.path.join(fmodel_base, "Exports", "Pal", "Content", "Pal", "Texture", "PalIcon", "Normal"))
                 has_icons = os.path.exists(icon_dir) and len(glob.glob(os.path.join(icon_dir, "*.png"))) > 10
             needs_icon_extraction = not has_icons
 
-            # Dynamic path checker: Skip editor-level checks if paths are empty (End-Users)
-            has_ue_paths = bool(settings.get("ue_root") and settings.get("uproject") and os.path.exists(settings["uproject"]))
-
-            if has_ue_paths:
+            # Run ModKit checks if UE binaries and .uproject are valid
+            if verified_paths["uproject"] and verified_paths["ue_binaries"]:
                 reqs = check_project_requirements(settings.get("ue_root", ""), settings.get("uproject", ""))
                 reqs["unreal_skipped"] = False
-                # Remove hard compile errors from verify pathway
-                reqs["error"] = None
             else:
                 reqs = {
                     "error": None,
@@ -93,24 +180,38 @@ def handle_env_command(args, settings):
 
             reqs["needs_db_build"] = needs_db_build
             reqs["missing_db_files"] = missing_db_files
+            reqs["path_errors"] = path_errors
+            reqs["verified_paths"] = verified_paths
 
-            if has_ue_paths and reqs.get("needs_plugin_sync"):
-                    project_dir = os.path.dirname(settings["uproject"])
-                    dest_plugin_dir = os.path.join(project_dir, "Plugins", "PalBakerEditorUtils")
-                    if os.path.exists(dest_plugin_dir):
-                        json_print({"type": "log", "level": "warning", "message": "The C++ Editor Helper Plugin is outdated. If compiling, close Unreal Editor first."})
-                    else:
-                        json_print({"type": "log", "level": "standard", "message": "Required C++ Editor Helper Plugin is missing."})
+            # If any path error was found, report error and exit
+            if path_errors:
+                reqs["error"] = "\n".join(path_errors)
+                for err in path_errors:
+                    json_print({"type": "log", "level": "error", "message": f"❌ {err}"})
+                json_print({
+                    "status": "error",
+                    "data": reqs,
+                    "message": f"Environment path verification failed with {len(path_errors)} error(s)."
+                })
+                sys.exit(1)
+
+            if reqs.get("needs_plugin_sync"):
+                project_dir = os.path.dirname(settings["uproject"])
+                dest_plugin_dir = os.path.join(project_dir, "Plugins", "PalBakerEditorUtils")
+                if os.path.exists(dest_plugin_dir):
+                    json_print({"type": "log", "level": "warning", "message": "The C++ Editor Helper Plugin is outdated. If compiling, close Unreal Editor first."})
+                else:
+                    json_print({"type": "log", "level": "standard", "message": "Required C++ Editor Helper Plugin is missing."})
 
             if reqs.get("needs_db_build"):
-                    missing_count = len(reqs.get("missing_db_files", []))
-                    json_print({
-                        "type": "log", 
-                        "level": "warning", 
-                        "message": f"Pal database is incomplete ({missing_count} cache files missing). Rebuild required."
-                    })
+                missing_count = len(reqs.get("missing_db_files", []))
+                json_print({
+                    "type": "log", 
+                    "level": "warning", 
+                    "message": f"Pal database is incomplete ({missing_count} cache files missing). Rebuild required."
+                })
 
-            json_print({"status": "success", "data": reqs, "message": "Verification completed."})
+            json_print({"status": "success", "data": reqs, "message": "All paths and binaries verified successfully."})
             sys.exit(0)
 
         except Exception as e:

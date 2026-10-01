@@ -87,30 +87,28 @@ def clean_track_name_simple(name: str, base_pal: str = "", mod_name: str = "") -
     return clean
 
 def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, base_pal: str = "") -> dict | None:
-    """
-    Scans Blender NLA tracks on the Armature and auto-generates the entire
-    custom_animations sidecar structure solely based on NLA track names.
-    """
     existing_custom = existing_sidecar_data.get("custom_animations", {})
     was_active = existing_custom.get("is_active", False)
 
-    # Filter out Blender internal stash / dummy tracks
+    # Filter out Blender internal stash / dummy tracks AND any rogue AM_ tracks
     valid_tracks = []
     if arm_obj and arm_obj.animation_data:
-        valid_tracks = [
-            t for t in arm_obj.animation_data.nla_tracks 
-            if t.name.strip() and not t.name.startswith(".") and "[action stash]" not in t.name.lower()
-        ]
+        for t in arm_obj.animation_data.nla_tracks:
+            t_name = t.name.strip()
+            if not t_name or t_name.startswith(".") or "[action stash]" in t_name.lower():
+                continue
+            if t_name.upper().startswith("AM_"):
+                print(f"[PalBaker Extractor] Skipping non-sequence track in NLA: '{t_name}'", flush=True)
+                continue
+            valid_tracks.append(t)
 
-    # If user deleted all animations in Blender, clear anims completely and deactivate
-    if not valid_tracks:
+    if not valid_tracks and not existing_custom.get("anims"):
         return {
             "is_active": False,
             "anims": {},
             "blend_spaces": {}
         }
 
-    # If the user explicitly toggled custom animations off in the UI, do not reactivate
     if not was_active:
         return {
             "is_active": False,
@@ -123,8 +121,8 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
     mapping_cache = {}
     if os.path.exists(cache_path):
         try:
-            with open(cache_path, "r", encoding="utf-8") as f:
-                mapping_cache = json.load(f)
+            with open(cache_path, "r", encoding="utf-8") as f_c:
+                mapping_cache = json.load(f_c)
         except Exception:
             pass
 
@@ -134,30 +132,42 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
     new_anims = {}
     blend_spaces = dict(existing_blend_spaces)
 
-    print(f"[PalBaker Extractor] Scanning {len(valid_tracks)} valid NLA tracks on Armature to build animation sidecar...", flush=True)
+    print(f"[PalBaker Extractor] Scanning {len(valid_tracks)} valid AS_ sequence tracks on Armature...", flush=True)
 
     for track in valid_tracks:
         raw_track_name = track.name.strip()
-
         clean_track = clean_track_name_simple(raw_track_name, base_pal, mod_name)
+        
+        default_sequence_asset = f"AS_{mod_name}_{clean_track}"
         montage_asset = f"AM_{mod_name}_{clean_track}"
-        sequence_asset = f"AS_{mod_name}_{clean_track}"
-        asset_key = montage_asset
+        asset_key = default_sequence_asset
 
-        # Preserve existing user notifies / rest properties if already configured
-        prev_entry = existing_anims.get(asset_key) or existing_anims.get(sequence_asset) or existing_anims.get(clean_track)
+        # Match previous entry case-insensitively
+        prev_entry = (
+            existing_anims.get(default_sequence_asset) or 
+            existing_anims.get(montage_asset) or 
+            existing_anims.get(clean_track)
+        )
         if not prev_entry:
-            # Search by clean track name or suffix (matches AM_CatMage_Cooking to Cooking)
             for k, v in existing_anims.items():
-                if v.get("nla_track_name", "").lower() == clean_track.lower() or k.lower().endswith(f"_{clean_track.lower()}"):
-                    prev_entry = v
-                    break
+                if isinstance(v, dict):
+                    v_track = v.get("nla_track_name", "").lower()
+                    v_seq = v.get("sequence_asset", "").lower()
+                    v_mont = v.get("montage_asset", "").lower()
+                    if clean_track.lower() in [v_track, v_seq, v_mont] or k.lower() == clean_track.lower():
+                        prev_entry = v
+                        break
         prev_entry = prev_entry or {}
 
         saved_notifies = prev_entry.get("notifies", [])
         saved_rest_props = prev_entry.get("rest_props")
+        
+        # PRESERVE USER'S CUSTOM SEQUENCE ASSIGNMENT AND MODIFIED FLAG
+        saved_sequence = prev_entry.get("sequence_asset")
+        final_sequence_asset = saved_sequence if (saved_sequence and saved_sequence.strip()) else default_sequence_asset
+        saved_is_modified = prev_entry.get("is_modified", False)
 
-        # 1. Pattern: Random Rests (Rest01, Rest02, Rest1, Rest_04)
+        # 1. Pattern: Random Rests
         if re.match(r'^Rest_?\d+$', clean_track, re.IGNORECASE) or "rest0" in clean_track.lower():
             category = "RandomRest"
             enum_key = f"Rest_{clean_track}"
@@ -173,30 +183,28 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "enum_key": enum_key,
                 "display_name": display_name,
                 "montage_asset": montage_asset,
-                "sequence_asset": sequence_asset,
+                "sequence_asset": final_sequence_asset,
                 "nla_track_name": clean_track,
                 "in_nla": True,
-                "is_modified": False,
+                "is_modified": saved_is_modified,
                 "notifies": saved_notifies,
                 "rest_props": rest_props
             }
 
-        # 2. Pattern: BlendSpace Samples (Idle, Walk, Run, Swim, Transport)
+        # 2. Pattern: BlendSpace Samples
         elif clean_track.lower() in ["idle", "walk", "run", "idle_swim", "transport", "move", "swim"]:
             category = "BlendSpaceSample"
-            asset_key = sequence_asset
             new_anims[asset_key] = {
                 "category": category,
                 "enum_key": f"BS_Move_{clean_track}",
                 "display_name": f"BlendSpace: {clean_track}",
-                "sequence_asset": sequence_asset,
+                "sequence_asset": final_sequence_asset,
                 "montage_asset": None,
                 "nla_track_name": clean_track,
                 "in_nla": True,
-                "is_modified": False,
+                "is_modified": saved_is_modified,
                 "notifies": []
             }
-            # Auto-register into default Move BlendSpace container
             if "Move" not in blend_spaces:
                 blend_spaces["Move"] = {
                     "enum_key": "EPalGeneralBlendSpaceType::GeneralMove",
@@ -209,7 +217,7 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
             if not existing_sample:
                 default_speed = 0.0 if clean_track.lower() == "idle" else (500.0 if clean_track.lower() == "walk" else 1000.0)
                 blend_spaces["Move"]["samples"].append({
-                    "animation": sequence_asset,
+                    "animation": final_sequence_asset,
                     "clean_name": clean_track,
                     "speed": default_speed,
                     "rate_scale": 1.0,
@@ -218,8 +226,9 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 blend_spaces["Move"]["samples"].sort(key=lambda x: x["speed"])
             else:
                 existing_sample["in_nla"] = True
+                existing_sample["animation"] = final_sequence_asset
 
-        # 3. Pattern: Canonical Map Lookup from anim_mapping_cache.json
+        # 3. Pattern: Canonical Map Lookup
         elif clean_track in mapping_cache:
             meta = mapping_cache[clean_track]
             category = meta.get("category", "GeneralMontage")
@@ -231,25 +240,25 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "enum_key": enum_key,
                 "display_name": display_name,
                 "montage_asset": montage_asset,
-                "sequence_asset": sequence_asset,
+                "sequence_asset": final_sequence_asset,
                 "nla_track_name": clean_track,
                 "in_nla": True,
-                "is_modified": False,
+                "is_modified": saved_is_modified,
                 "notifies": saved_notifies
             }
 
-        # 4. Pattern: Unique Waza Attack Skills
+        # 4. Pattern: Unique Attack Waza Skills
         elif any(kw in clean_track.lower() for kw in ["unique", "skill", "attack", "waza", "machete", "tackle", "punch", "kick"]):
             new_anims[asset_key] = {
                 "category": "UniqueAttack",
                 "enum_key": f"EPalWazaID::Unique_{mod_name}_{clean_track}",
                 "display_name": f"Unique: {clean_track.replace('_', ' ')}",
                 "montage_asset": montage_asset,
-                "sequence_asset": sequence_asset,
+                "sequence_asset": final_sequence_asset,
                 "action_bp": f"BP_Action_Unique_{mod_name}_{clean_track}",
                 "nla_track_name": clean_track,
                 "in_nla": True,
-                "is_modified": False,
+                "is_modified": saved_is_modified,
                 "notifies": saved_notifies
             }
 
@@ -260,14 +269,24 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "enum_key": f"EPalGeneralMontageType::{clean_track}",
                 "display_name": f"Montage: {clean_track.replace('_', ' ')}",
                 "montage_asset": montage_asset,
-                "sequence_asset": sequence_asset,
+                "sequence_asset": final_sequence_asset,
                 "nla_track_name": clean_track,
                 "in_nla": True,
-                "is_modified": False,
+                "is_modified": saved_is_modified,
                 "notifies": saved_notifies
             }
 
-    # Only keep tracks currently active in NLA
+    # PRESERVE USER-MODIFIED ENTRIES THAT ARE NOT CURRENTLY IN BLENDER NLA TRACKS
+    for old_k, old_v in existing_anims.items():
+        if not isinstance(old_v, dict):
+            continue
+        old_track = old_v.get("nla_track_name", "")
+        as_key = f"AS_{mod_name}_{old_track}" if old_track else old_k
+        if as_key not in new_anims and old_k not in new_anims:
+            preserved = dict(old_v)
+            preserved["in_nla"] = False
+            new_anims[as_key] = preserved
+
     has_valid_tracks = len(new_anims) > 0
     final_is_active = was_active and has_valid_tracks
 
@@ -276,7 +295,6 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
         "anims": new_anims,
         "blend_spaces": blend_spaces
     }
-
 def extract_metadata(output_path: str, fbx_path: str = None):
     print(f"\n[PalBaker Extractor] Starting metadata extraction for {os.path.basename(output_path)}...", flush=True)
     working_dir = os.path.dirname(output_path)

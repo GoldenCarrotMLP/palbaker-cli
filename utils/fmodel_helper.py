@@ -575,7 +575,13 @@ def preprocess_fmodel_textures(fmodel_dir: str, fmodel_root: str):
     materials_metadata = {}
 
     for file in os.listdir(fmodel_dir):
-        if not file.endswith(".json") or file in [".palbaker_state.json", "import_config.json", "materials_metadata.json", "bone_data.json"]:
+        if not file.endswith(".json") or file.startswith("."):
+            continue
+        if file in ["import_config.json", "materials_metadata.json", "bone_data.json"]:
+            continue
+        if file.endswith("_blend.json") or file.endswith("_dynamic_pals.json") or file.endswith("_creator.json") or "PhysicsAsset" in file:
+            continue
+        if not (file.startswith("MI_") or file.startswith("M_")):
             continue
             
         mat_name = os.path.splitext(file)[0]
@@ -587,3 +593,32 @@ def preprocess_fmodel_textures(fmodel_dir: str, fmodel_root: str):
         meta_path = os.path.join(fmodel_dir, "materials_metadata.json")
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(materials_metadata, f, indent=4)
+
+def resolve_and_copy_material_json(material_name: str, fmodel_dir: str, fmodel_root: str) -> dict | None:
+    target_file = f"{material_name}.json"
+    local_path = os.path.join(fmodel_dir, target_file)
+    
+    json_path = None
+    if os.path.exists(local_path):
+        json_path = local_path
+    else:
+        # Check if local folder has a renamed counterpart (e.g. MI_Emberpup_Body for MI_BlackPuppy_Body)
+        mod_name = os.path.basename(os.path.normpath(fmodel_dir))
+        clean_mat = re.sub(r'^(?:MI_|M_)', '', material_name)
+        mat_suffix = clean_mat.split('_', 1)[-1] if '_' in clean_mat else clean_mat
+
+        candidate_local = os.path.join(fmodel_dir, f"MI_{mod_name}_{mat_suffix}.json")
+        if os.path.exists(candidate_local):
+            json_path = candidate_local
+        else:
+            for f in os.listdir(fmodel_dir):
+                if f.startswith("MI_") and f.endswith(f"_{mat_suffix}.json") and not f.endswith("_blend.json"):
+                    json_path = os.path.join(fmodel_dir, f)
+                    break
+
+        if not json_path:
+            json_path = search_for_json(fmodel_root, target_file)
+
+    if not json_path or not os.path.exists(json_path):
+        print(f"  [Failure] Could not resolve JSON for material: {material_name}", flush=True)
+        return None

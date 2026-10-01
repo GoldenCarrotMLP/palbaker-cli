@@ -75,12 +75,18 @@ def export_individual_animations(output_dir: str, mod_name: str, base_pal: str):
     for track in arm_obj.animation_data.nla_tracks:
         if track.name.startswith(".") or "[action stash]" in track.name.lower():
             continue
+        if track.name.upper().startswith("AM_"):
+            continue
         for strip in track.strips:
             if strip.action:
+                if strip.action.name.upper().startswith("AM_"):
+                    continue
                 clean_track = clean_to_track_name(track.name, base_pal, mod_name)
                 actions_map[clean_track] = strip.action
 
     for act in bpy.data.actions:
+        if act.name.upper().startswith("AM_"):
+            continue
         clean_track = clean_to_track_name(act.name, base_pal, mod_name)
         if clean_track not in actions_map:
             actions_map[clean_track] = act

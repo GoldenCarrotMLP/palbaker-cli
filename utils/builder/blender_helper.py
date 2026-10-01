@@ -16,6 +16,36 @@ if utils_dir not in sys.path:
 
 from blender_utils import translator
 
+def resolve_active_addon_flag(blender_path: str, version_str: str) -> str:
+    """Finds which single extension/addon folder physically exists to prevent double-registration collisions."""
+    try:
+        ver_val = float(version_str)
+    except ValueError:
+        ver_val = 4.2
+
+    if ver_val < 4.2:
+        return "io_scene_psk_psa"
+
+    blender_dir = os.path.dirname(blender_path)
+    appdata = os.environ.get("APPDATA", "")
+
+    # Priority 1: System extensions (inside Blender install folder)
+    system_ext = os.path.join(blender_dir, version_str, "extensions", "system", "io_scene_psk_psa")
+    if os.path.exists(system_ext):
+        return "bl_ext.system.io_scene_psk_psa"
+
+    # Priority 2: User Default extensions (AppData)
+    if appdata:
+        user_ext = os.path.join(appdata, "Blender Foundation", "Blender", version_str, "extensions", "user_default", "io_scene_psk_psa")
+        if os.path.exists(user_ext):
+            return "bl_ext.user_default.io_scene_psk_psa"
+
+        blender_org_ext = os.path.join(appdata, "Blender Foundation", "Blender", version_str, "extensions", "blender_org", "io_scene_psk_psa")
+        if os.path.exists(blender_org_ext):
+            return "bl_ext.blender_org.io_scene_psk_psa"
+
+    return "bl_ext.system.io_scene_psk_psa"
+
 def get_blender_version(blender_path: str) -> str:
     """Queries the Blender executable headlessly to parse its version string."""
     if not blender_path or not os.path.exists(blender_path):
@@ -207,8 +237,8 @@ def run_headless_blender(blender_path: str, blend_file: str | None, script_path:
         
     if is_psk_task:
         pre_install_psk_addon(blender_path)
-        addons_list = translator.execute_with_version("get_addons_list", v_tuple)
-        cmd.extend(["--addons", addons_list])
+        addon_flag = resolve_active_addon_flag(blender_path, version_str)
+        cmd.extend(["--addons", addon_flag])
     
     cmd.extend(["--python", script_path, "--"])
     cmd.extend(args)

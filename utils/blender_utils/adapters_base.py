@@ -27,6 +27,34 @@ PHYSICS_BONE_PRESETS = {
     }
 }
 
+SPECIAL_PARENT_MATERIALS = {
+    "m_pal_twinkle": "/Game/Pal/Model/Character/Monster/DreamDemon/M_Pal_Twinkle",
+    "m_pal_dream": "/Game/Pal/Model/Character/Monster/DreamDemon/M_Pal_Dream",
+    "m_pal_fire": "/Game/Pal/Model/Character/Monster/Kitsunebi/M_Pal_Fire",
+    "m_pal_manticore_fire": "/Game/Pal/Model/Character/Monster/Manticore/M_Pal_Manticore_Fire",
+    "m_nightlady": "/Game/Pal/Model/Character/Monster/NightLady/M_NightLady",
+    "m_pallit_rainbow": "/Game/Pal/Model/Character/Monster/YakushimaMonster001_Rainbow/M_PalLit_Rainbow",
+}
+
+def resolve_special_parent_material(mat_name: str):
+    """Matches material slot names (including Blender .001 suffixes or MI_ prefixes) to special parent materials."""
+    if not mat_name:
+        return None
+    clean = re.sub(r'\.\d+$', '', str(mat_name).strip()).lower()
+    if clean in SPECIAL_PARENT_MATERIALS:
+        return SPECIAL_PARENT_MATERIALS[clean]
+    
+    # Handle cases where user prefixed with MI_ instead of M_
+    if clean.startswith("mi_"):
+        alt_m = "m_" + clean[3:]
+        if alt_m in SPECIAL_PARENT_MATERIALS:
+            return SPECIAL_PARENT_MATERIALS[alt_m]
+        alt_direct = clean[1:]  # e.g. mi_nightlady -> m_nightlady
+        if alt_direct in SPECIAL_PARENT_MATERIALS:
+            return SPECIAL_PARENT_MATERIALS[alt_direct]
+
+    return None
+
 def get_node_image_name(link):
     if link and link[0].from_node.type == 'TEX_IMAGE' and link[0].from_node.image:
         return link[0].from_node.image.name.split(".")[0]

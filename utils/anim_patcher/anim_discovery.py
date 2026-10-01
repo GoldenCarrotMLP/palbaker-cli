@@ -355,6 +355,8 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
     for am_path in am_uassets:
         o_name = os.path.splitext(os.path.basename(am_path))[0]
         clean_track = extract_track_name(o_name)
+        if clean_track.lower() in ["hit", "damageadditive"]:
+            continue
         am_json = am_path.replace(".uasset", ".json")
 
         scraped_notifies = []
@@ -403,7 +405,8 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
         if rest_props:
             anim_entry["rest_props"] = rest_props
 
-        inventory[o_name] = anim_entry
+        seq_key = o_name.replace("AM_", "AS_")
+        inventory[seq_key] = anim_entry
 
     # -------------------------------------------------------------------------
     # 5. Harvest Standalone AnimSequences (*.uasset)
@@ -419,6 +422,8 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
         if seq_name in inventory: continue
 
         clean_track = extract_track_name(seq_name)
+        if clean_track.lower() in ["hit", "damageadditive"]:
+            continue
         if clean_track in mapping_cache:
             meta = mapping_cache[clean_track]
             category = meta.get("category", "LocomotionSequence")

@@ -71,6 +71,28 @@ def get_all_blend_files_for_workspace(fmodel_root: str, category: str = "Monster
     # Sort keys and lists alphabetically
     return {k: sorted(result[k]) for k in sorted(result.keys())}
 
+def get_model_json_dirs(palworld_exe: str | None) -> tuple[str, str]:
+    """
+    Returns (model_json_dir, legacy_swap_json_dir).
+    Resolves case-insensitively whether ~Mods or ~mods is used.
+    """
+    if not palworld_exe or not os.path.exists(palworld_exe):
+        return "", ""
+
+    exe_dir = os.path.dirname(palworld_exe)
+    if "binaries" in palworld_exe.lower():
+        paks_dir = os.path.normpath(os.path.join(exe_dir, "..", "..", "Content", "Paks"))
+    else:
+        paks_dir = os.path.normpath(os.path.join(exe_dir, "Pal", "Content", "Paks"))
+
+    mods_dir = os.path.join(paks_dir, "~Mods")
+    if not os.path.exists(mods_dir) and os.path.exists(os.path.join(paks_dir, "~mods")):
+        mods_dir = os.path.join(paks_dir, "~mods")
+
+    model_json_dir = os.path.join(mods_dir, "ModelJSON")
+    legacy_swap_json_dir = os.path.join(mods_dir, "SwapJSON")
+    return model_json_dir, legacy_swap_json_dir
+
 def sanitize_json_filename(name: str, default_name: str) -> str:
     """Cleans user input to be a safe, valid Windows filename without redundant .json extension."""
     if not name or not name.strip():
@@ -191,25 +213,38 @@ def sync_sidecar_metadata(blender_path: str, blend_file_path: str) -> dict:
     save_sidecar(sidecar_path, synced_data)
     return synced_data
 
-def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_dir: str, swap_json_dir: str) -> tuple[bool, str]:
-    """Compiles local variant manifests into clean, clutter-free Dynamic Pals Format V2 JSON."""
+def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_dir: str, target_dir: str, legacy_dir: str = None) -> tuple[bool, str]:
+    """Compiles local variant manifests into clean, clutter-free Dynamic Pals Format V2 JSON in ~Mods/ModelJSON and cleans legacy SwapJSON."""
     manifest_name = f"{monster_name}_dynamic_pals.json"
     manifest_path = os.path.join(dynamic_pals_staging_dir, manifest_name)
 
     if not os.path.exists(manifest_path):
         return True, "No Dynamic Pals variants manifest detected to compile."
 
+    # Determine ModelJSON and legacy SwapJSON directories
+    clean_target = target_dir.replace("\\", "/").rstrip("/")
+    if clean_target.endswith("SwapJSON"):
+        model_json_dir = os.path.join(os.path.dirname(target_dir), "ModelJSON")
+        legacy_swap_json_dir = target_dir
+    else:
+        model_json_dir = target_dir
+        legacy_swap_json_dir = legacy_dir or os.path.join(os.path.dirname(target_dir), "SwapJSON")
+
     try:
         with open(manifest_path, "r", encoding="utf-8") as f_man:
             manifest_data = json.load(f_man)
 
+        custom_name = manifest_data.get("custom_json_name", "")
+        final_filename = sanitize_json_filename(custom_name, f"palbaker-{monster_name}")
+
         if not manifest_data.get("is_dynamic_pals_active", True):
-            target_path = os.path.join(swap_json_dir, f"palbaker-{monster_name}.json")
-            if os.path.exists(target_path):
-                try:
-                    os.remove(target_path)
-                except OSError:
-                    pass
+            for d in [model_json_dir, legacy_swap_json_dir]:
+                if d and os.path.exists(d):
+                    for fn in [f"{final_filename}.json", f"palbaker-{monster_name}.json"]:
+                        p = os.path.join(d, fn)
+                        if os.path.exists(p):
+                            try: os.remove(p)
+                            except OSError: pass
             return True, f"Dynamic Pals is disabled for {monster_name}. Deployed config removed from game."
 
         variants_data = manifest_data.get("variants", {})
@@ -592,8 +627,25 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
         }
     }
 
-    os.makedirs(swap_json_dir, exist_ok=True)
-    target_path = os.path.join(swap_json_dir, f"{final_filename}.json")
+    os.makedirs(model_json_dir, exist_ok=True)
+    target_path = os.path.join(model_json_dir, f"{final_filename}.json")
+
+    # MIGRATION: Delete old copies from legacy SwapJSON folder
+    if legacy_swap_json_dir and os.path.exists(legacy_swap_json_dir):
+        legacy_candidates = [
+            os.path.join(legacy_swap_json_dir, f"{final_filename}.json"),
+            os.path.join(legacy_swap_json_dir, f"palbaker-{monster_name}.json"),
+        ]
+        if custom_name:
+            legacy_candidates.append(os.path.join(legacy_swap_json_dir, f"{custom_name}.json"))
+
+        for old_legacy in set(legacy_candidates):
+            if os.path.exists(old_legacy):
+                try:
+                    os.remove(old_legacy)
+                    print(f"  [ModelJSON Migration] Cleaned legacy copy from SwapJSON: {os.path.basename(old_legacy)}", flush=True)
+                except OSError as e:
+                    print(f"  [ModelJSON Migration Warning] Could not remove legacy SwapJSON file '{old_legacy}': {e}", flush=True)
 
     if manifest_dirty and os.path.exists(manifest_path):
         try:
@@ -605,7 +657,7 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
     try:
         with open(target_path, "w", encoding="utf-8") as f:
             json.dump(output_structure, f, indent=4)
-        return True, f"SUCCESS: Compiled and deployed Dynamic Pals V2 config to {os.path.basename(target_path)}"
+        return True, f"SUCCESS: Compiled and deployed Dynamic Pals V2 config to ModelJSON/{os.path.basename(target_path)}"
     except Exception as e:
         return False, f"Failed to write deployment JSON: {e}"
 

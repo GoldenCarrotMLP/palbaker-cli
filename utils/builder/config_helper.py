@@ -56,6 +56,10 @@ def inject_packaging_settings(ini_path: str, ue_virtual_path: str, skeleton_virt
         f'+DirectoriesToAlwaysCook=(Path="{ue_virtual_path}")\n',
         f'+DirectoriesToAlwaysCook=(Path="{skeleton_virtual_path}")\n'
     ]
+    if ue_virtual_path.startswith("/Game/"):
+        append_lines.append(f'+DirectoriesToAlwaysCook=(Path="{ue_virtual_path[6:]}")\n')
+    if skeleton_virtual_path.startswith("/Game/"):
+        append_lines.append(f'+DirectoriesToAlwaysCook=(Path="{skeleton_virtual_path[6:]}")\n')
     
     if has_anims:
         append_lines.append(f'+DirectoriesToAlwaysCook=(Path="{anims_virtual_path}")\n')
@@ -144,14 +148,17 @@ class GameIniCookContext:
                     if os.path.isdir(sub_path) and not sub.startswith(".") and sub.lower() not in ["sources", ".palbaker_audio"]:
                         discovered_subs.add(sub)
 
-            for sub in sorted(list(discovered_subs)):
-                if hasattr(self.workspace, "skipped_variants") and sub in self.workspace.skipped_variants:
-                    print(f"  [Recursive Cook] Skipping variant subfolder '{sub}' (in skipped_variants).", flush=True)
-                    continue
-                variant_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{self.workspace.base_pal}/{sub}"
-                if variant_virtual_path not in actual_extra_paths:
-                    actual_extra_paths.append(variant_virtual_path)
-                    print(f"  [Recursive Cook] Automatically queued variant subfolder: {variant_virtual_path}", flush=True)
+            if not self.workspace.is_variant:
+                for sub in sorted(list(discovered_subs)):
+                    if hasattr(self.workspace, "skipped_variants") and sub in self.workspace.skipped_variants:
+                        print(f"  [Recursive Cook] Skipping variant subfolder '{sub}' (in skipped_variants).", flush=True)
+                        continue
+                    variant_virtual_path = f"/Game/Pal/Model/Character/{category_sanitized}/{self.workspace.base_pal}/{sub}"
+                    if variant_virtual_path not in actual_extra_paths:
+                        actual_extra_paths.append(variant_virtual_path)
+                        print(f"  [Recursive Cook] Automatically queued variant subfolder: {variant_virtual_path}", flush=True)
+            else:
+                print(f"  [Targeted Cook] Variant mode: Restricting cook to '{self.workspace.mod_name}'.", flush=True)
 
 
 

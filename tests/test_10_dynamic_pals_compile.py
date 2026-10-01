@@ -73,8 +73,8 @@ def main():
 
         # 3. Assert Format V2 Deployed JSON
         if palworld_exe and os.path.exists(palworld_exe):
-            swap_json = os.path.join(os.path.dirname(palworld_exe), "Pal", "Content", "Paks", "~Mods", "SwapJSON", f"palbaker-{TARGET_PAL}.json")
-            assert os.path.exists(swap_json), f"Deployed JSON missing at {swap_json}"
+            model_json = os.path.join(os.path.dirname(palworld_exe), "Pal", "Content", "Paks", "~Mods", "ModelJSON", f"palbaker-{TARGET_PAL}.json")
+            assert os.path.exists(model_json), f"Deployed JSON missing at {model_json}"
             
             with open(swap_json, "r", encoding="utf-8") as f_json:
                 data = json.load(f_json)

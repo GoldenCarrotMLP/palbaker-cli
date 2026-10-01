@@ -88,14 +88,22 @@ class DynamicPalsController:
         else:
             palworld_exe = self.settings.get("palworld_exe", "")
             if palworld_exe and os.path.exists(palworld_exe):
-                swap_json_dir = os.path.join(os.path.dirname(palworld_exe), "Pal", "Content", "Paks", "~Mods", "SwapJSON")
-                target_json = os.path.join(swap_json_dir, f"palbaker-{current_char_id}.json")
-                if os.path.exists(target_json):
-                    try:
-                        os.remove(target_json)
-                        self.view.write_log(f"Purged disabled Dynamic Pals config from game: {os.path.basename(target_json)}", "standard")
-                    except OSError:
-                        pass
+                from utils.dynamic_pals_helper import get_model_json_dirs, sanitize_json_filename
+                model_json_dir, legacy_swap_json_dir = get_model_json_dirs(palworld_exe)
+
+                custom_name = manifest_data.get("custom_json_name", "")
+                final_filename = sanitize_json_filename(custom_name, f"palbaker-{current_char_id}")
+
+                for d in [model_json_dir, legacy_swap_json_dir]:
+                    if d and os.path.exists(d):
+                        for fn in [f"{final_filename}.json", f"palbaker-{current_char_id}.json"]:
+                            target_json = os.path.join(d, fn)
+                            if os.path.exists(target_json):
+                                try:
+                                    os.remove(target_json)
+                                    self.view.write_log(f"Purged disabled Dynamic Pals config from game: {os.path.basename(target_json)}", "standard")
+                                except OSError:
+                                    pass
             
         self.mc.refresh_mods(scan_disk=True, target_mod=current_char_id)
 
