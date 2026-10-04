@@ -225,6 +225,7 @@ def import_psas_to_nla(blend_path: str, psa_dir: str, sidecar_path: str, base_pa
                     "in_nla": True,
                     "is_modified": False,
                     "notifies": [],
+                    "enable_root_motion": False,
                     "rest_props": {
                         "weight": 1.0,
                         "loop_min": 1,
@@ -243,7 +244,8 @@ def import_psas_to_nla(blend_path: str, psa_dir: str, sidecar_path: str, base_pa
                     "nla_track_name": track_name,
                     "in_nla": True,
                     "is_modified": False,
-                    "notifies": []
+                    "notifies": [],
+                    "enable_root_motion": False
                 }
             else:
                 target_entry = {
@@ -255,7 +257,8 @@ def import_psas_to_nla(blend_path: str, psa_dir: str, sidecar_path: str, base_pa
                     "nla_track_name": track_name,
                     "in_nla": True,
                     "is_modified": False,
-                    "notifies": []
+                    "notifies": [],
+                    "enable_root_motion": False
                 }
         else:
             target_entry["in_nla"] = True

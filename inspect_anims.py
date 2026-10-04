@@ -18,8 +18,8 @@ def main():
     ue_root = settings.get("ue_root", "")
     uproject = settings.get("uproject", "")
 
-    base_pal = "ThunderFluffyBird"
-    mod_name = "AnthroThunderFluffyBird"
+    base_pal = "Garm"
+    mod_name = "SexyDirehowl"
 
     print("=" * 70)
     print(f"=== PALBAKER ANIMATION DIAGNOSTIC INSPECTOR: {mod_name} ===")
@@ -42,6 +42,10 @@ def main():
         print(f"   - Total mapped entries: {len(anims)}")
         in_nla = [k for k, v in anims.items() if v.get("in_nla")]
         print(f"   - Tracks marked 'in_nla': {len(in_nla)}")
+        root_motion = [k for k, v in anims.items() if v.get("enable_root_motion")]
+        print(f"   - Tracks with Root Motion: {len(root_motion)}")
+        for rm in root_motion:
+            print(f"     -> [Root Motion] {rm}")
     else:
         print(f"\n1. SIDECAR STATUS: ❌ Sidecar not found at {sidecar_path}")
 

@@ -434,8 +434,10 @@ def handle_mod_command(args, settings):
                     inv_v["rest_props"] = existing_match["rest_props"]
                 if "in_nla" in existing_match:
                     inv_v["in_nla"] = existing_match["in_nla"]
+                # Only preserve user override if user intentionally edited root motion
+                if existing_match.get("is_modified", False) and "enable_root_motion" in existing_match:
+                    inv_v["enable_root_motion"] = existing_match["enable_root_motion"]
 
-        # Clean replacement: eliminates duplicate template keys from the sidecar
         sidecar_data.setdefault("custom_animations", {})["is_active"] = True
         sidecar_data["custom_animations"]["anims"] = inventory
         sidecar_data["custom_animations"]["blend_spaces"] = blend_spaces
@@ -532,6 +534,26 @@ def handle_mod_command(args, settings):
 
         source_pal, is_custom = resolve_source_template(mod_data, settings, base_pal, mod_name)
 
+        # Harvest Root Motion sequences from sidecar
+        from utils.sidecar_helper import load_sidecar
+        sidecar_path = os.path.join(mod_data["fmodel_path"], f"{mod_name}_blend.json")
+        if not os.path.exists(sidecar_path):
+            sidecar_path = os.path.join(mod_data["fmodel_path"], f"{base_pal}_blend.json")
+
+        sidecar_data = load_sidecar(sidecar_path) if os.path.exists(sidecar_path) else {}
+        anims_dict = sidecar_data.get("custom_animations", {}).get("anims", {})
+
+        root_motion_sequences = []
+        for anim_k, anim_v in anims_dict.items():
+            if isinstance(anim_v, dict) and anim_v.get("enable_root_motion"):
+                seq_name = anim_v.get("sequence_asset") or anim_k
+                root_motion_sequences.append(seq_name)
+                track = anim_v.get("nla_track_name")
+                if track:
+                    root_motion_sequences.append(track)
+                    root_motion_sequences.append(f"AS_{mod_name}_{track}")
+                    root_motion_sequences.append(f"AS_{base_pal}_{track}")
+
         # Step 2: Configure Unreal Batch Import
         import tempfile
         temp_dir = tempfile.gettempdir()
@@ -543,12 +565,14 @@ def handle_mod_command(args, settings):
                 "base_pal": base_pal,
                 "template_id": source_pal,
                 "is_custom_pal": is_custom,
-                "category": mod_data.get("category", "Monster")
+                "category": mod_data.get("category", "Monster"),
+                "root_motion_sequences": root_motion_sequences,
+                "sidecar_path": sidecar_path
             }, f_cfg, indent=4)
 
         import_script = os.path.join(repo_root, "unreal_scripts", "import_anims.py").replace("\\", "/")
         target_project_name = os.path.splitext(os.path.basename(settings["uproject"]))[0]
-        cmd_import = f'f = open(r"{import_script}", encoding="utf-8"); exec(f.read()); f.close()'
+        cmd_import = f'import warnings; warnings.filterwarnings("ignore"); f = open(r"{import_script}", encoding="utf-8"); exec(f.read()); f.close()'
         
         from utils.builder.unreal_helper import run_remote_command, focus_unreal_window
         success, ue_msg = run_remote_command(settings["ue_root"], target_project_name, cmd_import)
@@ -824,11 +848,16 @@ def handle_edit_anim(settings: dict, mod_data: dict | None, base_pal: str, mod_n
             "nla_track_name": clean_t,
             "in_nla": payload.get("in_nla", True),
             "is_modified": True,
-            "notifies": []
+            "notifies": [],
+            "enable_root_motion": bool(payload.get("enable_root_motion", False))
         }
 
     # 3. Apply Granular Operations or Property Patches
-    if op == "add_notify":
+    if op == "set_root_motion":
+        target_entry["enable_root_motion"] = bool(payload.get("enable_root_motion", True))
+        target_entry["is_modified"] = True
+
+    elif op == "add_notify":
         new_items = payload.get("notifies") or ([payload["notify"]] if "notify" in payload else [])
         target_entry.setdefault("notifies", []).extend(new_items)
         target_entry["is_modified"] = True
@@ -863,8 +892,12 @@ def handle_edit_anim(settings: dict, mod_data: dict | None, base_pal: str, mod_n
         for f_name, f_val in fields.items():
             if f_name in ["op", "key", "anim_key"]:
                 continue
-            target_entry[f_name] = f_val
+            if f_name == "enable_root_motion":
+                target_entry[f_name] = bool(f_val)
+            else:
+                target_entry[f_name] = f_val
         target_entry["is_modified"] = True
+
 
     anims_dict[target_key] = target_entry
     custom_anims["is_active"] = True

@@ -142,7 +142,6 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
         montage_asset = f"AM_{mod_name}_{clean_track}"
         asset_key = default_sequence_asset
 
-        # Match previous entry case-insensitively
         prev_entry = (
             existing_anims.get(default_sequence_asset) or 
             existing_anims.get(montage_asset) or 
@@ -161,11 +160,10 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
 
         saved_notifies = prev_entry.get("notifies", [])
         saved_rest_props = prev_entry.get("rest_props")
-        
-        # PRESERVE USER'S CUSTOM SEQUENCE ASSIGNMENT AND MODIFIED FLAG
         saved_sequence = prev_entry.get("sequence_asset")
         final_sequence_asset = saved_sequence if (saved_sequence and saved_sequence.strip()) else default_sequence_asset
         saved_is_modified = prev_entry.get("is_modified", False)
+        saved_root_motion = prev_entry.get("enable_root_motion", False)
 
         # 1. Pattern: Random Rests
         if re.match(r'^Rest_?\d+$', clean_track, re.IGNORECASE) or "rest0" in clean_track.lower():
@@ -188,7 +186,8 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "in_nla": True,
                 "is_modified": saved_is_modified,
                 "notifies": saved_notifies,
-                "rest_props": rest_props
+                "rest_props": rest_props,
+                "enable_root_motion": saved_root_motion
             }
 
         # 2. Pattern: BlendSpace Samples
@@ -203,7 +202,8 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "nla_track_name": clean_track,
                 "in_nla": True,
                 "is_modified": saved_is_modified,
-                "notifies": []
+                "notifies": [],
+                "enable_root_motion": saved_root_motion
             }
             if "Move" not in blend_spaces:
                 blend_spaces["Move"] = {
@@ -244,7 +244,8 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "nla_track_name": clean_track,
                 "in_nla": True,
                 "is_modified": saved_is_modified,
-                "notifies": saved_notifies
+                "notifies": saved_notifies,
+                "enable_root_motion": saved_root_motion
             }
 
         # 4. Pattern: Unique Attack Waza Skills
@@ -259,7 +260,8 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "nla_track_name": clean_track,
                 "in_nla": True,
                 "is_modified": saved_is_modified,
-                "notifies": saved_notifies
+                "notifies": saved_notifies,
+                "enable_root_motion": saved_root_motion
             }
 
         # 5. Fallback: General Montage
@@ -273,8 +275,10 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "nla_track_name": clean_track,
                 "in_nla": True,
                 "is_modified": saved_is_modified,
-                "notifies": saved_notifies
+                "notifies": saved_notifies,
+                "enable_root_motion": saved_root_motion
             }
+
 
     # PRESERVE USER-MODIFIED ENTRIES THAT ARE NOT CURRENTLY IN BLENDER NLA TRACKS
     for old_k, old_v in existing_anims.items():

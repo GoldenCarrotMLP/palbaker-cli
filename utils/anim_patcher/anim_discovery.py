@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 from utils.extractor.core import extract_game_files
+from utils.uasset_helper import decompile_uasset
 
 def extract_track_name(asset_name: str) -> str:
     clean = asset_name.split("'")[-2] if "'" in asset_name else asset_name
@@ -52,11 +53,53 @@ def parse_float_safe(val, default: float = 0.0) -> float:
     except (ValueError, TypeError):
         return default
 
+def check_sequence_root_motion(as_uasset_path: str, uasset_gui_exe: str, usmap_path: str) -> bool:
+    """
+    Decompiles an AnimSequence (.uasset) using UAssetGUI and Mappings.usmap to check
+    if bEnableRootMotion is set to True.
+    """
+    if not as_uasset_path or not os.path.exists(as_uasset_path):
+        return False
+
+    as_json = as_uasset_path.replace(".uasset", ".json")
+    try:
+        # 1. Decompile with UAssetGUI and Mappings.usmap if json does not already exist
+        if not os.path.exists(as_json):
+            success = decompile_uasset(uasset_gui_exe, as_uasset_path, as_json, usmap_path)
+            if not success or not os.path.exists(as_json):
+                return False
+
+        # 2. Inspect the unversioned schema output
+        with open(as_json, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+
+        # Format 1: UAssetGUI NormalExport format (Exports array)
+        for exp in data.get("Exports", []):
+            for prop in exp.get("Data", []):
+                if isinstance(prop, dict) and prop.get("Name") in ["bEnableRootMotion", "enable_root_motion"]:
+                    val = prop.get("Value")
+                    if isinstance(val, bool):
+                        return val
+                    if isinstance(val, (int, float)):
+                        return bool(val)
+                    if isinstance(val, str):
+                        return val.lower() in ["true", "1"]
+
+        # Format 2: FModel / CUE4Parse flat list or dictionary
+        objects = data if isinstance(data, list) else [data]
+        for obj in objects:
+            if isinstance(obj, dict):
+                props = obj.get("Properties", {})
+                if "bEnableRootMotion" in props:
+                    return bool(props["bEnableRootMotion"])
+                if "enable_root_motion" in props:
+                    return bool(props["enable_root_motion"])
+    except Exception as e:
+        print(f"[PalBaker Anims Warning] Failed to inspect root motion for {os.path.basename(as_uasset_path)}: {e}", flush=True)
+
+    return False
+
 def resolve_sub_export_details(export_idx: int, exports: list, imports: list) -> dict:
-    """
-    Follows UAsset export pointers to extract deep notify metadata (CapsuleComponent
-    dimensions, AttackFilters, Niagara assets, Wwise audio events, and custom event names).
-    """
     if not isinstance(export_idx, int) or export_idx <= 0 or export_idx > len(exports):
         return {}
 
@@ -68,20 +111,13 @@ def resolve_sub_export_details(export_idx: int, exports: list, imports: list) ->
         p_name = p.get("Name")
         p_val = p.get("Value")
 
-        # Extract text identifiers (NotifyName, EyeType, WazaID, Bone attachments)
         if p_name in ["NotifyName", "EyeType", "Waza", "attachBoneName", "CollisionProfileName"]:
             details[p_name] = str(p_val)
-
-        # Extract asset pointers (Audio Events, Niagara Systems)
         elif p_name in ["Event", "Template", "Asset"]:
             if isinstance(p_val, int) and p_val < 0 and (-p_val - 1) < len(imports):
                 details[p_name] = imports[-p_val - 1].get("ObjectName", "")
-
-        # Extract physical hitbox dimensions (CapsuleComponent)
         elif p_name in ["CapsuleRadius", "CapsuleHalfHeight"]:
             details[p_name] = parse_float_safe(p_val)
-
-        # Extract attack filter parameters
         elif p_name == "NativeBlowVelocity":
             if isinstance(p_val, list) and len(p_val) > 0:
                 vec = p_val[0].get("Value", {})
@@ -90,11 +126,8 @@ def resolve_sub_export_details(export_idx: int, exports: list, imports: list) ->
                     parse_float_safe(vec.get("Y")),
                     parse_float_safe(vec.get("Z"))
                 ]
-
-        # Extract nested child references (Hitbox Capsule pointers inside AttackCollision)
         elif p_name in ["ShapeComponents", "AttackFilter"]:
             if isinstance(p_val, int) and 0 < p_val <= len(exports):
-                sub_child = exports[p_val - 1]
                 details[p_name] = resolve_sub_export_details(p_val, exports, imports)
             elif isinstance(p_val, list):
                 details[p_name] = [
@@ -105,10 +138,6 @@ def resolve_sub_export_details(export_idx: int, exports: list, imports: list) ->
     return details
 
 def scrape_notifies_from_json(uasset_json_path: str) -> list[dict]:
-    """
-    Parses any AnimMontage JSON (FModel or UAssetGUI format) to extract all notifies,
-    resolving linked sub-objects (hitbox capsules, damage filters, VFX emitters, audio).
-    """
     notifies_list = []
     if not os.path.exists(uasset_json_path):
         return notifies_list
@@ -120,7 +149,6 @@ def scrape_notifies_from_json(uasset_json_path: str) -> list[dict]:
         exports = data.get("Exports", [])
         imports = data.get("Imports", [])
 
-        # Support FModel flat structure vs UAssetGUI exports array
         if not exports:
             if isinstance(data, list) and len(data) > 0:
                 props = data[0].get("Properties", {})
@@ -133,7 +161,6 @@ def scrape_notifies_from_json(uasset_json_path: str) -> list[dict]:
                     })
             return notifies_list
 
-        # Locate the primary AnimMontage export
         montage_export = next(
             (exp for exp in exports if exp.get("Type") == "AnimMontage" or exp.get("ObjectName", "").startswith("AM_")),
             exports[0]
@@ -146,7 +173,6 @@ def scrape_notifies_from_json(uasset_json_path: str) -> list[dict]:
 
         for idx, struct_item in enumerate(notifies_prop["Value"]):
             inner_vals = struct_item.get("Value", [])
-
             notify_name = "PalCustomNotify"
             notify_time = 0.0
             notify_duration = 0.0
@@ -171,14 +197,12 @@ def scrape_notifies_from_json(uasset_json_path: str) -> list[dict]:
                 elif p_name == "TrackIndex":
                     track_index = int(p_val) if isinstance(p_val, (int, float)) else 0
 
-            # Follow pointers into sub-exports for deep parameter harvesting
             deep_details = {}
             if notify_obj_idx > 0:
                 deep_details = resolve_sub_export_details(notify_obj_idx, exports, imports)
             elif notify_state_idx > 0:
                 deep_details = resolve_sub_export_details(notify_state_idx, exports, imports)
 
-            # Build record with standard core fields
             notify_record = {
                 "Name": notify_name,
                 "Time": round(notify_time, 4),
@@ -186,7 +210,6 @@ def scrape_notifies_from_json(uasset_json_path: str) -> list[dict]:
                 "Track": track_index
             }
 
-            # Map specific event signatures if resolved
             if "NotifyName" in deep_details and deep_details["NotifyName"] != notify_name:
                 notify_record["EventName"] = deep_details["NotifyName"]
             if "EyeType" in deep_details:
@@ -227,30 +250,71 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
                 mapping_cache = json.load(f_c)
         except Exception: pass
 
-    # Clean previous temporary extraction directories
     shutil.rmtree(temp_dir, ignore_errors=True)
     os.makedirs(temp_dir, exist_ok=True)
 
-    # -------------------------------------------------------------------------
-    # 1. Full Package Extraction (No wildcards in directory paths)
-    # -------------------------------------------------------------------------
+    # 1. Full Package Extraction
     log(f"Extracting all Blueprints, Montages, and BlendSpaces for {base_pal} from game archives...", "standard")
-    
     extract_targets = [
         f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{base_pal}/*",
         f"Pal/Content/Pal/Animation/Character/Monster/{base_pal}/*",
-        f"Pal/Content/Pal/Animation/Character/Pending Monster/{base_pal}/*"
+        f"Pal/Content/Pal/Animation/Character/Pending Monster/{base_pal}/*",
+        f"*Animation/Character/*/{base_pal}/*"
     ]
-    
     extract_game_files(settings, extract_targets, temp_dir, format_type="raw")
+
+    # Map all extracted AnimSequence (.uasset) files by sequence name, lowercase name, and clean track name
+    as_uasset_map = {}
+    for root, _, files in os.walk(temp_dir):
+        for f in files:
+            if f.startswith("AS_") and f.endswith(".uasset"):
+                seq_base = os.path.splitext(f)[0]
+                uasset_path = os.path.join(root, f)
+                as_uasset_map[seq_base] = uasset_path
+                as_uasset_map[seq_base.lower()] = uasset_path
+
+                clean_t = extract_track_name(seq_base)
+                if clean_t:
+                    as_uasset_map[clean_t] = uasset_path
+                    as_uasset_map[clean_t.lower()] = uasset_path
+
+    root_motion_cache = {}
+    def get_root_motion(seq_key_name: str, clean_track_name: str = "") -> bool:
+        if not seq_key_name:
+            return False
+        clean_key = seq_key_name.split(".")[0]
+        if clean_key in root_motion_cache:
+            return root_motion_cache[clean_key]
+        if clean_key.lower() in root_motion_cache:
+            return root_motion_cache[clean_key.lower()]
+        if clean_track_name and clean_track_name.lower() in root_motion_cache:
+            return root_motion_cache[clean_track_name.lower()]
+
+        uasset_file = (
+            as_uasset_map.get(clean_key) or 
+            as_uasset_map.get(clean_key.lower()) or
+            as_uasset_map.get(clean_track_name) or
+            as_uasset_map.get(clean_track_name.lower())
+        )
+
+        if not uasset_file and clean_track_name:
+            for k, p in as_uasset_map.items():
+                if k.lower().endswith(f"_{clean_track_name.lower()}"):
+                    uasset_file = p
+                    break
+
+        res = check_sequence_root_motion(uasset_file, uasset_gui_exe, usmap_path) if uasset_file else False
+        root_motion_cache[clean_key] = res
+        root_motion_cache[clean_key.lower()] = res
+        if clean_track_name:
+            root_motion_cache[clean_track_name.lower()] = res
+        return res
 
     inventory = {}
     blend_spaces = {}
     rest_infos_by_montage = {}
 
-    # -------------------------------------------------------------------------
     # 2. Parse Parent Actor Blueprint for Idle/Rest Configuration
-    # -------------------------------------------------------------------------
     bp_disk = None
     for root, _, files in os.walk(temp_dir):
         for f in files:
@@ -280,9 +344,7 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
         except Exception as e:
             log(f"Warning parsing Actor Blueprint: {e}", "warning")
 
-    # -------------------------------------------------------------------------
     # 3. Harvest All BlendSpaces (*.uasset)
-    # -------------------------------------------------------------------------
     bs_uassets = []
     for root, _, files in os.walk(temp_dir):
         for f in files:
@@ -308,6 +370,7 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
             for idx, seq_name in enumerate(anim_seqs):
                 clean_track = extract_track_name(seq_name)
                 calc_speed = round(float(idx * speed_step), 1)
+                rm_enabled = get_root_motion(seq_name, clean_track)
 
                 samples_list.append({
                     "animation": seq_name,
@@ -326,7 +389,8 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
                     "nla_track_name": clean_track,
                     "in_nla": False,
                     "is_modified": False,
-                    "notifies": []
+                    "notifies": [],
+                    "enable_root_motion": rm_enabled
                 }
 
             clean_bs_key = extract_track_name(bs_asset_name)
@@ -341,9 +405,7 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
             }
         except Exception: pass
 
-    # -------------------------------------------------------------------------
-    # 4. Harvest All AnimMontages (*.uasset) with Deep Notify Extraction
-    # -------------------------------------------------------------------------
+    # 4. Harvest All AnimMontages (*.uasset) with Deep Notify & Root Motion Extraction
     am_uassets = []
     for root, _, files in os.walk(temp_dir):
         for f in files:
@@ -364,6 +426,9 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
             subprocess.run([uasset_gui_exe, "tojson", am_path, am_json, "VER_UE5_1", usmap_path], check=True, creationflags=creation_flags)
             scraped_notifies = scrape_notifies_from_json(am_json)
         except Exception: pass
+
+        seq_key = o_name.replace("AM_", "AS_")
+        rm_enabled = get_root_motion(seq_key, clean_track)
 
         is_rest_animation = bool(re.match(r'^Rest_?\d+$', clean_track, re.IGNORECASE) or "rest0" in clean_track.lower())
 
@@ -396,21 +461,19 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
             "enum_key": enum_key,
             "display_name": display_name,
             "montage_asset": o_name,
-            "sequence_asset": o_name.replace("AM_", "AS_"),
+            "sequence_asset": seq_key,
             "nla_track_name": clean_track,
             "in_nla": False,
             "is_modified": False,
-            "notifies": scraped_notifies
+            "notifies": scraped_notifies,
+            "enable_root_motion": rm_enabled
         }
         if rest_props:
             anim_entry["rest_props"] = rest_props
 
-        seq_key = o_name.replace("AM_", "AS_")
         inventory[seq_key] = anim_entry
 
-    # -------------------------------------------------------------------------
     # 5. Harvest Standalone AnimSequences (*.uasset)
-    # -------------------------------------------------------------------------
     as_uassets = []
     for root, _, files in os.walk(temp_dir):
         for f in files:
@@ -424,6 +487,9 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
         clean_track = extract_track_name(seq_name)
         if clean_track.lower() in ["hit", "damageadditive"]:
             continue
+
+        rm_enabled = get_root_motion(seq_name, clean_track)
+
         if clean_track in mapping_cache:
             meta = mapping_cache[clean_track]
             category = meta.get("category", "LocomotionSequence")
@@ -443,8 +509,10 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
             "nla_track_name": clean_track,
             "in_nla": False,
             "is_modified": False,
-            "notifies": []
+            "notifies": [],
+            "enable_root_motion": rm_enabled
         }
 
-    log(f"Extracted {len(inventory)} total animations and {len(blend_spaces)} blendspaces.", "success")
+    rm_count = sum(1 for v in inventory.values() if v.get("enable_root_motion"))
+    log(f"Extracted {len(inventory)} total animations ({rm_count} with Root Motion) and {len(blend_spaces)} blendspaces.", "success")
     return inventory, blend_spaces
