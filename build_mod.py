@@ -36,14 +36,10 @@ def main():
     workspace = ModWorkspace(BASE_PAL, MOD_NAME, CATEGORY, settings)
     custom_blacklist = getattr(workspace, "custom_blacklist", [])
     
-    # Pre-define category paths so they are always available for all actions (cook, pack, push, etc.)
     category_sanitized = workspace.category.replace(" ", "_").replace("\\", "/")
     cat_parts = workspace.category.replace("/", os.sep)
 
 
-    # -------------------------------------------------------------
-    # DETECT CUSTOM ANIMATIONS IN SIDECAR
-    # -------------------------------------------------------------
     sidecar_path = os.path.join(workspace.fmodel_dir, f"{MOD_NAME}_blend.json")
     sidecar_data = load_sidecar(sidecar_path)
     
@@ -54,14 +50,12 @@ def main():
     else:
         print(f"[PalBaker] Custom animations inactive for {MOD_NAME}: Using shared vanilla skeleton.", flush=True)
 
-    # 1. READ VANILLA REDIRECT OPTION
     redirect_folder = ""
     if not workspace.is_variant:
         base_sidecar_path = os.path.join(workspace.fmodel_dir, f"{workspace.base_pal}_blend.json")
         base_sidecar_data = load_sidecar(base_sidecar_path)
         redirect_folder = base_sidecar_data.get("active_vanilla_replacer", "")
 
-    # If redirection is active, shift local files lookup directory to the variant folder!
     if redirect_folder:
         print(f"[Redirect] Base mesh SK_{BASE_PAL} will bake using {redirect_folder}'s .blend geometry...", flush=True)
         workspace.fmodel_dir = os.path.join(workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", CATEGORY, BASE_PAL, redirect_folder)
@@ -103,7 +97,6 @@ def main():
             blend_file_clean = blend_file.replace("\\", "/")
             output_json = os.path.join(workspace.fmodel_dir, f"{MOD_NAME}_blend.json")
 
-            # --- 1. SEED SIDECAR WITH REPLICATED ABP NODES BEFORE BLENDER RUNS ---
             from utils.abp_parser import identify_abp_json, parse_abp_nodes
             detected_abp = identify_abp_json(workspace.fmodel_dir)
             if detected_abp:
@@ -117,7 +110,6 @@ def main():
                     f"{len(abp_payload['lookat_bones'])} lookats, {len(abp_payload['copy_bones'])} copies)...",
                     flush=True
                 )
-            # ---------------------------------------------------------------------
             
             print(f"Launching headless Blender to reconstruct .blend workspace from {os.path.basename(psk_file)}...", flush=True)
             result = run_headless_blender(
@@ -127,12 +119,10 @@ def main():
                 ["--fbx", psk_file_clean, "--output", blend_file_clean, "--sidecar", output_json.replace("\\", "/")]
             )
             
-            # --- PRINT BLENDER'S INTERNAL LOGS TO UI CONSOLE ---
             if result.stdout.strip():
                 print(result.stdout, flush=True)
             if result.stderr.strip():
                 print(result.stderr, flush=True)
-            # ----------------------------------------------------
 
             if os.path.exists(blend_file):
                 print(f"SUCCESS! .blend file generated at: {blend_file}", flush=True)
@@ -169,7 +159,6 @@ def main():
             print("ERROR: No raw model sources found in workspaces to push.", flush=True)
             sys.exit(1)
 
-        # Ingest any detected AnimBlueprint JSON into the sidecars before pushing
         from utils.abp_parser import identify_abp_json, parse_abp_nodes
         detected_abp = identify_abp_json(workspace.fmodel_dir)
         if detected_abp:
@@ -298,7 +287,6 @@ def main():
             print("ERROR: No .blend files found in workspace to refresh.", flush=True)
             sys.exit(1)
 
-        # Ingest any detected AnimBlueprint JSON into the sidecars before extracting
         from utils.abp_parser import identify_abp_json, parse_abp_nodes
         detected_abp = identify_abp_json(workspace.fmodel_dir)
         if detected_abp:
@@ -318,7 +306,6 @@ def main():
                 sidecar_data["has_replicated_abp"] = True
                 save_sidecar(output_json, sidecar_data)
 
-        # Sync missing baseline material settings from parent material instances
         from utils.fmodel_helper import sync_sidecar_material_baselines
         for blend_file in blend_files:
             parent_dir = os.path.dirname(blend_file)
@@ -355,13 +342,11 @@ def main():
     if ACTION in ["cook", "full", "cook_only", "recursive_cook"]:
         from utils.builder.cooker_helper import verify_cooking_memory_limit, verify_unreal_animation_assets
         
-        # 1. Physical Memory Guard
         is_safe, err_msg = verify_cooking_memory_limit(threshold_gb=2.5)
         if not is_safe:
             print(f"ERROR: {err_msg}", flush=True)
             sys.exit(1)
 
-        # 2. Animation Sequences Integrity Guard
         anims_valid, anim_errors = verify_unreal_animation_assets(workspace, sidecar_data)
         if not anims_valid:
             print("\n" + "=" * 70, flush=True)
@@ -380,7 +365,6 @@ def main():
         extra_cook_paths = []
 
         if not workspace.is_variant:
-            # PARENT MODE: Discover all enabled variants and queue their assets, skeletons, and anims
             ue_char_dir = os.path.normpath(os.path.join(
                 workspace.project_dir, "Content", "Pal", "Model", "Character", 
                 cat_parts, workspace.base_pal
@@ -409,7 +393,6 @@ def main():
                     extra_cook_paths.append(variant_vpath)
                     print(f"  [Cook Queue] Added variant directory: {variant_vpath}", flush=True)
 
-                # Check if this child variant has custom animations
                 sub_sidecar = os.path.join(base_fmodel_dir, sub, f"{sub}_blend.json")
                 if not os.path.exists(sub_sidecar):
                     sub_sidecar = os.path.join(base_fmodel_dir, f"{sub}_blend.json")
@@ -427,12 +410,10 @@ def main():
         else:
             print(f"  [Cook Queue] Variant mode: Restricting queue strictly to '{MOD_NAME}'.", flush=True)
 
-        # For variants, always cook the dedicated skeleton directory so the mesh has its required skeleton
         if workspace.is_variant:
             if workspace.skeleton_virtual_path not in extra_cook_paths:
                 extra_cook_paths.append(workspace.skeleton_virtual_path)
 
-        # Ensure custom animations, actions, and blueprints are cooked
         if workspace.has_anims:
             if workspace.anims_virtual_path not in extra_cook_paths:
                 extra_cook_paths.append(workspace.anims_virtual_path)
@@ -443,7 +424,6 @@ def main():
                 extra_cook_paths.append(waza_virtual_dir)
             if workspace.blueprint_virtual_path not in extra_cook_paths:
                 extra_cook_paths.append(workspace.blueprint_virtual_path)
-
 
         if workspace.has_custom_shader and not is_path_blacklisted("/Game/CartoonCelShader/Materials/CelShader", workspace.custom_blacklist):
             extra_cook_paths.append("/Game/CartoonCelShader/Materials/CelShader")
@@ -490,8 +470,7 @@ def main():
     # -------------------------------------------------------------
     # PHASE 3: PACK (Package only)
     # -------------------------------------------------------------
-    if ACTION in ["cook", "full", "pack", "pack_only", "recursive_cook"]:
-        # Animation Sequences Integrity Guard for standalone packaging
+    if ACTION in ["pack", "full", "pack_only"]:
         from utils.builder.cooker_helper import verify_unreal_animation_assets
         anims_valid, anim_errors = verify_unreal_animation_assets(workspace, sidecar_data)
         if not anims_valid:
@@ -502,12 +481,10 @@ def main():
             print("=" * 70 + "\n", flush=True)
             sys.exit(1)
 
-        # Single Unified Blueprint Orchestration (Actor BP, AnimBP, BlendSpaces, Weapons, Bosses)
         from utils.blueprint_patcher import patch_actor_blueprint
         source_template = workspace.template_id if workspace.is_custom_pal else workspace.base_pal
 
         if workspace.is_variant:
-            # Variant Mode: Compile blueprint stack for this specific variant
             if workspace.has_anims:
                 print(f"[PalBaker Blueprints] Auto-generating unified blueprint stack for variant '{MOD_NAME}'...", flush=True)
                 patch_actor_blueprint(
@@ -520,7 +497,6 @@ def main():
                     keep_temp=True
                 )
         else:
-            # Parent Mode: Compile blueprint stack for parent if custom or has anims
             if workspace.is_custom_pal or workspace.has_anims:
                 print(f"[PalBaker Blueprints] Auto-generating unified blueprint stack for parent '{BASE_PAL}'...", flush=True)
                 patch_actor_blueprint(
@@ -533,7 +509,6 @@ def main():
                     keep_temp=True
                 )
 
-            # In Parent Mode: Compile blueprint stacks for ALL enabled child variants with custom anims!
             base_fmodel_dir = os.path.normpath(os.path.join(
                 workspace.fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", 
                 cat_parts, workspace.base_pal
@@ -573,6 +548,34 @@ def main():
                         keep_temp=True
                     )
 
+        # -----------------------------------------------------------------
+        # POST-COOK SEQUENCE INJECTION (UNIVERSAL AST PATCHER)
+        # -----------------------------------------------------------------
+        from utils.uasset_helper import process_cooked_anim_sequences
+        uasset_gui_exe = os.path.normpath(os.path.join(os.path.dirname(__file__), "deps", "UAssetGUI.exe"))
+        if not os.path.exists(uasset_gui_exe):
+            uasset_gui_exe = os.path.normpath(os.path.join(os.path.dirname(os.path.dirname(__file__)), "deps", "UAssetGUI.exe"))
+        usmap_path = os.path.normpath(os.path.join(os.path.dirname(uasset_gui_exe), "Mappings.usmap"))
+
+        if workspace.has_anims and os.path.exists(workspace.cooked_anims_dir):
+            print(f"[PalBaker Anims] Applying Universal AnimSequence Patcher for {MOD_NAME}...", flush=True)
+            process_cooked_anim_sequences(workspace.cooked_anims_dir, sidecar_data, uasset_gui_exe, usmap_path, MOD_NAME)
+
+        if not workspace.is_variant:
+            for sub in sorted(list(discovered_subs)):
+                if hasattr(workspace, "skipped_variants") and sub in workspace.skipped_variants:
+                    continue
+                sub_sidecar = os.path.join(base_fmodel_dir, sub, f"{sub}_blend.json")
+                if not os.path.exists(sub_sidecar):
+                    sub_sidecar = os.path.join(base_fmodel_dir, f"{sub}_blend.json")
+                sub_data = load_sidecar(sub_sidecar) if os.path.exists(sub_sidecar) else {}
+                
+                if sub_data.get("custom_animations", {}).get("is_active"):
+                    sub_anim_dir = os.path.join(workspace.project_dir, "Saved", "Cooked", "Windows", workspace.target_project_name, "Content", "Pal", "Animation", "Character", category_sanitized, workspace.base_pal, sub)
+                    if os.path.exists(sub_anim_dir):
+                        print(f"[PalBaker Anims] Applying Universal AnimSequence Patcher for child variant {sub}...", flush=True)
+                        process_cooked_anim_sequences(sub_anim_dir, sub_data, uasset_gui_exe, usmap_path, sub)
+
         final_pak_path = workspace.output_pak_clean
         print(f"Preparing Pak (Target: {os.path.basename(final_pak_path)})...", flush=True)
         
@@ -594,7 +597,6 @@ def main():
             is_variant=workspace.is_variant
         )
 
-        # Parent Mode: Clean up redundant standalone child variant pak files now consolidated in this pak
         if not workspace.is_variant and files_found > 0:
             cat_parts = workspace.category.replace("/", os.sep)
             base_fmodel_dir = os.path.normpath(os.path.join(

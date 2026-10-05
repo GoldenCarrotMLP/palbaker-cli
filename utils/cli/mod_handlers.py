@@ -430,11 +430,14 @@ def handle_mod_command(args, settings):
             if existing_match:
                 if existing_match.get("notifies"):
                     inv_v["notifies"] = existing_match["notifies"]
+                if existing_match.get("sequence_notifies"):
+                    inv_v["sequence_notifies"] = existing_match["sequence_notifies"]
+                if existing_match.get("montage_notifies"):
+                    inv_v["montage_notifies"] = existing_match["montage_notifies"]
                 if "rest_props" in existing_match:
                     inv_v["rest_props"] = existing_match["rest_props"]
                 if "in_nla" in existing_match:
                     inv_v["in_nla"] = existing_match["in_nla"]
-                # Only preserve user override if user intentionally edited root motion
                 if existing_match.get("is_modified", False) and "enable_root_motion" in existing_match:
                     inv_v["enable_root_motion"] = existing_match["enable_root_motion"]
 

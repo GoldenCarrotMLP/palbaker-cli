@@ -8,13 +8,132 @@ import glob
 import subprocess
 
 from utils.extractor.core import extract_game_files
-from utils.uasset_helper import decompile_uasset, compile_uasset, sync_namemap, patch_montage_ast, encode_guid_to_extras
 from .build_variants import build_boss_variant, build_predator_variant, build_raid_variant
 from .feature_manager import (
     BlueprintFeatureManager,
     synthesize_funnel_character_ast,
     synthesize_flamethrower_cluster
 )
+
+from utils.uasset_helper import (
+    decompile_uasset, 
+    compile_uasset, 
+    sync_namemap, 
+    patch_montage_ast, 
+    sanitize_anim_sequence_notifies,
+    patch_anim_sequence_ast,
+    encode_guid_to_extras
+)
+
+def _patch_cooked_animation_sequences(
+    settings: dict,
+    template_id: str,
+    pal_id: str,
+    category: str,
+    base_pal: str,
+    is_variant: bool,
+    custom_guid: str,
+    has_anims: bool,
+    temp_dir: str,
+    cooked_anims_dir: str,
+    uasset_gui_exe: str,
+    usmap_path: str,
+    custom_anims: dict,
+    log
+):
+    """
+    Applies root motion flags (bEnableRootMotion) and sequence notifies to all
+    cooked AS_*.uasset animation sequences on disk. Clones and retargets unpushed sequences
+    from the parent template if needed.
+    """
+    anims_dict = custom_anims.get("anims", {})
+    if not anims_dict:
+        return
+
+    cat_sanitized = category.replace(" ", "_")
+    target_anims_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
+    target_skel_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
+
+    # Index template AS_ files extracted to temp_dir
+    template_as_files = {}
+    for root, _, files in os.walk(temp_dir):
+        for f in files:
+            if f.startswith("AS_") and f.endswith(".uasset"):
+                template_as_files[f.lower()] = os.path.join(root, f)
+
+    log(f"  [Sequence Patching] Syncing root motion & sequence notifies for {len(anims_dict)} tracks...", "standard")
+
+    patched_count = 0
+    for anim_key, anim_meta in anims_dict.items():
+        if not isinstance(anim_meta, dict):
+            continue
+
+        seq_name = anim_meta.get("sequence_asset")
+        track_name = anim_meta.get("nla_track_name") or ""
+        if not seq_name and track_name:
+            seq_name = f"AS_{pal_id}_{track_name}"
+        if not seq_name:
+            seq_name = anim_key
+
+        # Skip hit flinch tracks as they are handled by _retarget_additive_hit_animations
+        if seq_name.lower().endswith("_hit"):
+            continue
+
+        enable_rm = bool(anim_meta.get("enable_root_motion", False))
+        seq_notifies = anim_meta.get("sequence_notifies")
+        if seq_notifies is None:
+            seq_notifies = [n for n in anim_meta.get("notifies", []) if n.get("Source") == "sequence"]
+
+        dest_as_uasset = os.path.join(cooked_anims_dir, f"{seq_name}.uasset")
+        template_seq_name = f"AS_{template_id}_{track_name}" if track_name else seq_name.replace(pal_id, template_id)
+        tmpl_uasset = template_as_files.get(template_seq_name.lower())
+
+        target_base_uasset = None
+        template_ast = None
+
+        if os.path.exists(dest_as_uasset):
+            target_base_uasset = dest_as_uasset
+            # Load template AST as reference to transplant notifies if needed
+            if tmpl_uasset and os.path.exists(tmpl_uasset):
+                tmpl_json = os.path.join(temp_dir, f"tmpl_{os.path.basename(tmpl_uasset)}.json")
+                if decompile_uasset(uasset_gui_exe, tmpl_uasset, tmpl_json, usmap_path):
+                    with open(tmpl_json, "r", encoding="utf-8") as f_tmpl:
+                        template_ast = json.load(f_tmpl)
+        elif tmpl_uasset and os.path.exists(tmpl_uasset):
+            target_base_uasset = tmpl_uasset
+
+        if not target_base_uasset or not os.path.exists(target_base_uasset):
+            continue
+
+        temp_as_json = os.path.join(temp_dir, f"patch_{seq_name}.json")
+        if not decompile_uasset(uasset_gui_exe, target_base_uasset, temp_as_json, usmap_path):
+            continue
+
+        with open(temp_as_json, "r", encoding="utf-8") as f_in:
+            base_data = json.load(f_in)
+
+        patched_ast = patch_anim_sequence_ast(
+            data=base_data,
+            template_id=template_id,
+            target_pal=pal_id,
+            anim_name=track_name,
+            skeleton_guid=custom_guid if has_anims else None,
+            enable_root_motion=enable_rm,
+            sequence_notifies=seq_notifies,
+            template_as_data=template_ast
+        )
+
+        with open(temp_as_json, "w", encoding="utf-8") as f_out:
+            json.dump(patched_ast, f_out, indent=2)
+
+        if compile_uasset(uasset_gui_exe, temp_as_json, dest_as_uasset, usmap_path):
+            patched_count += 1
+            rm_label = "Enabled" if enable_rm else "Disabled"
+            not_count = len(seq_notifies) if seq_notifies else 0
+            log(f"  ✓ Processed AnimSequence: {seq_name}.uasset (Root Motion: {rm_label}, Notifies: {not_count})", "standard")
+
+    log(f"  ✓ Successfully applied changes to {patched_count} AnimSequence assets.", "success")
+
 
 def find_skeleton_guid_in_json(json_path: str) -> str:
     if not json_path or not os.path.exists(json_path):
@@ -763,6 +882,8 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
             log=log
         )
 
+
+
         # -----------------------------------------------------------------
         # STEP 5: Ingest Features into Host Actor Blueprint via AST Manager
         # -----------------------------------------------------------------
@@ -822,118 +943,51 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                         if riding.get("WithMountedShooter"):
                             mgr.add_mounted_shooter()
 
-                        # --- SYNTHESIZE PHYSICAL BS_Move_<Pal>_Riding.uasset ---
-                        new_bs_name = f"BS_Move_{pal_id}_Riding"
-                        dest_bs_uasset = os.path.join(cooked_bp_dir, f"{new_bs_name}.uasset")
-
-                        seed_bs_rel = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BS_Move_{template_id}_Riding.uasset"
-                        extract_game_files(settings, [seed_bs_rel, seed_bs_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
-                        seed_bs_disk = os.path.join(temp_dir, seed_bs_rel)
-
-                        if not os.path.exists(seed_bs_disk):
-                            seed_bs_rel = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{template_id}/BS_Move_{template_id}.uasset"
-                            extract_game_files(settings, [seed_bs_rel, seed_bs_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
-                            seed_bs_disk = os.path.join(temp_dir, seed_bs_rel)
-
-                        if not os.path.exists(seed_bs_disk):
-                            seed_bs_rel = "Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/WeaselDragon/BS_Move_WeaselDragon_Riding.uasset"
-                            extract_game_files(settings, [seed_bs_rel, seed_bs_rel.replace('.uasset', '.uexp')], temp_dir, format_type="raw")
-                            seed_bs_disk = os.path.join(temp_dir, seed_bs_rel)
-
-                        if not os.path.exists(seed_bs_disk):
-                            for root, _, files in os.walk(temp_dir):
-                                for f in files:
-                                    if f.lower().startswith("bs_move_") and f.lower().endswith(".uasset"):
-                                        seed_bs_disk = os.path.join(root, f)
-                                        break
-                                if seed_bs_disk and os.path.exists(seed_bs_disk):
-                                    break
-
-                        bs_compiled_ok = False
-                        if seed_bs_disk and os.path.exists(seed_bs_disk):
-                            old_bs_name = os.path.splitext(os.path.basename(seed_bs_disk))[0]
-                            temp_bs_json = os.path.join(temp_dir, f"{new_bs_name}.json")
-                            if decompile_uasset(uasset_gui_exe, seed_bs_disk, temp_bs_json, usmap_path):
-                                with open(temp_bs_json, "r", encoding="utf-8") as f_bs:
-                                    bs_str = f_bs.read()
-
-                                seed_pal_id = template_id if template_id in old_bs_name else "WeaselDragon"
-
-                                bs_str = bs_str.replace(f"/PalActorBP/{seed_pal_id}/{old_bs_name}", f"/PalActorBP/{target_bp_folder}/{new_bs_name}")
-                                bs_str = bs_str.replace(f'"{old_bs_name}"', f'"{new_bs_name}"')
-                                bs_str = bs_str.replace(f"'{old_bs_name}'", f"'{new_bs_name}'")
-                                bs_str = bs_str.replace(f"/PalActorBP/{seed_pal_id}/", f"/PalActorBP/{target_bp_folder}/")
-
-                                if has_anims:
-                                    bs_str = bs_str.replace(f"SK_{seed_pal_id}_Skeleton", f"SK_{pal_id}_Skeleton")
-                                    bs_str = bs_str.replace(f"AS_{seed_pal_id}_", f"AS_{pal_id}_")
-                                    bs_str = bs_str.replace(f"/Skeleton/{seed_pal_id}/", f"/Skeleton/{target_skel_folder}/")
-                                    bs_str = bs_str.replace(f"/Monster/{seed_pal_id}/", f"/Monster/{target_anims_folder}/")
-                                else:
-                                    bs_str = bs_str.replace(f"SK_{seed_pal_id}_Skeleton", f"SK_{template_id}_Skeleton")
-                                    bs_str = bs_str.replace(f"/Skeleton/{seed_pal_id}/", f"/Skeleton/{template_id}/")
-                                    bs_str = bs_str.replace(f"AS_{seed_pal_id}_", f"AS_{template_id}_")
-                                    bs_str = bs_str.replace(f"/Monster/{seed_pal_id}/", f"/Monster/{template_id}/")
-
-                                bs_str = bs_str.replace(f"AS_{seed_pal_id}_Run_Riding", f"AS_{template_id}_Run")
-                                bs_str = bs_str.replace(f"AS_{seed_pal_id}_Walk_Riding", f"AS_{template_id}_Walk")
-                                bs_str = bs_str.replace(f"AS_{template_id}_Run_Riding", f"AS_{template_id}_Run")
-                                bs_str = bs_str.replace(f"AS_{template_id}_Walk_Riding", f"AS_{template_id}_Walk")
-
-                                bs_data = json.loads(bs_str)
-                                bs_data["FolderName"] = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_bs_name}"
-                                if bs_data.get("Exports"):
-                                    bs_data["Exports"][0]["ObjectName"] = new_bs_name
-
-                                sync_namemap(bs_data)
-                                with open(temp_bs_json, "w", encoding="utf-8") as f_bs:
-                                    json.dump(bs_data, f_bs, indent=2)
-
-                                if compile_uasset(uasset_gui_exe, temp_bs_json, dest_bs_uasset, usmap_path):
-                                    log(f"  ✓ Compiled standalone Riding BlendSpace: {dest_bs_uasset}", "success")
-                                    bs_compiled_ok = True
-
-                        bs_pkg_path = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_bs_name}"
-                        bs_import_idx = mgr.ensure_import_chain(bs_pkg_path, new_bs_name, class_type="BlendSpace1D")
-
-                        comp = mgr.find_static_char_param_export()
-                        if comp and isinstance(comp.get("Data"), list):
-                            comp_deps = comp.setdefault("CreateBeforeSerializationDependencies", [])
-                            if bs_import_idx not in comp_deps:
-                                comp_deps.append(bs_import_idx)
-
-                            bs_map = next((p for p in comp["Data"] if isinstance(p, dict) and p.get("Name") == "GeneralBlendSpaceMap"), None)
-                            if bs_map and isinstance(bs_map.get("Value"), list):
-                                bs_map["Value"] = [
-                                    e for e in bs_map["Value"]
-                                    if not (isinstance(e, list) and len(e) >= 1 and isinstance(e[0], dict) and "RidingMove" in str(e[0].get("Value", "")))
-                                ]
-                                bs_map["Value"].append([
-                                    {
-                                        "$type": "UAssetAPI.PropertyTypes.Objects.EnumPropertyData, UAssetAPI",
-                                        "EnumType": None,
-                                        "InnerType": None,
-                                        "Name": "GeneralBlendSpaceMap",
-                                        "ArrayIndex": 0,
-                                        "PropertyGuid": None,
-                                        "IsZero": False,
-                                        "PropertyTagFlags": "None",
-                                        "PropertyTypeName": None,
-                                        "PropertyTagExtensions": "NoExtension",
-                                        "Value": "EPalGeneralBlendSpaceType::RidingMove"
-                                    },
-                                    {
-                                        "$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
-                                        "Name": "GeneralBlendSpaceMap",
-                                        "ArrayIndex": 0,
-                                        "PropertyGuid": None,
-                                        "IsZero": False,
-                                        "PropertyTagFlags": "None",
-                                        "PropertyTypeName": None,
-                                        "PropertyTagExtensions": "NoExtension",
-                                        "Value": bs_import_idx
-                                    }
-                                ])
+                                        # --- CRITICAL FIX FOR D3D11 RENDER CRASH ---
+                # UAssetGUI cannot safely serialize compressed UE 5.1 animation curves in BlendSpaces.
+                # Generating a custom Riding blendspace creates a 0-byte deformed mesh array, crashing DirectX 11.
+                # Instead, we safely reuse the template's pristine GeneralMove blendspace for RidingMove.
+                comp = mgr.find_static_char_param_export()
+                if comp and isinstance(comp.get("Data"), list):
+                    bs_map = next((p for p in comp["Data"] if isinstance(p, dict) and p.get("Name") == "GeneralBlendSpaceMap"), None)
+                    if bs_map and isinstance(bs_map.get("Value"), list):
+                        gen_move_entry = next(
+                            (e for e in bs_map["Value"] if isinstance(e, list) and len(e) >= 2 and isinstance(e[0], dict) and "GeneralMove" in str(e[0].get("Value", ""))),
+                            None
+                        )
+                        if gen_move_entry and isinstance(gen_move_entry[1], dict):
+                            # Clean out any old RidingMove entry
+                            bs_map["Value"] = [
+                                e for e in bs_map["Value"]
+                                if not (isinstance(e, list) and len(e) >= 1 and isinstance(e[0], dict) and "RidingMove" in str(e[0].get("Value", "")))
+                            ]
+                            # Bind RidingMove perfectly to the GeneralMove blendspace (preventing D3D11 crash)
+                            bs_map["Value"].append([
+                                {
+                                    "$type": "UAssetAPI.PropertyTypes.Objects.EnumPropertyData, UAssetAPI",
+                                    "EnumType": None,
+                                    "InnerType": None,
+                                    "Name": "GeneralBlendSpaceMap",
+                                    "ArrayIndex": 0,
+                                    "PropertyGuid": None,
+                                    "IsZero": False,
+                                    "PropertyTagFlags": "None",
+                                    "PropertyTypeName": None,
+                                    "PropertyTagExtensions": "NoExtension",
+                                    "Value": "EPalGeneralBlendSpaceType::RidingMove"
+                                },
+                                {
+                                    "$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
+                                    "Name": "GeneralBlendSpaceMap",
+                                    "ArrayIndex": 0,
+                                    "PropertyGuid": None,
+                                    "IsZero": False,
+                                    "PropertyTagFlags": "None",
+                                    "PropertyTypeName": None,
+                                    "PropertyTagExtensions": "NoExtension",
+                                    "Value": gen_move_entry[1].get("Value")
+                                }
+                            ])
                     else:
                         mgr.remove_saddle()
 

@@ -6,10 +6,33 @@ import re
 import shutil
 import subprocess
 from utils.extractor.core import extract_game_files
-from utils.uasset_helper import compile_uasset
+from utils.uasset_helper import compile_uasset, decompile_uasset, sync_namemap
 
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     getattr(sys.stdout, "reconfigure")(encoding='utf-8', errors='replace')
+
+def find_skeleton_guid_in_json(json_path: str) -> str:
+    """Safely extracts the actual SkeletonGuid property instead of matching engine CustomVersionContainer GUIDs."""
+    if not json_path or not os.path.exists(json_path):
+        return ""
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        def search(node):
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    if k.lower() in ["skeletonguid", "virtualboneguid"] and isinstance(v, str) and len(v) >= 32:
+                        return v
+                    res = search(v)
+                    if res: return res
+            elif isinstance(node, list):
+                for item in node:
+                    res = search(item)
+                    if res: return res
+            return None
+        return search(data) or ""
+    except Exception:
+        return ""
 
 def execute_animation_stack_clone(settings: dict, base_pal: str, mod_name: str, category: str, temp_dir: str, custom_anims_meta: dict, log_cb=None, is_custom_pal: bool = False) -> bool:
     def log(msg, lvl="standard"):
@@ -19,7 +42,6 @@ def execute_animation_stack_clone(settings: dict, base_pal: str, mod_name: str, 
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     uasset_gui = os.path.normpath(os.path.join(repo_root, "deps", "UAssetGUI.exe"))
     usmap_path = os.path.normpath(os.path.join(repo_root, "deps", "Mappings.usmap"))
-    creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 
     log(f"Extracting vanilla animation stack and blueprints for {base_pal}...", "standard")
     
@@ -49,12 +71,8 @@ def execute_animation_stack_clone(settings: dict, base_pal: str, mod_name: str, 
         return False
 
     vanilla_skel_json = os.path.join(temp_dir, "vanilla_skel.json")
-    subprocess.run([uasset_gui, "tojson", vanilla_skel_disk, vanilla_skel_json, "VER_UE5_1"], check=True, creationflags=creation_flags)
-    with open(vanilla_skel_json, "r", encoding="utf-8") as f:
-        v_skel_data = f.read()
-
-    guid_match = re.search(r'[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}', v_skel_data)
-    vanilla_guid = guid_match.group(0) if guid_match else "BF21DEE0-4BCF0A09-60C97DA1-367595A0"
+    decompile_uasset(uasset_gui, vanilla_skel_disk, vanilla_skel_json, usmap_path)
+    vanilla_guid = find_skeleton_guid_in_json(vanilla_skel_json) or "BF21DEE0-4BCF0A09-60C97DA1-367595A0"
 
     # 3. Read Custom Skeleton GUID
     project_dir = os.path.dirname(settings.get("uproject", ""))
@@ -72,12 +90,10 @@ def execute_animation_stack_clone(settings: dict, base_pal: str, mod_name: str, 
 
     if not new_guid and custom_skel_disk and os.path.exists(custom_skel_disk):
         custom_skel_json = os.path.join(temp_dir, "custom_skel.json")
-        subprocess.run([uasset_gui, "tojson", custom_skel_disk, custom_skel_json, "VER_UE5_1"], check=True, creationflags=creation_flags)
-        with open(custom_skel_json, "r", encoding="utf-8") as f:
-            c_skel_data = f.read()
-        new_guid_match = re.search(r'[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}', c_skel_data)
-        if new_guid_match:
-            new_guid = new_guid_match.group(0)
+        decompile_uasset(uasset_gui, custom_skel_disk, custom_skel_json, usmap_path)
+        found_guid = find_skeleton_guid_in_json(custom_skel_json)
+        if found_guid:
+            new_guid = found_guid
 
     if not new_guid:
         new_guid = "F3642458-43D36EB4-2B398F89-8DDC8313"
@@ -85,7 +101,7 @@ def execute_animation_stack_clone(settings: dict, base_pal: str, mod_name: str, 
     log(f"  Vanilla Skeleton GUID: {vanilla_guid}")
     log(f"  Target Custom Skeleton GUID: {new_guid}")
 
-    # 4. Resolved Virtual and Cooked Paths (Strictly Cooked Staging Only!)
+    # 4. Resolved Virtual and Cooked Paths
     is_var = (not is_custom_pal and base_pal.lower() != mod_name.lower())
     
     v_new_anim = f"/Game/Pal/Animation/Character/{category}/{base_pal}/{mod_name}" if is_var else f"/Game/Pal/Animation/Character/{category}/{mod_name}"
@@ -123,13 +139,14 @@ def execute_animation_stack_clone(settings: dict, base_pal: str, mod_name: str, 
     
     for uasset_path in extracted_uassets:
         json_path = uasset_path.replace(".uasset", ".json")
-        subprocess.run([uasset_gui, "tojson", uasset_path, json_path, "VER_UE5_1"], check=True, creationflags=creation_flags)
+        decompile_uasset(uasset_gui, uasset_path, json_path, usmap_path)
         
         with open(json_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # Guided Path Replacements
-        content = content.replace(vanilla_guid, new_guid)
+        # Guided Path Replacements (Only replace actual skeleton GUID, not version container GUIDs)
+        if vanilla_guid and new_guid and vanilla_guid != new_guid:
+            content = content.replace(vanilla_guid, new_guid)
 
         # Animations
         content = content.replace(f"Pal/Content/Pal/Animation/Character/Monster/{base_pal}", raw_new_anim)
@@ -171,28 +188,21 @@ def execute_animation_stack_clone(settings: dict, base_pal: str, mod_name: str, 
 
         filename = os.path.basename(uasset_path).replace(".uasset", "")
 
-        # Inject user notifies on montages
-        if filename.startswith("AM_"):
-            anim_meta = custom_anims_meta.get("anims", {}).get(filename)
-            if anim_meta and anim_meta.get("notifies"):
-                try:
-                    montage_obj = json.loads(content)
-                    for exp in montage_obj.get("Exports", []):
-                        if exp.get("Type") == "AnimMontage":
-                            props = exp.setdefault("Properties", {})
-                            notifies_arr = props.setdefault("Notifies", [])
-                            for user_notify in anim_meta["notifies"]:
-                                notifies_arr.append({
-                                    "TriggerTimeOffset": 0.0,
-                                    "DisplayTime": float(user_notify.get("Time", 0.0)),
-                                    "NotifyName": user_notify.get("Name", "PalCustomNotify"),
-                                    "Notify": None
-                                })
-                    content = json.dumps(montage_obj, indent=4)
-                except Exception: pass
-
-        with open(json_path, "w", encoding="utf-8") as f:
-            f.write(content)
+        # Sanitize and serialize back with correct PropertyTypeName and pre-seeded NameMap
+        try:
+            data_obj = json.loads(content)
+            if "FolderName" in data_obj:
+                if filename.startswith("AM_") or filename.startswith("AS_"):
+                    data_obj["FolderName"] = f"{v_new_anim}/{filename.replace(base_pal, mod_name)}"
+                else:
+                    data_obj["FolderName"] = f"{v_new_bp}/{filename.replace(base_pal, mod_name)}"
+            
+            sync_namemap(data_obj)
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(data_obj, f, indent=4)
+        except Exception:
+            with open(json_path, "w", encoding="utf-8") as f:
+                f.write(content)
 
         # Route compiled asset strictly into Cooked Staging
         target_name = f"{filename.replace(base_pal, mod_name)}.uasset"

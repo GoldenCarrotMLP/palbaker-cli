@@ -63,37 +63,40 @@ def check_sequence_root_motion(as_uasset_path: str, uasset_gui_exe: str, usmap_p
 
     as_json = as_uasset_path.replace(".uasset", ".json")
     try:
-        # 1. Decompile with UAssetGUI and Mappings.usmap if json does not already exist
         if not os.path.exists(as_json):
             success = decompile_uasset(uasset_gui_exe, as_uasset_path, as_json, usmap_path)
             if not success or not os.path.exists(as_json):
                 return False
 
-        # 2. Inspect the unversioned schema output
         with open(as_json, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
 
         # Format 1: UAssetGUI NormalExport format (Exports array)
-        for exp in data.get("Exports", []):
-            for prop in exp.get("Data", []):
-                if isinstance(prop, dict) and prop.get("Name") in ["bEnableRootMotion", "enable_root_motion"]:
-                    val = prop.get("Value")
-                    if isinstance(val, bool):
-                        return val
-                    if isinstance(val, (int, float)):
-                        return bool(val)
-                    if isinstance(val, str):
-                        return val.lower() in ["true", "1"]
+        if isinstance(data, dict):
+            for exp in data.get("Exports", []):
+                if isinstance(exp, dict):
+                    prop_data = exp.get("Data")
+                    if isinstance(prop_data, list):
+                        for prop in prop_data:
+                            if isinstance(prop, dict) and prop.get("Name") in ["bEnableRootMotion", "enable_root_motion"]:
+                                val = prop.get("Value")
+                                if isinstance(val, bool):
+                                    return val
+                                if isinstance(val, (int, float)):
+                                    return bool(val)
+                                if isinstance(val, str):
+                                    return val.lower() in ["true", "1"]
 
         # Format 2: FModel / CUE4Parse flat list or dictionary
         objects = data if isinstance(data, list) else [data]
         for obj in objects:
             if isinstance(obj, dict):
                 props = obj.get("Properties", {})
-                if "bEnableRootMotion" in props:
-                    return bool(props["bEnableRootMotion"])
-                if "enable_root_motion" in props:
-                    return bool(props["enable_root_motion"])
+                if isinstance(props, dict):
+                    if "bEnableRootMotion" in props:
+                        return bool(props["bEnableRootMotion"])
+                    if "enable_root_motion" in props:
+                        return bool(props["enable_root_motion"])
     except Exception as e:
         print(f"[PalBaker Anims Warning] Failed to inspect root motion for {os.path.basename(as_uasset_path)}: {e}", flush=True)
 
@@ -104,10 +107,19 @@ def resolve_sub_export_details(export_idx: int, exports: list, imports: list) ->
         return {}
 
     exp = exports[export_idx - 1]
+    if not isinstance(exp, dict):
+        return {}
+
     exp_name = exp.get("ObjectName", "")
     details = {"SubExport": exp_name}
 
-    for p in exp.get("Data", []):
+    exp_data = exp.get("Data", [])
+    if not isinstance(exp_data, list):
+        return details
+
+    for p in exp_data:
+        if not isinstance(p, dict):
+            continue
         p_name = p.get("Name")
         p_val = p.get("Value")
 
@@ -116,28 +128,71 @@ def resolve_sub_export_details(export_idx: int, exports: list, imports: list) ->
         elif p_name in ["Event", "Template", "Asset"]:
             if isinstance(p_val, int) and p_val < 0 and (-p_val - 1) < len(imports):
                 details[p_name] = imports[-p_val - 1].get("ObjectName", "")
-        elif p_name in ["CapsuleRadius", "CapsuleHalfHeight"]:
+        elif p_name in ["CapsuleRadius", "CapsuleHalfHeight", "SphereRadius"]:
             details[p_name] = parse_float_safe(p_val)
         elif p_name == "NativeBlowVelocity":
-            if isinstance(p_val, list) and len(p_val) > 0:
+            if isinstance(p_val, list) and len(p_val) > 0 and isinstance(p_val[0], dict):
                 vec = p_val[0].get("Value", {})
-                details["BlowVelocity"] = [
-                    parse_float_safe(vec.get("X")),
-                    parse_float_safe(vec.get("Y")),
-                    parse_float_safe(vec.get("Z"))
-                ]
-        elif p_name in ["ShapeComponents", "AttackFilter"]:
+                if isinstance(vec, dict):
+                    details["BlowVelocity"] = [
+                        parse_float_safe(vec.get("X")),
+                        parse_float_safe(vec.get("Y")),
+                        parse_float_safe(vec.get("Z"))
+                    ]
+        elif p_name in ["ShapeComponents", "ShapeComponent", "AttackFilter"]:
             if isinstance(p_val, int) and 0 < p_val <= len(exports):
-                details[p_name] = resolve_sub_export_details(p_val, exports, imports)
+                sub_details = resolve_sub_export_details(p_val, exports, imports)
+                details.update(sub_details)
             elif isinstance(p_val, list):
-                details[p_name] = [
-                    resolve_sub_export_details(item, exports, imports)
-                    for item in p_val if isinstance(item, int) and 0 < item <= len(exports)
-                ]
+                for item in p_val:
+                    if isinstance(item, int) and 0 < item <= len(exports):
+                        sub_details = resolve_sub_export_details(item, exports, imports)
+                        details.update(sub_details)
 
     return details
 
-def scrape_notifies_from_json(uasset_json_path: str) -> list[dict]:
+def resolve_fmodel_sub_object(obj_ref: dict, data_list: list) -> dict:
+    """Recursively resolves sub-objects in a flat CUE4Parse/FModel JSON array."""
+    if not isinstance(obj_ref, dict):
+        return {}
+    obj_name_full = obj_ref.get("ObjectName", "")
+    if "'" in obj_name_full:
+        obj_name = obj_name_full.split("'")[-2].split(":")[-1]
+    else:
+        obj_name = obj_name_full
+        
+    details = {"SubExport": obj_name}
+    target_obj = next((item for item in data_list if isinstance(item, dict) and item.get("Name") == obj_name), None)
+    if not target_obj:
+        return details
+    
+    props = target_obj.get("Properties", {})
+    if not isinstance(props, dict):
+        return details
+
+    for p_name, p_val in props.items():
+        if p_name in ["NotifyName", "EyeType", "Waza", "attachBoneName", "CollisionProfileName"]:
+            details[p_name] = str(p_val)
+        elif p_name in ["CapsuleRadius", "CapsuleHalfHeight", "SphereRadius"]:
+            details[p_name] = parse_float_safe(p_val)
+        elif p_name in ["Event", "Template", "Asset"]:
+            if isinstance(p_val, dict):
+                details[p_name] = p_val.get("ObjectName", "").split("'")[0]
+            elif isinstance(p_val, str):
+                details[p_name] = p_val.split("'")[0]
+        elif p_name in ["ShapeComponents", "ShapeComponent", "AttackFilter"]:
+            if isinstance(p_val, dict):
+                sub_details = resolve_fmodel_sub_object(p_val, data_list)
+                details.update(sub_details)
+            elif isinstance(p_val, list):
+                for item in p_val:
+                    if isinstance(item, dict):
+                        sub_details = resolve_fmodel_sub_object(item, data_list)
+                        details.update(sub_details)
+            
+    return details
+
+def scrape_notifies_from_json(uasset_json_path: str, source: str = "") -> list[dict]:
     notifies_list = []
     if not os.path.exists(uasset_json_path):
         return notifies_list
@@ -146,33 +201,105 @@ def scrape_notifies_from_json(uasset_json_path: str) -> list[dict]:
         with open(uasset_json_path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
 
-        exports = data.get("Exports", [])
-        imports = data.get("Imports", [])
-
-        if not exports:
-            if isinstance(data, list) and len(data) > 0:
-                props = data[0].get("Properties", {})
-                notifies_val = props.get("Notifies", [])
-                for n in notifies_val:
-                    notifies_list.append({
-                        "Name": str(n.get("NotifyName", "PalCustomNotify")),
-                        "Time": round(parse_float_safe(n.get("LinkValue", n.get("DisplayTime"))), 4),
-                        "Duration": round(parse_float_safe(n.get("Duration")), 4)
-                    })
+        # ---------------------------------------------------------------------
+        # Format 1: CUE4Parse / FModel flat list
+        # ---------------------------------------------------------------------
+        if isinstance(data, list):
+            if not source:
+                base_fn = os.path.basename(uasset_json_path).upper()
+                source = "sequence" if base_fn.startswith("AS_") else "montage"
+            for obj in data:
+                if isinstance(obj, dict):
+                    props = obj.get("Properties", {})
+                    if isinstance(props, dict):
+                        notifies_val = props.get("Notifies", [])
+                        if isinstance(notifies_val, list):
+                            for n in notifies_val:
+                                if isinstance(n, dict):
+                                    notify_name = str(n.get("NotifyName", "PalCustomNotify"))
+                                    time_val = round(parse_float_safe(n.get("LinkValue", n.get("DisplayTime"))), 4)
+                                    dur_val = round(parse_float_safe(n.get("Duration")), 4)
+                                    track_idx = int(parse_float_safe(n.get("TrackIndex", 0)))
+                                    
+                                    notify_obj_ref = n.get("Notify")
+                                    notify_state_ref = n.get("NotifyStateClass")
+                                    
+                                    deep_details = {}
+                                    if isinstance(notify_obj_ref, dict):
+                                        deep_details = resolve_fmodel_sub_object(notify_obj_ref, data)
+                                    elif isinstance(notify_state_ref, dict):
+                                        deep_details = resolve_fmodel_sub_object(notify_state_ref, data)
+                                        
+                                    rec = {
+                                        "Name": notify_name,
+                                        "Time": time_val,
+                                        "Duration": dur_val,
+                                        "Track": track_idx
+                                    }
+                                    if source: rec["Source"] = source
+                                        
+                                    if "NotifyName" in deep_details and deep_details["NotifyName"] != notify_name:
+                                        rec["EventName"] = deep_details["NotifyName"]
+                                    if "EyeType" in deep_details: rec["EyeType"] = deep_details["EyeType"]
+                                    if "AudioEvent" in deep_details: rec["AudioEvent"] = deep_details["AudioEvent"]
+                                    if "Template" in deep_details: rec["NiagaraSystem"] = deep_details["Template"]
+                                    if "Waza" in deep_details: rec["WazaID"] = deep_details["Waza"].replace("EPalWazaID::", "")
+                                    if "attachBoneName" in deep_details: rec["AttachBone"] = deep_details["attachBoneName"]
+                                    if "SocketName" in deep_details and "AttachBone" not in rec: rec["AttachBone"] = deep_details["SocketName"]
+                                    if "BlowVelocity" in deep_details: rec["BlowVelocity"] = deep_details["BlowVelocity"]
+                                    if "CapsuleRadius" in deep_details: rec["CapsuleRadius"] = deep_details["CapsuleRadius"]
+                                    if "CapsuleHalfHeight" in deep_details: rec["CapsuleHalfHeight"] = deep_details["CapsuleHalfHeight"]
+                                    if "SphereRadius" in deep_details: rec["SphereRadius"] = deep_details["SphereRadius"]
+                                        
+                                    notifies_list.append(rec)
             return notifies_list
 
-        montage_export = next(
-            (exp for exp in exports if exp.get("Type") == "AnimMontage" or exp.get("ObjectName", "").startswith("AM_")),
-            exports[0]
-        )
+        # ---------------------------------------------------------------------
+        # Format 2: UAssetGUI (Exports & Imports)
+        # ---------------------------------------------------------------------
+        if not isinstance(data, dict):
+            return notifies_list
 
-        props = montage_export.get("Data", [])
-        notifies_prop = next((p for p in props if p.get("Name") == "Notifies"), None)
+        exports = data.get("Exports", [])
+        imports = data.get("Imports", [])
+        if not isinstance(exports, list) or not exports:
+            return notifies_list
+
+        if not source:
+            base_fn = os.path.basename(uasset_json_path).upper()
+            source = "sequence" if base_fn.startswith("AS_") else "montage"
+
+        def has_notifies_prop(e):
+            if not isinstance(e, dict): return False
+            d = e.get("Data")
+            if isinstance(d, list):
+                return any(isinstance(p, dict) and p.get("Name") == "Notifies" for p in d)
+            return False
+
+        anim_export = next(
+            (exp for exp in exports if isinstance(exp, dict) and (
+                exp.get("Type") in ["AnimMontage", "AnimSequence"]
+                or exp.get("ObjectName", "").startswith(("AM_", "AS_"))
+                or has_notifies_prop(exp)
+            )),
+            None
+        )
+        if not anim_export:
+            anim_export = exports[0] if isinstance(exports[0], dict) else {}
+
+        props = anim_export.get("Data", [])
+        if not isinstance(props, list):
+            return notifies_list
+
+        notifies_prop = next((p for p in props if isinstance(p, dict) and p.get("Name") == "Notifies"), None)
         if not notifies_prop or not isinstance(notifies_prop.get("Value"), list):
             return notifies_list
 
         for idx, struct_item in enumerate(notifies_prop["Value"]):
+            if not isinstance(struct_item, dict): continue
             inner_vals = struct_item.get("Value", [])
+            if not isinstance(inner_vals, list): continue
+
             notify_name = "PalCustomNotify"
             notify_time = 0.0
             notify_duration = 0.0
@@ -181,27 +308,20 @@ def scrape_notifies_from_json(uasset_json_path: str) -> list[dict]:
             track_index = 0
 
             for p in inner_vals:
+                if not isinstance(p, dict): continue
                 p_name = p.get("Name")
                 p_val = p.get("Value")
 
-                if p_name == "NotifyName":
-                    notify_name = str(p_val)
-                elif p_name == "LinkValue":
-                    notify_time = parse_float_safe(p_val, notify_time)
-                elif p_name == "Duration":
-                    notify_duration = parse_float_safe(p_val, notify_duration)
-                elif p_name == "Notify":
-                    notify_obj_idx = p_val if isinstance(p_val, int) else 0
-                elif p_name == "NotifyStateClass":
-                    notify_state_idx = p_val if isinstance(p_val, int) else 0
-                elif p_name == "TrackIndex":
-                    track_index = int(p_val) if isinstance(p_val, (int, float)) else 0
+                if p_name == "NotifyName": notify_name = str(p_val)
+                elif p_name in ["LinkValue", "DisplayTime"]: notify_time = parse_float_safe(p_val, notify_time)
+                elif p_name == "Duration": notify_duration = parse_float_safe(p_val, notify_duration)
+                elif p_name == "Notify": notify_obj_idx = p_val if isinstance(p_val, int) else 0
+                elif p_name == "NotifyStateClass": notify_state_idx = p_val if isinstance(p_val, int) else 0
+                elif p_name == "TrackIndex": track_index = int(p_val) if isinstance(p_val, (int, float)) else 0
 
             deep_details = {}
-            if notify_obj_idx > 0:
-                deep_details = resolve_sub_export_details(notify_obj_idx, exports, imports)
-            elif notify_state_idx > 0:
-                deep_details = resolve_sub_export_details(notify_state_idx, exports, imports)
+            if notify_obj_idx > 0: deep_details = resolve_sub_export_details(notify_obj_idx, exports, imports)
+            elif notify_state_idx > 0: deep_details = resolve_sub_export_details(notify_state_idx, exports, imports)
 
             notify_record = {
                 "Name": notify_name,
@@ -209,26 +329,24 @@ def scrape_notifies_from_json(uasset_json_path: str) -> list[dict]:
                 "Duration": round(notify_duration, 4),
                 "Track": track_index
             }
+            if source: notify_record["Source"] = source
 
-            if "NotifyName" in deep_details and deep_details["NotifyName"] != notify_name:
-                notify_record["EventName"] = deep_details["NotifyName"]
-            if "EyeType" in deep_details:
-                notify_record["EyeType"] = deep_details["EyeType"]
-            if "Event" in deep_details:
-                notify_record["AudioEvent"] = deep_details["Event"]
-            if "Template" in deep_details:
-                notify_record["NiagaraSystem"] = deep_details["Template"]
-            if "Waza" in deep_details:
-                notify_record["WazaID"] = deep_details["Waza"]
-            if "attachBoneName" in deep_details:
-                notify_record["AttachBone"] = deep_details["attachBoneName"]
-            if "BlowVelocity" in deep_details:
-                notify_record["BlowVelocity"] = deep_details["BlowVelocity"]
+            if "NotifyName" in deep_details and deep_details["NotifyName"] != notify_name: notify_record["EventName"] = deep_details["NotifyName"]
+            if "EyeType" in deep_details: notify_record["EyeType"] = deep_details["EyeType"]
+            if "Event" in deep_details: notify_record["AudioEvent"] = deep_details["Event"]
+            if "Template" in deep_details: notify_record["NiagaraSystem"] = deep_details["Template"]
+            if "Waza" in deep_details: notify_record["WazaID"] = deep_details["Waza"].replace("EPalWazaID::", "")
+            if "attachBoneName" in deep_details: notify_record["AttachBone"] = deep_details["attachBoneName"]
+            if "SocketName" in deep_details and "AttachBone" not in notify_record: notify_record["AttachBone"] = deep_details["SocketName"]
+            if "BlowVelocity" in deep_details: notify_record["BlowVelocity"] = deep_details["BlowVelocity"]
+            if "CapsuleRadius" in deep_details: notify_record["CapsuleRadius"] = deep_details["CapsuleRadius"]
+            if "CapsuleHalfHeight" in deep_details: notify_record["CapsuleHalfHeight"] = deep_details["CapsuleHalfHeight"]
+            if "SphereRadius" in deep_details: notify_record["SphereRadius"] = deep_details["SphereRadius"]
 
             notifies_list.append(notify_record)
 
     except Exception as e:
-        print(f"[Scraper Warning] Failed to parse notifies: {e}", flush=True)
+        print(f"[Scraper Warning] Failed to parse notifies from {uasset_json_path}: {e}", flush=True)
 
     return notifies_list
 
@@ -263,7 +381,6 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
     ]
     extract_game_files(settings, extract_targets, temp_dir, format_type="raw")
 
-    # Map all extracted AnimSequence (.uasset) files by sequence name, lowercase name, and clean track name
     as_uasset_map = {}
     for root, _, files in os.walk(temp_dir):
         for f in files:
@@ -421,14 +538,33 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
             continue
         am_json = am_path.replace(".uasset", ".json")
 
-        scraped_notifies = []
+        scraped_montage_notifies = []
         try:
             subprocess.run([uasset_gui_exe, "tojson", am_path, am_json, "VER_UE5_1", usmap_path], check=True, creationflags=creation_flags)
-            scraped_notifies = scrape_notifies_from_json(am_json)
+            scraped_montage_notifies = scrape_notifies_from_json(am_json, source="montage")
         except Exception: pass
 
         seq_key = o_name.replace("AM_", "AS_")
         rm_enabled = get_root_motion(seq_key, clean_track)
+
+        # Scrape sequence-level notifies from the matching AS_ file
+        scraped_seq_notifies = []
+        seq_uasset = (
+            as_uasset_map.get(seq_key) or 
+            as_uasset_map.get(seq_key.lower()) or
+            as_uasset_map.get(clean_track) or
+            as_uasset_map.get(clean_track.lower())
+        )
+        if seq_uasset and os.path.exists(seq_uasset):
+            seq_json = seq_uasset.replace(".uasset", ".json")
+            try:
+                if not os.path.exists(seq_json):
+                    decompile_uasset(uasset_gui_exe, seq_uasset, seq_json, usmap_path)
+                if os.path.exists(seq_json):
+                    scraped_seq_notifies = scrape_notifies_from_json(seq_json, source="sequence")
+            except Exception: pass
+
+        combined_notifies = scraped_seq_notifies + scraped_montage_notifies
 
         is_rest_animation = bool(re.match(r'^Rest_?\d+$', clean_track, re.IGNORECASE) or "rest0" in clean_track.lower())
 
@@ -465,7 +601,9 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
             "nla_track_name": clean_track,
             "in_nla": False,
             "is_modified": False,
-            "notifies": scraped_notifies,
+            "notifies": combined_notifies,
+            "sequence_notifies": scraped_seq_notifies,
+            "montage_notifies": scraped_montage_notifies,
             "enable_root_motion": rm_enabled
         }
         if rest_props:
@@ -490,6 +628,15 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
 
         rm_enabled = get_root_motion(seq_name, clean_track)
 
+        scraped_seq_notifies = []
+        try:
+            as_json = as_path.replace(".uasset", ".json")
+            if not os.path.exists(as_json):
+                decompile_uasset(uasset_gui_exe, as_path, as_json, usmap_path)
+            if os.path.exists(as_json):
+                scraped_seq_notifies = scrape_notifies_from_json(as_json, source="sequence")
+        except Exception: pass
+
         if clean_track in mapping_cache:
             meta = mapping_cache[clean_track]
             category = meta.get("category", "LocomotionSequence")
@@ -509,7 +656,9 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
             "nla_track_name": clean_track,
             "in_nla": False,
             "is_modified": False,
-            "notifies": [],
+            "notifies": scraped_seq_notifies,
+            "sequence_notifies": scraped_seq_notifies,
+            "montage_notifies": [],
             "enable_root_motion": rm_enabled
         }
 
