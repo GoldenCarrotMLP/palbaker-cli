@@ -7,27 +7,34 @@ import subprocess
 from utils.extractor.core import extract_game_files
 from utils.uasset_helper import decompile_uasset
 
-def extract_track_name(asset_name: str) -> str:
+def extract_track_name(asset_name: str, base_pal: str = "", mod_name: str = "") -> str:
     clean = asset_name.split("'")[-2] if "'" in asset_name else asset_name
     clean = clean.split("/")[-1].split(".")[0]
 
-    # 1. Montages & Sequences
-    m = re.match(r'^(?:AM|AS)_[a-zA-Z0-9]+?_(.+)$', clean)
-    if m: return m.group(1)
-
-    # 2. BlendSpaces
     m = re.match(r'^BS_([a-zA-Z]+)_[a-zA-Z0-9]+(?:_(.+))?$', clean)
     if m:
         return f"{m.group(1)}_{m.group(2)}" if m.group(2) else m.group(1)
-
     if clean.startswith("BS_"): return clean[3:]
 
-    # 3. Unique Waza Actions
     m = re.match(r'^(?:BP_Action_Unique|BP_UniqueAction)_[a-zA-Z0-9]+?_(.+)$', clean)
     if m: return m.group(1)
 
-    return clean
+    prefixes = []
+    if mod_name: prefixes.extend([f"AM_{mod_name}_", f"AS_{mod_name}_", f"{mod_name}_"])
+    if base_pal: prefixes.extend([f"AM_{base_pal}_", f"AS_{base_pal}_", f"{base_pal}_"])
+    prefixes.extend(["AM_", "AS_"])
+    prefixes.sort(key=len, reverse=True)
 
+    changed = True
+    while changed:
+        changed = False
+        for pfx in prefixes:
+            if clean.lower().startswith(pfx.lower()):
+                clean = clean[len(pfx):]
+                changed = True
+                break
+
+    return clean
 def find_key_globally(node, target_key):
     if isinstance(node, dict):
         if target_key in node:
@@ -195,7 +202,14 @@ def resolve_fmodel_sub_object(obj_ref: dict, data_list: list) -> dict:
 def scrape_notifies_from_json(uasset_json_path: str, source: str = "") -> list[dict]:
     notifies_list = []
     if not os.path.exists(uasset_json_path):
+        print(f"[PalBaker Scraper ERROR] Target file does not exist on disk: {uasset_json_path}", flush=True)
         return notifies_list
+
+    base_fn = os.path.basename(uasset_json_path)
+    if not source:
+        source = "sequence" if base_fn.upper().startswith("AS_") else "montage"
+
+    print(f"\n[PalBaker Scraper] >>> Reading notifies from: '{base_fn}' (Role: {source.upper()})", flush=True)
 
     try:
         with open(uasset_json_path, "r", encoding="utf-8-sig") as f:
@@ -205,9 +219,7 @@ def scrape_notifies_from_json(uasset_json_path: str, source: str = "") -> list[d
         # Format 1: CUE4Parse / FModel flat list
         # ---------------------------------------------------------------------
         if isinstance(data, list):
-            if not source:
-                base_fn = os.path.basename(uasset_json_path).upper()
-                source = "sequence" if base_fn.startswith("AS_") else "montage"
+            print(f"  [Scraper Format] Detected CUE4Parse/FModel flat JSON array ({len(data)} objects)", flush=True)
             for obj in data:
                 if isinstance(obj, dict):
                     props = obj.get("Properties", {})
@@ -234,9 +246,9 @@ def scrape_notifies_from_json(uasset_json_path: str, source: str = "") -> list[d
                                         "Name": notify_name,
                                         "Time": time_val,
                                         "Duration": dur_val,
-                                        "Track": track_idx
+                                        "Track": track_idx,
+                                        "Source": source
                                     }
-                                    if source: rec["Source"] = source
                                         
                                     if "NotifyName" in deep_details and deep_details["NotifyName"] != notify_name:
                                         rec["EventName"] = deep_details["NotifyName"]
@@ -252,22 +264,23 @@ def scrape_notifies_from_json(uasset_json_path: str, source: str = "") -> list[d
                                     if "SphereRadius" in deep_details: rec["SphereRadius"] = deep_details["SphereRadius"]
                                         
                                     notifies_list.append(rec)
+                                    print(f"    • [{source.upper()}] '{notify_name}' @ {time_val}s (Dur: {dur_val}s, Track: {track_idx}) -> {deep_details}", flush=True)
             return notifies_list
 
         # ---------------------------------------------------------------------
         # Format 2: UAssetGUI (Exports & Imports)
         # ---------------------------------------------------------------------
         if not isinstance(data, dict):
+            print(f"  [Scraper ERROR] Unrecognized JSON format: Expected dict or list, got {type(data)}", flush=True)
             return notifies_list
 
         exports = data.get("Exports", [])
         imports = data.get("Imports", [])
-        if not isinstance(exports, list) or not exports:
+        if not exports:
+            print(f"  [Scraper ERROR] No Exports array present in {base_fn}", flush=True)
             return notifies_list
 
-        if not source:
-            base_fn = os.path.basename(uasset_json_path).upper()
-            source = "sequence" if base_fn.startswith("AS_") else "montage"
+        print(f"  [Scraper Format] Detected UAssetGUI AST with {len(exports)} exports and {len(imports)} imports.", flush=True)
 
         def has_notifies_prop(e):
             if not isinstance(e, dict): return False
@@ -278,8 +291,7 @@ def scrape_notifies_from_json(uasset_json_path: str, source: str = "") -> list[d
 
         anim_export = next(
             (exp for exp in exports if isinstance(exp, dict) and (
-                exp.get("Type") in ["AnimMontage", "AnimSequence"]
-                or exp.get("ObjectName", "").startswith(("AM_", "AS_"))
+                exp.get("ObjectName", "").startswith(("AM_", "AS_"))
                 or has_notifies_prop(exp)
             )),
             None
@@ -287,13 +299,21 @@ def scrape_notifies_from_json(uasset_json_path: str, source: str = "") -> list[d
         if not anim_export:
             anim_export = exports[0] if isinstance(exports[0], dict) else {}
 
+        target_obj_name = anim_export.get("ObjectName", "Unknown")
+        print(f"  [Scraper Target] Target Export: '{target_obj_name}'", flush=True)
+
         props = anim_export.get("Data", [])
         if not isinstance(props, list):
+            print(f"  [Scraper Warning] Export '{target_obj_name}' has no Data property list.", flush=True)
             return notifies_list
 
         notifies_prop = next((p for p in props if isinstance(p, dict) and p.get("Name") == "Notifies"), None)
         if not notifies_prop or not isinstance(notifies_prop.get("Value"), list):
+            print(f"  [Scraper Result] No 'Notifies' property list found on '{target_obj_name}'. (0 notifies)", flush=True)
             return notifies_list
+
+        raw_count = len(notifies_prop["Value"])
+        print(f"  [Scraper Parsing] Processing {raw_count} raw struct entries under 'Notifies'...", flush=True)
 
         for idx, struct_item in enumerate(notifies_prop["Value"]):
             if not isinstance(struct_item, dict): continue
@@ -312,44 +332,68 @@ def scrape_notifies_from_json(uasset_json_path: str, source: str = "") -> list[d
                 p_name = p.get("Name")
                 p_val = p.get("Value")
 
-                if p_name == "NotifyName": notify_name = str(p_val)
-                elif p_name in ["LinkValue", "DisplayTime"]: notify_time = parse_float_safe(p_val, notify_time)
-                elif p_name == "Duration": notify_duration = parse_float_safe(p_val, notify_duration)
-                elif p_name == "Notify": notify_obj_idx = p_val if isinstance(p_val, int) else 0
-                elif p_name == "NotifyStateClass": notify_state_idx = p_val if isinstance(p_val, int) else 0
-                elif p_name == "TrackIndex": track_index = int(p_val) if isinstance(p_val, (int, float)) else 0
+                if p_name == "NotifyName": 
+                    notify_name = str(p_val)
+                elif p_name == "LinkValue":
+                    notify_time = parse_float_safe(p_val, notify_time)
+                elif p_name == "DisplayTime" and notify_time == 0.0:
+                    notify_time = parse_float_safe(p_val, notify_time)
+                elif p_name == "Duration": 
+                    notify_duration = parse_float_safe(p_val, notify_duration)
+                elif p_name == "Notify": 
+                    notify_obj_idx = p_val if isinstance(p_val, int) else 0
+                elif p_name == "NotifyStateClass": 
+                    notify_state_idx = p_val if isinstance(p_val, int) else 0
+                elif p_name == "TrackIndex": 
+                    track_index = int(p_val) if isinstance(p_val, (int, float)) else 0
 
             deep_details = {}
-            if notify_obj_idx > 0: deep_details = resolve_sub_export_details(notify_obj_idx, exports, imports)
-            elif notify_state_idx > 0: deep_details = resolve_sub_export_details(notify_state_idx, exports, imports)
+            if notify_obj_idx > 0: 
+                deep_details = resolve_sub_export_details(notify_obj_idx, exports, imports)
+            elif notify_state_idx > 0: 
+                deep_details = resolve_sub_export_details(notify_state_idx, exports, imports)
 
             notify_record = {
                 "Name": notify_name,
                 "Time": round(notify_time, 4),
                 "Duration": round(notify_duration, 4),
-                "Track": track_index
+                "Track": track_index,
+                "Source": source
             }
-            if source: notify_record["Source"] = source
 
-            if "NotifyName" in deep_details and deep_details["NotifyName"] != notify_name: notify_record["EventName"] = deep_details["NotifyName"]
-            if "EyeType" in deep_details: notify_record["EyeType"] = deep_details["EyeType"]
-            if "Event" in deep_details: notify_record["AudioEvent"] = deep_details["Event"]
-            if "Template" in deep_details: notify_record["NiagaraSystem"] = deep_details["Template"]
-            if "Waza" in deep_details: notify_record["WazaID"] = deep_details["Waza"].replace("EPalWazaID::", "")
-            if "attachBoneName" in deep_details: notify_record["AttachBone"] = deep_details["attachBoneName"]
-            if "SocketName" in deep_details and "AttachBone" not in notify_record: notify_record["AttachBone"] = deep_details["SocketName"]
-            if "BlowVelocity" in deep_details: notify_record["BlowVelocity"] = deep_details["BlowVelocity"]
-            if "CapsuleRadius" in deep_details: notify_record["CapsuleRadius"] = deep_details["CapsuleRadius"]
-            if "CapsuleHalfHeight" in deep_details: notify_record["CapsuleHalfHeight"] = deep_details["CapsuleHalfHeight"]
-            if "SphereRadius" in deep_details: notify_record["SphereRadius"] = deep_details["SphereRadius"]
+            if "NotifyName" in deep_details and deep_details["NotifyName"] != notify_name: 
+                notify_record["EventName"] = deep_details["NotifyName"]
+            if "EyeType" in deep_details: 
+                notify_record["EyeType"] = deep_details["EyeType"]
+            if "Event" in deep_details: 
+                notify_record["AudioEvent"] = deep_details["Event"]
+            if "Template" in deep_details: 
+                notify_record["NiagaraSystem"] = deep_details["Template"]
+            if "Waza" in deep_details: 
+                notify_record["WazaID"] = deep_details["Waza"].replace("EPalWazaID::", "")
+            if "attachBoneName" in deep_details: 
+                notify_record["AttachBone"] = deep_details["attachBoneName"]
+            if "SocketName" in deep_details and "AttachBone" not in notify_record: 
+                notify_record["AttachBone"] = deep_details["SocketName"]
+            if "BlowVelocity" in deep_details: 
+                notify_record["BlowVelocity"] = deep_details["BlowVelocity"]
+            if "CapsuleRadius" in deep_details: 
+                notify_record["CapsuleRadius"] = deep_details["CapsuleRadius"]
+            if "CapsuleHalfHeight" in deep_details: 
+                notify_record["CapsuleHalfHeight"] = deep_details["CapsuleHalfHeight"]
+            if "SphereRadius" in deep_details: 
+                notify_record["SphereRadius"] = deep_details["SphereRadius"]
 
             notifies_list.append(notify_record)
+            print(f"    • [{source.upper()} #{idx+1}] '{notify_name}' @ {round(notify_time, 4)}s (Dur: {round(notify_duration, 4)}s, Track: {track_index})", flush=True)
+            if deep_details:
+                print(f"        ↳ SubDetails: {deep_details}", flush=True)
 
     except Exception as e:
-        print(f"[Scraper Warning] Failed to parse notifies from {uasset_json_path}: {e}", flush=True)
+        print(f"[PalBaker Scraper ERROR] Exception while parsing {uasset_json_path}: {e}", flush=True)
 
+    print(f"  [Scraper Complete] Total {len(notifies_list)} notifies scraped from {base_fn}\n", flush=True)
     return notifies_list
-
 def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str, log_cb=None) -> tuple[dict, dict]:
     def log(msg, lvl="standard"):
         if log_cb: log_cb(msg, lvl)
@@ -390,9 +434,10 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
                 as_uasset_map[seq_base] = uasset_path
                 as_uasset_map[seq_base.lower()] = uasset_path
 
-                clean_t = extract_track_name(seq_base)
-                if clean_t:
+                clean_t = extract_track_name(seq_base, base_pal=base_pal)
+                if clean_t and clean_t not in as_uasset_map:
                     as_uasset_map[clean_t] = uasset_path
+                if clean_t and clean_t.lower() not in as_uasset_map:
                     as_uasset_map[clean_t.lower()] = uasset_path
 
     root_motion_cache = {}
@@ -416,7 +461,7 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
 
         if not uasset_file and clean_track_name:
             for k, p in as_uasset_map.items():
-                if k.lower().endswith(f"_{clean_track_name.lower()}"):
+                if k.lower() == f"as_{base_pal}_{clean_track_name}".lower() or k.lower().endswith(f"_{clean_track_name.lower()}"):
                     uasset_file = p
                     break
 
@@ -510,7 +555,7 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
                     "enable_root_motion": rm_enabled
                 }
 
-            clean_bs_key = extract_track_name(bs_asset_name)
+            clean_bs_key = extract_track_name(bs_asset_name, base_pal=base_pal)
             enum_key = mapping_cache.get(clean_bs_key, {}).get("enum_key", f"EPalGeneralBlendSpaceType::{clean_bs_key}")
 
             blend_spaces[clean_bs_key] = {
@@ -533,7 +578,7 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
 
     for am_path in am_uassets:
         o_name = os.path.splitext(os.path.basename(am_path))[0]
-        clean_track = extract_track_name(o_name)
+        clean_track = extract_track_name(o_name, base_pal=base_pal)
         if clean_track.lower() in ["hit", "damageadditive"]:
             continue
         am_json = am_path.replace(".uasset", ".json")
@@ -547,24 +592,44 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
         seq_key = o_name.replace("AM_", "AS_")
         rm_enabled = get_root_motion(seq_key, clean_track)
 
-        # Scrape sequence-level notifies from the matching AS_ file
+        print(f"\n[PalBaker Pipeline] Processing Montage: '{o_name}' (Track: '{clean_track}')", flush=True)
+        print(f"  -> Expecting matching AnimSequence: '{seq_key}'", flush=True)
+
+        # Scrape sequence-level notifies from the matching AS_ file with explicit priority resolution
         scraped_seq_notifies = []
+        target_seq_name = f"AS_{base_pal}_{clean_track}"
+
         seq_uasset = (
             as_uasset_map.get(seq_key) or 
             as_uasset_map.get(seq_key.lower()) or
+            as_uasset_map.get(target_seq_name) or
+            as_uasset_map.get(target_seq_name.lower()) or
             as_uasset_map.get(clean_track) or
             as_uasset_map.get(clean_track.lower())
         )
+
         if seq_uasset and os.path.exists(seq_uasset):
+            print(f"  ✓ Resolved Sequence Asset on disk: '{os.path.basename(seq_uasset)}'", flush=True)
+            print(f"    ↳ Path: {seq_uasset}", flush=True)
             seq_json = seq_uasset.replace(".uasset", ".json")
             try:
-                if not os.path.exists(seq_json):
-                    decompile_uasset(uasset_gui_exe, seq_uasset, seq_json, usmap_path)
+                # Force fresh decompile to eliminate stale or misaligned JSON files
                 if os.path.exists(seq_json):
+                    try: os.remove(seq_json)
+                    except OSError: pass
+
+                decompile_success = decompile_uasset(uasset_gui_exe, seq_uasset, seq_json, usmap_path)
+                if decompile_success and os.path.exists(seq_json):
                     scraped_seq_notifies = scrape_notifies_from_json(seq_json, source="sequence")
-            except Exception: pass
+                else:
+                    print(f"  ❌ Decompilation failed for {os.path.basename(seq_uasset)}", flush=True)
+            except Exception as e:
+                print(f"  ❌ Exception during sequence scraping: {e}", flush=True)
+        else:
+            print(f"  ⚠️ Warning: No matching AS_ sequence found on disk for '{seq_key}' or '{clean_track}'!", flush=True)
 
         combined_notifies = scraped_seq_notifies + scraped_montage_notifies
+        print(f"  ==> Summary for '{o_name}': {len(scraped_seq_notifies)} sequence notifies + {len(scraped_montage_notifies)} montage notifies = {len(combined_notifies)} total stored in 'notifies'.", flush=True)
 
         is_rest_animation = bool(re.match(r'^Rest_?\d+$', clean_track, re.IGNORECASE) or "rest0" in clean_track.lower())
 
@@ -622,7 +687,7 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
         seq_name = os.path.splitext(os.path.basename(as_path))[0]
         if seq_name in inventory: continue
 
-        clean_track = extract_track_name(seq_name)
+        clean_track = extract_track_name(seq_name, base_pal=base_pal)
         if clean_track.lower() in ["hit", "damageadditive"]:
             continue
 

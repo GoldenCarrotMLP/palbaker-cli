@@ -60,19 +60,18 @@ def resolve_special_parent_material(mat_name: str):
 def clean_track_name_simple(name: str, base_pal: str = "", mod_name: str = "") -> str:
     clean = name.split("'")[-2] if "'" in name else name
     clean = clean.split("/")[-1].split(".")[0]
-    m = re.match(r'^(?:AM|AS)_[a-zA-Z0-9]+?_(.+)$', clean)
-    if m: clean = m.group(1)
+    
+    m = re.match(r'^BS_([a-zA-Z]+)_[a-zA-Z0-9]+(?:_(.+))?$', clean)
+    if m: clean = f"{m.group(1)}_{m.group(2)}" if m.group(2) else m.group(1)
+    elif clean.startswith("BS_"): clean = clean[3:]
     else:
-        m = re.match(r'^BS_([a-zA-Z]+)_[a-zA-Z0-9]+(?:_(.+))?$', clean)
-        if m: clean = f"{m.group(1)}_{m.group(2)}" if m.group(2) else m.group(1)
-        elif clean.startswith("BS_"): clean = clean[3:]
-        else:
-            m = re.match(r'^(?:BP_Action_Unique|BP_UniqueAction)_[a-zA-Z0-9]+?_(.+)$', clean)
-            if m: clean = m.group(1)
+        m = re.match(r'^(?:BP_Action_Unique|BP_UniqueAction)_[a-zA-Z0-9]+?_(.+)$', clean)
+        if m: clean = m.group(1)
 
     prefixes = []
     if mod_name: prefixes.extend([f"AM_{mod_name}_", f"AS_{mod_name}_", f"{mod_name}_"])
     if base_pal: prefixes.extend([f"AM_{base_pal}_", f"AS_{base_pal}_", f"{base_pal}_"])
+    prefixes.extend(["AM_", "AS_"])
     prefixes.sort(key=len, reverse=True)
 
     changed = True
@@ -159,6 +158,8 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
         prev_entry = prev_entry or {}
 
         saved_notifies = prev_entry.get("notifies", [])
+        saved_seq_notifies = prev_entry.get("sequence_notifies", [n for n in saved_notifies if n.get("Source") == "sequence"])
+        saved_montage_notifies = prev_entry.get("montage_notifies", [n for n in saved_notifies if n.get("Source") == "montage"])
         saved_rest_props = prev_entry.get("rest_props")
         saved_sequence = prev_entry.get("sequence_asset")
         final_sequence_asset = saved_sequence if (saved_sequence and saved_sequence.strip()) else default_sequence_asset
@@ -186,6 +187,8 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "in_nla": True,
                 "is_modified": saved_is_modified,
                 "notifies": saved_notifies,
+                "sequence_notifies": saved_seq_notifies,
+                "montage_notifies": saved_montage_notifies,
                 "rest_props": rest_props,
                 "enable_root_motion": saved_root_motion
             }
@@ -203,6 +206,8 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "in_nla": True,
                 "is_modified": saved_is_modified,
                 "notifies": [],
+                "sequence_notifies": [],
+                "montage_notifies": [],
                 "enable_root_motion": saved_root_motion
             }
             if "Move" not in blend_spaces:
@@ -245,6 +250,8 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "in_nla": True,
                 "is_modified": saved_is_modified,
                 "notifies": saved_notifies,
+                "sequence_notifies": saved_seq_notifies,
+                "montage_notifies": saved_montage_notifies,
                 "enable_root_motion": saved_root_motion
             }
 
@@ -261,6 +268,8 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "in_nla": True,
                 "is_modified": saved_is_modified,
                 "notifies": saved_notifies,
+                "sequence_notifies": saved_seq_notifies,
+                "montage_notifies": saved_montage_notifies,
                 "enable_root_motion": saved_root_motion
             }
 
@@ -276,6 +285,8 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 "in_nla": True,
                 "is_modified": saved_is_modified,
                 "notifies": saved_notifies,
+                "sequence_notifies": saved_seq_notifies,
+                "montage_notifies": saved_montage_notifies,
                 "enable_root_motion": saved_root_motion
             }
 

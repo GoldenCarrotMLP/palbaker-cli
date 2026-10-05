@@ -44,19 +44,18 @@ def parse_args():
 def extract_track_name_simple(filename: str, base_pal: str = "", mod_name: str = "") -> str:
     clean = filename.split("'")[-2] if "'" in filename else filename
     clean = clean.split("/")[-1].split(".")[0]
-    m = re.match(r'^(?:AM|AS)_[a-zA-Z0-9]+?_(.+)$', clean)
-    if m: clean = m.group(1)
+    
+    m = re.match(r'^BS_([a-zA-Z]+)_[a-zA-Z0-9]+(?:_(.+))?$', clean)
+    if m: clean = f"{m.group(1)}_{m.group(2)}" if m.group(2) else m.group(1)
+    elif clean.startswith("BS_"): clean = clean[3:]
     else:
-        m = re.match(r'^BS_([a-zA-Z]+)_[a-zA-Z0-9]+(?:_(.+))?$', clean)
-        if m: clean = f"{m.group(1)}_{m.group(2)}" if m.group(2) else m.group(1)
-        elif clean.startswith("BS_"): clean = clean[3:]
-        else:
-            m = re.match(r'^(?:BP_Action_Unique|BP_UniqueAction)_[a-zA-Z0-9]+?_(.+)$', clean)
-            if m: clean = m.group(1)
+        m = re.match(r'^(?:BP_Action_Unique|BP_UniqueAction)_[a-zA-Z0-9]+?_(.+)$', clean)
+        if m: clean = m.group(1)
 
     prefixes = []
     if mod_name: prefixes.extend([f"AM_{mod_name}_", f"AS_{mod_name}_", f"{mod_name}_"])
     if base_pal: prefixes.extend([f"AM_{base_pal}_", f"AS_{base_pal}_", f"{base_pal}_"])
+    prefixes.extend(["AM_", "AS_"])
     prefixes.sort(key=len, reverse=True)
 
     changed = True
