@@ -193,12 +193,34 @@ def handle_dynamic_pals_command(args, settings):
         fmodel_dir = mc.raw_mods[0].get("fmodel_path", "")
         blend_path = None
         if fmodel_dir:
+            blend_lower = blend_name.lower()
             for root, _, files in os.walk(fmodel_dir):
-                if blend_name in files:
-                    blend_path = os.path.join(root, blend_name)
+                match = next((f for f in files if f.lower() == blend_lower), None)
+                if match:
+                    blend_path = os.path.join(root, match)
                     break
 
         if not blend_path:
+            # Fallback directly to the sidecar JSON if the .blend file is missing or renamed
+            from utils.sidecar_helper import load_sidecar
+            sidecar_candidates = [
+                os.path.join(fmodel_dir, f"{mod_name}_blend.json"),
+                os.path.join(fmodel_dir, f"{base_pal}_blend.json")
+            ]
+            sidecar_path = next((p for p in sidecar_candidates if os.path.exists(p)), None)
+            if not sidecar_path and fmodel_dir:
+                sidecar_lower = f"{mod_name.lower()}_blend.json"
+                for root, _, files in os.walk(fmodel_dir):
+                    match = next((f for f in files if f.lower() == sidecar_lower or f.lower().endswith("_blend.json")), None)
+                    if match:
+                        sidecar_path = os.path.join(root, match)
+                        break
+
+            if sidecar_path and os.path.exists(sidecar_path):
+                data = load_sidecar(sidecar_path)
+                json_print({"status": "success", "data": data})
+                return
+
             error_print(f"Skeletal blend file '{blend_name}' not found inside workspace.")
             sys.exit(1)
 
@@ -206,8 +228,15 @@ def handle_dynamic_pals_command(args, settings):
             synced_data = sync_sidecar_metadata(settings["blender"], blend_path)
             json_print({"status": "success", "data": synced_data})
         except Exception as e:
-            error_print(f"Failed to sync sidecar metadata: {str(e)}")
-            sys.exit(1)
+            # Fallback to existing sidecar on disk if Blender sync throws
+            from utils.sidecar_helper import load_sidecar
+            sidecar_path = os.path.join(fmodel_dir, f"{mod_name}_blend.json")
+            if os.path.exists(sidecar_path):
+                data = load_sidecar(sidecar_path)
+                json_print({"status": "success", "data": data})
+            else:
+                error_print(f"Failed to sync sidecar metadata: {str(e)}")
+                sys.exit(1)
 
     elif subcommand == "metadata":
         mc.refresh_mods(target_mod=mod_name)
@@ -247,9 +276,11 @@ def handle_dynamic_pals_command(args, settings):
         blend_path = None
         fmodel_dir = mc.raw_mods[0].get("fmodel_path", "")
         if fmodel_dir:
+            blend_lower = blend_name.lower()
             for root, _, files in os.walk(fmodel_dir):
-                if blend_name in files:
-                    blend_path = os.path.join(root, blend_name)
+                match = next((f for f in files if f.lower() == blend_lower), None)
+                if match:
+                    blend_path = os.path.join(root, match)
                     break
 
         if not blend_path:

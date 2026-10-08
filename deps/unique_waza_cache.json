@@ -1,0 +1,136 @@
+{
+  "Unique_Anubis_GroundPunch": [
+    {
+      "montage_asset": "AM_Anubis_Skill_JimenNaguri_Start",
+      "clean_track": "Skill_JimenNaguri_Start"
+    },
+    {
+      "montage_asset": "AM_Anubis_Skill_JimenNaguri_UpLoop",
+      "clean_track": "Skill_JimenNaguri_UpLoop"
+    },
+    {
+      "montage_asset": "AM_Anubis_Skill_JimenNaguri_DownLoop",
+      "clean_track": "Skill_JimenNaguri_DownLoop"
+    },
+    {
+      "montage_asset": "AM_Anubis_Skill_JimenNaguri_End",
+      "clean_track": "Skill_JimenNaguri_End"
+    }
+  ],
+  "Unique_Anubis_GroundPunch::Skill_JimenNaguri_Start": {
+    "clean_track": "Skill_JimenNaguri_Start",
+    "suggested_sequence": "AS_EmberPup_Skill_JimenNaguri_Start",
+    "sequence_notifies": [],
+    "montage_notifies": [
+      {
+        "Name": "PalFacialEye",
+        "Time": 0.0,
+        "Duration": 0.0,
+        "Track": 0,
+        "Source": "montage"
+      },
+      {
+        "Name": "AkEvent_C",
+        "Time": 0.173,
+        "Duration": 0.0,
+        "Track": 2,
+        "Source": "montage",
+        "AudioEvent": "AKE_UniqueSkill_Anubis_GroundPunch_Set",
+        "NiagaraPackage": "/Game/Pal/Sound/Events/SE/Skill/UniqueSkills/Anubis_GroundPunch/AKE_UniqueSkill_Anubis_GroundPunch_Set"
+      },
+      {
+        "Name": "PalFacialEye",
+        "Time": 0.2232,
+        "Duration": 0.0,
+        "Track": 0,
+        "Source": "montage",
+        "EyeType": "Close"
+      },
+      {
+        "Name": "PalFacialEye",
+        "Time": 0.3606,
+        "Duration": 0.0,
+        "Track": 0,
+        "Source": "montage",
+        "EyeType": "Anger"
+      },
+      {
+        "Name": "AkEvent_C",
+        "Time": 0.5907,
+        "Duration": 0.0,
+        "Track": 2,
+        "Source": "montage",
+        "AudioEvent": "AKE_UniqueSkill_Anubis_GroundPunch_JumpUp",
+        "NiagaraPackage": "/Game/Pal/Sound/Events/SE/Skill/UniqueSkills/Anubis_GroundPunch/AKE_UniqueSkill_Anubis_GroundPunch_JumpUp"
+      },
+      {
+        "Name": "PalRequestJump",
+        "Time": 0.5948,
+        "Duration": 0.0,
+        "Track": 1,
+        "Source": "montage"
+      }
+    ]
+  },
+  "Unique_Anubis_GroundPunch::Skill_JimenNaguri_UpLoop": {
+    "clean_track": "Skill_JimenNaguri_UpLoop",
+    "suggested_sequence": "AS_EmberPup_Skill_JimenNaguri_UpLoop",
+    "sequence_notifies": [],
+    "montage_notifies": []
+  },
+  "Unique_Anubis_GroundPunch::Skill_JimenNaguri_DownLoop": {
+    "clean_track": "Skill_JimenNaguri_DownLoop",
+    "suggested_sequence": "AS_EmberPup_Skill_JimenNaguri_DownLoop",
+    "sequence_notifies": [],
+    "montage_notifies": []
+  },
+  "Unique_Anubis_GroundPunch::Skill_JimenNaguri_End": {
+    "clean_track": "Skill_JimenNaguri_End",
+    "suggested_sequence": "AS_EmberPup_Skill_JimenNaguri_End",
+    "sequence_notifies": [],
+    "montage_notifies": [
+      {
+        "Name": "PalFacialEye",
+        "Time": 0.0,
+        "Duration": 0.0,
+        "Track": 0,
+        "Source": "montage"
+      },
+      {
+        "Name": "PalAttackCollision",
+        "Time": 0.0,
+        "Duration": 0.8446,
+        "Track": 1,
+        "Source": "montage",
+        "WazaID": "Unique_Anubis_GroundPunch",
+        "BlowVelocity": [
+          1000.0,
+          0.0,
+          500.0
+        ]
+      },
+      {
+        "Name": "PlayMontageNotify",
+        "Time": 0.0,
+        "Duration": 0.0,
+        "Track": 2,
+        "Source": "montage"
+      },
+      {
+        "Name": "PalFacialEye",
+        "Time": 0.9098,
+        "Duration": 0.0,
+        "Track": 0,
+        "Source": "montage",
+        "EyeType": "Close"
+      },
+      {
+        "Name": "PalFacialEye",
+        "Time": 1.3204,
+        "Duration": 0.0,
+        "Track": 0,
+        "Source": "montage"
+      }
+    ]
+  }
+}

@@ -152,16 +152,32 @@ def handle_creator_command(args, settings):
             sys.exit(1)
 
     elif subcommand == "get-waza-deps":
-        waza_id = resolve_pal_id(args)
+        waza_id = getattr(args, "id", "") or getattr(args, "waza", "") or getattr(args, "waza_id", "") or ""
+        pal_id = getattr(args, "pal", "") or getattr(args, "pal_id", "") or ""
         if not waza_id:
             error_print("Missing waza_id parameter")
             sys.exit(1)
         try:
             from utils.creator.waza_scraper import scrape_waza_dependencies
-            deps = scrape_waza_dependencies(settings, waza_id)
-            json_print({"status": "success", "data": deps})
+            deps_data = scrape_waza_dependencies(settings, waza_id, pal_id)
+            json_print({"status": "success", "data": deps_data})
         except Exception as e:
             error_print(f"Failed to scrape waza dependencies: {str(e)}")
+            sys.exit(1)
+
+    elif subcommand == "autofill-waza":
+        waza_id = getattr(args, "id", "") or getattr(args, "waza", "") or getattr(args, "waza_id", "") or ""
+        track = getattr(args, "track", "") or ""
+        pal_id = getattr(args, "pal", "") or getattr(args, "pal_id", "") or ""
+        if not waza_id or not track:
+            error_print("Missing waza_id or track parameter")
+            sys.exit(1)
+        try:
+            from utils.creator.waza_scraper import autofill_stage_defaults
+            data = autofill_stage_defaults(settings, waza_id, track, pal_id)
+            json_print({"status": "success", "data": data})
+        except Exception as e:
+            error_print(f"Failed to autofill waza stage: {str(e)}")
             sys.exit(1)
 
     elif subcommand == "validate":

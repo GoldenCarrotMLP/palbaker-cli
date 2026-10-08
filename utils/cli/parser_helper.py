@@ -118,6 +118,12 @@ def create_cli_parser() -> argparse.ArgumentParser:
 
     creator_waza = creator_subparsers.add_parser("get-waza-deps", help="Dynamically scrape unique attack dependencies")
     creator_waza.add_argument("id", help="Waza ID")
+    creator_waza.add_argument("--pal", default="", help="Pal Character ID to discover local sequences")
+
+    creator_autofill = creator_subparsers.add_parser("autofill-waza", help="Autofill waza stage notifies and sequences from vanilla pal")
+    creator_autofill.add_argument("id", help="Waza ID")
+    creator_autofill.add_argument("--track", required=True, help="Clean track name (e.g. Skill_JimenNaguri_Start)")
+    creator_autofill.add_argument("--pal", required=True, help="Target Pal ID (e.g. EmberPup)")
 
     creator_refresh_bp = creator_subparsers.add_parser("refresh-bp", help="Refresh Actor Blueprint")
     creator_refresh_bp.add_argument("id", help="Target unique ID to refresh")
