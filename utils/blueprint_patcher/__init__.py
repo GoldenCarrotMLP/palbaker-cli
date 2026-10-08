@@ -141,19 +141,24 @@ def find_skeleton_guid_in_json(json_path: str) -> str:
     try:
         with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        def search(node):
-            if isinstance(node, dict):
-                for k, v in node.items():
-                    if k.lower() in ["skeletonguid", "virtualboneguid", "guid"] and isinstance(v, str) and len(v) >= 32:
-                        return v
-                    res = search(v)
-                    if res: return res
-            elif isinstance(node, list):
-                for item in node:
-                    res = search(item)
-                    if res: return res
-            return None
-        return search(data) or ""
+
+        items = data.get("Exports", []) if isinstance(data, dict) else data
+        for exp in items:
+            if isinstance(exp, dict):
+                obj_name = str(exp.get("ObjectName", exp.get("Name", "")))
+                obj_type = str(exp.get("Class", exp.get("Type", "")))
+                if "Skeleton" in obj_name or "Skeleton" in obj_type:
+                    if "Guid" in exp and isinstance(exp["Guid"], str) and len(exp["Guid"]) >= 32:
+                        return exp["Guid"]
+                if "SkeletonGuid" in exp and isinstance(exp["SkeletonGuid"], str) and len(exp["SkeletonGuid"]) >= 32:
+                    return exp["SkeletonGuid"]
+
+        for exp in items:
+            if isinstance(exp, dict):
+                for k in ["Guid", "SkeletonGuid"]:
+                    if k in exp and isinstance(exp[k], str) and len(exp[k]) >= 32:
+                        return exp[k]
+        return ""
     except Exception:
         return ""
 
@@ -775,6 +780,14 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                     bs_data = json.loads(bs_str)
                     if "FolderName" in bs_data:
                         bs_data["FolderName"] = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_bs_name}"
+                    
+                    # Force overwrite SkeletonGuid so it strictly matches the custom skeleton
+                    if custom_guid:
+                        bs_exports = bs_data.get("Exports", []) if isinstance(bs_data, dict) else bs_data
+                        for exp in bs_exports:
+                            if isinstance(exp, dict) and "SkeletonGuid" in exp:
+                                exp["SkeletonGuid"] = custom_guid
+
                     sync_namemap(bs_data)
                     with open(bs_json, "w", encoding="utf-8") as f:
                         json.dump(bs_data, f, indent=4)
@@ -890,6 +903,13 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
         base_json_str = global_patch(base_json_str)
         base_json_data = json.loads(base_json_str)
 
+        # Repair missing spine_03 for skeletons that only have up to spine_02
+        if "spine_03" not in base_json_str and "spine_02" in base_json_str:
+            base_json_str = base_json_str.replace('"spine_03"', '"spine_02"')
+
+        # Repair Socket_Weapon_R bone target if weapon_r does not exist in skeleton
+        base_json_str = base_json_str.replace('"weapon_r"', '"head"')
+
         # Clean up any null OverrideMaterials that crash D3D11
         for exp in base_json_data.get("Exports", []):
             if exp.get("ObjectName") == "CharacterMesh0":
@@ -943,51 +963,51 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                         if riding.get("WithMountedShooter"):
                             mgr.add_mounted_shooter()
 
-                                        # --- CRITICAL FIX FOR D3D11 RENDER CRASH ---
-                # UAssetGUI cannot safely serialize compressed UE 5.1 animation curves in BlendSpaces.
-                # Generating a custom Riding blendspace creates a 0-byte deformed mesh array, crashing DirectX 11.
-                # Instead, we safely reuse the template's pristine GeneralMove blendspace for RidingMove.
-                comp = mgr.find_static_char_param_export()
-                if comp and isinstance(comp.get("Data"), list):
-                    bs_map = next((p for p in comp["Data"] if isinstance(p, dict) and p.get("Name") == "GeneralBlendSpaceMap"), None)
-                    if bs_map and isinstance(bs_map.get("Value"), list):
-                        gen_move_entry = next(
-                            (e for e in bs_map["Value"] if isinstance(e, list) and len(e) >= 2 and isinstance(e[0], dict) and "GeneralMove" in str(e[0].get("Value", ""))),
-                            None
-                        )
-                        if gen_move_entry and isinstance(gen_move_entry[1], dict):
-                            # Clean out any old RidingMove entry
-                            bs_map["Value"] = [
-                                e for e in bs_map["Value"]
-                                if not (isinstance(e, list) and len(e) >= 1 and isinstance(e[0], dict) and "RidingMove" in str(e[0].get("Value", "")))
-                            ]
-                            # Bind RidingMove perfectly to the GeneralMove blendspace (preventing D3D11 crash)
-                            bs_map["Value"].append([
-                                {
-                                    "$type": "UAssetAPI.PropertyTypes.Objects.EnumPropertyData, UAssetAPI",
-                                    "EnumType": None,
-                                    "InnerType": None,
-                                    "Name": "GeneralBlendSpaceMap",
-                                    "ArrayIndex": 0,
-                                    "PropertyGuid": None,
-                                    "IsZero": False,
-                                    "PropertyTagFlags": "None",
-                                    "PropertyTypeName": None,
-                                    "PropertyTagExtensions": "NoExtension",
-                                    "Value": "EPalGeneralBlendSpaceType::RidingMove"
-                                },
-                                {
-                                    "$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
-                                    "Name": "GeneralBlendSpaceMap",
-                                    "ArrayIndex": 0,
-                                    "PropertyGuid": None,
-                                    "IsZero": False,
-                                    "PropertyTagFlags": "None",
-                                    "PropertyTypeName": None,
-                                    "PropertyTagExtensions": "NoExtension",
-                                    "Value": gen_move_entry[1].get("Value")
-                                }
-                            ])
+                        # --- CRITICAL FIX FOR D3D11 RENDER CRASH ---
+                        # UAssetGUI cannot safely serialize compressed UE 5.1 animation curves in BlendSpaces.
+                        # Generating a custom Riding blendspace creates a 0-byte deformed mesh array, crashing DirectX 11.
+                        # Instead, we safely reuse the template's pristine GeneralMove blendspace for RidingMove.
+                        comp = mgr.find_static_char_param_export()
+                        if comp and isinstance(comp.get("Data"), list):
+                            bs_map = next((p for p in comp["Data"] if isinstance(p, dict) and p.get("Name") == "GeneralBlendSpaceMap"), None)
+                            if bs_map and isinstance(bs_map.get("Value"), list):
+                                gen_move_entry = next(
+                                    (e for e in bs_map["Value"] if isinstance(e, list) and len(e) >= 2 and isinstance(e[0], dict) and "GeneralMove" in str(e[0].get("Value", ""))),
+                                    None
+                                )
+                                if gen_move_entry and isinstance(gen_move_entry[1], dict):
+                                    # Clean out any old RidingMove entry
+                                    bs_map["Value"] = [
+                                        e for e in bs_map["Value"]
+                                        if not (isinstance(e, list) and len(e) >= 1 and isinstance(e[0], dict) and "RidingMove" in str(e[0].get("Value", "")))
+                                    ]
+                                    # Bind RidingMove perfectly to the GeneralMove blendspace (preventing D3D11 crash)
+                                    bs_map["Value"].append([
+                                        {
+                                            "$type": "UAssetAPI.PropertyTypes.Objects.EnumPropertyData, UAssetAPI",
+                                            "EnumType": None,
+                                            "InnerType": None,
+                                            "Name": "GeneralBlendSpaceMap",
+                                            "ArrayIndex": 0,
+                                            "PropertyGuid": None,
+                                            "IsZero": False,
+                                            "PropertyTagFlags": "None",
+                                            "PropertyTypeName": None,
+                                            "PropertyTagExtensions": "NoExtension",
+                                            "Value": "EPalGeneralBlendSpaceType::RidingMove"
+                                        },
+                                        {
+                                            "$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
+                                            "Name": "GeneralBlendSpaceMap",
+                                            "ArrayIndex": 0,
+                                            "PropertyGuid": None,
+                                            "IsZero": False,
+                                            "PropertyTagFlags": "None",
+                                            "PropertyTypeName": None,
+                                            "PropertyTagExtensions": "NoExtension",
+                                            "Value": gen_move_entry[1].get("Value")
+                                        }
+                                    ])
                     else:
                         mgr.remove_saddle()
 

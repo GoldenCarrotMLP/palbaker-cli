@@ -420,10 +420,10 @@ def handle_mod_command(args, settings):
         existing_anims = sidecar_data.get("custom_animations", {}).get("anims", {})
 
         for inv_k, inv_v in inventory.items():
-            clean_t = inv_v.get("nla_track_name", "").lower()
+            clean_t = (inv_v.get("nla_track_name") or "").lower()
             existing_match = None
             for ek, ev in existing_anims.items():
-                if ek.lower() == inv_k.lower() or (isinstance(ev, dict) and ev.get("nla_track_name", "").lower() == clean_t):
+                if ek.lower() == inv_k.lower() or (isinstance(ev, dict) and (ev.get("nla_track_name") or "").lower() == clean_t):
                     existing_match = ev
                     break
 
@@ -820,9 +820,9 @@ def handle_edit_anim(settings: dict, mod_data: dict | None, base_pal: str, mod_n
     if not target_entry:
         for k, v in anims_dict.items():
             if isinstance(v, dict):
-                v_track = v.get("nla_track_name", "").lower()
-                v_seq = v.get("sequence_asset", "").lower()
-                v_mont = v.get("montage_asset", "").lower()
+                v_track = (v.get("nla_track_name") or "").lower()
+                v_seq = (v.get("sequence_asset") or "").lower()
+                v_mont = (v.get("montage_asset") or "").lower()
                 if anim_key_lower in [v_track, v_seq, v_mont]:
                     target_key = k
                     target_entry = v

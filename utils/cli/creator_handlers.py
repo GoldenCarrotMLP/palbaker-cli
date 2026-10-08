@@ -151,6 +151,19 @@ def handle_creator_command(args, settings):
             error_print(f"Failed to update standalone Pal: {str(e)}")
             sys.exit(1)
 
+    elif subcommand == "get-waza-deps":
+        waza_id = resolve_pal_id(args)
+        if not waza_id:
+            error_print("Missing waza_id parameter")
+            sys.exit(1)
+        try:
+            from utils.creator.waza_scraper import scrape_waza_dependencies
+            deps = scrape_waza_dependencies(settings, waza_id)
+            json_print({"status": "success", "data": deps})
+        except Exception as e:
+            error_print(f"Failed to scrape waza dependencies: {str(e)}")
+            sys.exit(1)
+
     elif subcommand == "validate":
         if not pal_id:
             error_print("Missing required parameter: <pal_id>")

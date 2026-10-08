@@ -13,6 +13,15 @@ class PALBAKEREDITORUTILS_API UAnimScriptingLibrary : public UBlueprintFunctionL
     GENERATED_BODY()
 
 public:
+
+    
+
+    UFUNCTION(BlueprintCallable, Category = "PalBaker|Material")
+    static bool ConnectWorldPositionOffset(UMaterialExpression* FromExpression, const FString& FromOutputName = TEXT(""));
+
+    UFUNCTION(BlueprintCallable, Category = "PalBaker|Material")
+    static bool ConnectMaterialPropertyCustom(UMaterialExpression* FromExpression, const FString& FromOutputName, const FString& PropertyName);
+    
     UFUNCTION(BlueprintCallable, Category = "PalBaker")
     static bool ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const FString& JsonPath);
 

@@ -208,7 +208,10 @@ class FeatureDependencyValidator:
                     })
                     return
 
-                user_notifies = [n.get("Name") for n in anim_node.get("notifies", [])]
+                raw_notifies = (
+                    anim_node.get("sequence_notifies", []) + anim_node.get("montage_notifies", [])
+                ) if ("sequence_notifies" in anim_node or "montage_notifies" in anim_node) else anim_node.get("notifies", [])
+                user_notifies = [n.get("Name") for n in raw_notifies]
                 for req_notify in required_notifies:
                     if req_notify not in user_notifies:
                         missing.append({

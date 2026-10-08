@@ -130,13 +130,33 @@ def resolve_sub_export_details(export_idx: int, exports: list, imports: list) ->
         p_name = p.get("Name")
         p_val = p.get("Value")
 
-        if p_name in ["NotifyName", "EyeType", "Waza", "attachBoneName", "CollisionProfileName"]:
+        if p_name in ["NotifyName", "EyeType", "Waza", "attachBoneName", "CollisionProfileName", "SocketName"]:
             details[p_name] = str(p_val)
         elif p_name in ["Event", "Template", "Asset"]:
             if isinstance(p_val, int) and p_val < 0 and (-p_val - 1) < len(imports):
-                details[p_name] = imports[-p_val - 1].get("ObjectName", "")
+                imp = imports[-p_val - 1]
+                details[p_name] = imp.get("ObjectName", "")
+                outer_idx = imp.get("OuterIndex", 0)
+                if outer_idx < 0 and (-outer_idx - 1) < len(imports):
+                    pkg_imp = imports[-outer_idx - 1]
+                    pkg_name = pkg_imp.get("ObjectName", "")
+                    if pkg_name:
+                        clean_pkg = "/" + pkg_name.replace("Pal/Content/", "Game/").strip("/").replace("Pal/Content", "Game")
+                        details["TemplatePackage"] = clean_pkg if clean_pkg.startswith("/") else f"/{clean_pkg}"
         elif p_name in ["CapsuleRadius", "CapsuleHalfHeight", "SphereRadius"]:
-            details[p_name] = parse_float_safe(p_val)
+            details[p_name] = parse_float_safe(p_val)        
+        elif p_name in ["LocationOffset", "RotationOffset", "ScaleOffset", "RelativeLocation", "RelativeRotation", "RelativeScale3D"]:
+            vec_dict = None
+            if isinstance(p_val, list) and len(p_val) > 0 and isinstance(p_val[0], dict):
+                inner = p_val[0].get("Value")
+                if isinstance(inner, dict):
+                    vec_dict = inner
+            elif isinstance(p_val, dict):
+                vec_dict = p_val
+            if vec_dict:
+                details[p_name] = {
+                    k: parse_float_safe(v) for k, v in vec_dict.items() if k in ["X", "Y", "Z", "Pitch", "Yaw", "Roll"]
+                }
         elif p_name == "NativeBlowVelocity":
             if isinstance(p_val, list) and len(p_val) > 0 and isinstance(p_val[0], dict):
                 vec = p_val[0].get("Value", {})
@@ -157,7 +177,6 @@ def resolve_sub_export_details(export_idx: int, exports: list, imports: list) ->
                         details.update(sub_details)
 
     return details
-
 def resolve_fmodel_sub_object(obj_ref: dict, data_list: list) -> dict:
     """Recursively resolves sub-objects in a flat CUE4Parse/FModel JSON array."""
     if not isinstance(obj_ref, dict):
@@ -178,15 +197,26 @@ def resolve_fmodel_sub_object(obj_ref: dict, data_list: list) -> dict:
         return details
 
     for p_name, p_val in props.items():
-        if p_name in ["NotifyName", "EyeType", "Waza", "attachBoneName", "CollisionProfileName"]:
+        if p_name in ["NotifyName", "EyeType", "Waza", "attachBoneName", "CollisionProfileName", "SocketName"]:
             details[p_name] = str(p_val)
         elif p_name in ["CapsuleRadius", "CapsuleHalfHeight", "SphereRadius"]:
             details[p_name] = parse_float_safe(p_val)
+        elif p_name in ["LocationOffset", "RotationOffset", "ScaleOffset", "RelativeLocation", "RelativeRotation", "RelativeScale3D"]:
+            if isinstance(p_val, dict):
+                details[p_name] = {
+                    k: parse_float_safe(v) for k, v in p_val.items() if k in ["X", "Y", "Z", "Pitch", "Yaw", "Roll"]
+                }
         elif p_name in ["Event", "Template", "Asset"]:
             if isinstance(p_val, dict):
-                details[p_name] = p_val.get("ObjectName", "").split("'")[0]
+                obj_name_raw = p_val.get("ObjectName", "")
+                details[p_name] = obj_name_raw.split("'")[1] if "'" in obj_name_raw else obj_name_raw
+                raw_obj_path = p_val.get("ObjectPath", "")
+                if raw_obj_path:
+                    clean_pkg = "/" + raw_obj_path.split(".")[0].replace("Pal/Content/", "Game/").strip("/").replace("Pal/Content", "Game")
+                    details["TemplatePackage"] = clean_pkg if clean_pkg.startswith("/") else f"/{clean_pkg}"
             elif isinstance(p_val, str):
-                details[p_name] = p_val.split("'")[0]
+                details[p_name] = p_val.split("'")[1] if "'" in p_val else p_val
+
         elif p_name in ["ShapeComponents", "ShapeComponent", "AttackFilter"]:
             if isinstance(p_val, dict):
                 sub_details = resolve_fmodel_sub_object(p_val, data_list)
@@ -369,12 +399,30 @@ def scrape_notifies_from_json(uasset_json_path: str, source: str = "") -> list[d
                 notify_record["AudioEvent"] = deep_details["Event"]
             if "Template" in deep_details: 
                 notify_record["NiagaraSystem"] = deep_details["Template"]
+            if "TemplatePackage" in deep_details:
+                notify_record["NiagaraPackage"] = deep_details["TemplatePackage"]
+            if "Waza" in deep_details: 
+                notify_record["WazaID"] = deep_details["Waza"].replace("EPalWazaID::", "")
+            if "Template" in deep_details: 
+                notify_record["NiagaraSystem"] = deep_details["Template"]
+            if "TemplatePackage" in deep_details:
+                notify_record["NiagaraPackage"] = deep_details["TemplatePackage"]
             if "Waza" in deep_details: 
                 notify_record["WazaID"] = deep_details["Waza"].replace("EPalWazaID::", "")
             if "attachBoneName" in deep_details: 
                 notify_record["AttachBone"] = deep_details["attachBoneName"]
-            if "SocketName" in deep_details and "AttachBone" not in notify_record: 
-                notify_record["AttachBone"] = deep_details["SocketName"]
+            if "SocketName" in deep_details:
+                notify_record["SocketName"] = deep_details["SocketName"]
+                if "AttachBone" not in notify_record:
+                    notify_record["AttachBone"] = deep_details["SocketName"]
+            if "LocationOffset" in deep_details:
+                notify_record["LocationOffset"] = deep_details["LocationOffset"]
+            if "RotationOffset" in deep_details:
+                notify_record["RotationOffset"] = deep_details["RotationOffset"]
+            if "RelativeLocation" in deep_details:
+                notify_record["RelativeLocation"] = deep_details["RelativeLocation"]
+            if "RelativeRotation" in deep_details:
+                notify_record["RelativeRotation"] = deep_details["RelativeRotation"]
             if "BlowVelocity" in deep_details: 
                 notify_record["BlowVelocity"] = deep_details["BlowVelocity"]
             if "CapsuleRadius" in deep_details: 
@@ -383,7 +431,6 @@ def scrape_notifies_from_json(uasset_json_path: str, source: str = "") -> list[d
                 notify_record["CapsuleHalfHeight"] = deep_details["CapsuleHalfHeight"]
             if "SphereRadius" in deep_details: 
                 notify_record["SphereRadius"] = deep_details["SphereRadius"]
-
             notifies_list.append(notify_record)
             print(f"    • [{source.upper()} #{idx+1}] '{notify_name}' @ {round(notify_time, 4)}s (Dur: {round(notify_duration, 4)}s, Track: {track_index})", flush=True)
             if deep_details:
@@ -628,8 +675,7 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
         else:
             print(f"  ⚠️ Warning: No matching AS_ sequence found on disk for '{seq_key}' or '{clean_track}'!", flush=True)
 
-        combined_notifies = scraped_seq_notifies + scraped_montage_notifies
-        print(f"  ==> Summary for '{o_name}': {len(scraped_seq_notifies)} sequence notifies + {len(scraped_montage_notifies)} montage notifies = {len(combined_notifies)} total stored in 'notifies'.", flush=True)
+        print(f"  ==> Summary for '{o_name}': {len(scraped_seq_notifies)} sequence notifies (AS_) and {len(scraped_montage_notifies)} montage notifies (AM_) saved distinctly without duplicate 'notifies' array.", flush=True)
 
         is_rest_animation = bool(re.match(r'^Rest_?\d+$', clean_track, re.IGNORECASE) or "rest0" in clean_track.lower())
 
@@ -666,7 +712,6 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
             "nla_track_name": clean_track,
             "in_nla": False,
             "is_modified": False,
-            "notifies": combined_notifies,
             "sequence_notifies": scraped_seq_notifies,
             "montage_notifies": scraped_montage_notifies,
             "enable_root_motion": rm_enabled
@@ -721,7 +766,6 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
             "nla_track_name": clean_track,
             "in_nla": False,
             "is_modified": False,
-            "notifies": scraped_seq_notifies,
             "sequence_notifies": scraped_seq_notifies,
             "montage_notifies": [],
             "enable_root_motion": rm_enabled

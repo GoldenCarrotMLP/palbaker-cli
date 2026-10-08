@@ -116,6 +116,9 @@ def create_cli_parser() -> argparse.ArgumentParser:
     creator_update.add_argument("id", help="Target unique ID to update")
     creator_update.add_argument("--data", required=True, help="JSON payload to save")
 
+    creator_waza = creator_subparsers.add_parser("get-waza-deps", help="Dynamically scrape unique attack dependencies")
+    creator_waza.add_argument("id", help="Waza ID")
+
     creator_refresh_bp = creator_subparsers.add_parser("refresh-bp", help="Refresh Actor Blueprint")
     creator_refresh_bp.add_argument("id", help="Target unique ID to refresh")
     creator_refresh_bp.add_argument("--keep-temp", action="store_true", help="Keep temporary decompiled JSON files in temp_bp_extract for debugging")

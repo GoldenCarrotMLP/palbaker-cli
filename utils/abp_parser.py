@@ -4,8 +4,8 @@ import json
 
 def identify_abp_json(workspace_dir: str) -> str | None:
     """
-    Scans the workspace directory (and parent character directory) for any JSON file 
-    whose internal content matches an Unreal Engine Animation Blueprint signature.
+    Scans the workspace directory (and immediate parent character directory if this is a variant)
+    for any JSON file whose internal content matches an Unreal Engine Animation Blueprint signature.
     Prioritizes rich ABP source definitions over auto-generated output files.
     """
     if not workspace_dir or not os.path.exists(workspace_dir):
@@ -19,57 +19,65 @@ def identify_abp_json(workspace_dir: str) -> str | None:
         "bone_data.json"
     }
 
-    # Search both the active workspace directory and the base character parent directory
-    search_dirs = [workspace_dir]
-    parent = os.path.dirname(workspace_dir)
-    if parent and os.path.exists(parent) and "Character" in parent.replace("\\", "/"):
-        search_dirs.append(parent)
-
     candidates = []
 
-    for s_dir in search_dirs:
-        for root, _, files in os.walk(s_dir):
-            for f in files:
-                if not f.endswith(".json") or f in ignored_files or f.startswith("."):
-                    continue
-                if f.endswith("_dynamic_pals.json") or f.endswith("_blend.json") or f.startswith("MI_"):
-                    continue
+    def scan_file(full_path: str, filename: str):
+        if not filename.endswith(".json") or filename in ignored_files or filename.startswith("."):
+            return
+        if filename.endswith("_dynamic_pals.json") or filename.endswith("_blend.json") or filename.startswith("MI_"):
+            return
 
-                full_path = os.path.join(root, f)
-                try:
-                    with open(full_path, "r", encoding="utf-8-sig", errors="ignore") as file_in:
-                        sample = file_in.read(32768)
+        try:
+            with open(full_path, "r", encoding="utf-8-sig", errors="ignore") as file_in:
+                sample = file_in.read(32768)
 
-                    is_abp = (
-                        "AnimBlueprintGeneratedClass" in sample and
-                        ("AnimGraphNode_" in sample or "AnimNode_" in sample or "Class'AnimInstance'" in sample)
-                    )
-                    if not is_abp:
-                        continue
+            is_abp = (
+                "AnimBlueprintGeneratedClass" in sample and
+                ("AnimGraphNode_" in sample or "AnimNode_" in sample or "Class'AnimInstance'" in sample)
+            )
+            if not is_abp:
+                return
 
-                    # Score candidates: prioritize rich source files over minimal generated files
-                    score = sample.count("AnimGraphNode_")
-                    if "AnimGraphNode_CopyBone" in sample:
-                        score += 15
-                    if "AnimGraphNode_ModifyBone" in sample:
-                        score += 15
-                    if f.startswith("ABP_") or "JigglePhysics" in f:
-                        score += 10
-                    if f.endswith("_BP.json"):
-                        score -= 5
+            score = sample.count("AnimGraphNode_")
+            if "AnimGraphNode_CopyBone" in sample:
+                score += 15
+            if "AnimGraphNode_ModifyBone" in sample:
+                score += 15
+            if filename.startswith("ABP_") or "JigglePhysics" in filename:
+                score += 10
+            if filename.endswith("_BP.json"):
+                score -= 5
 
-                    candidates.append((score, full_path))
-                except Exception:
-                    continue
+            candidates.append((score, full_path))
+        except Exception:
+            pass
+
+    # 1. Search active workspace directory recursively (strictly within this pal's directory)
+    for root, _, files in os.walk(workspace_dir):
+        for f in files:
+            scan_file(os.path.join(root, f), f)
+
+    # 2. Only check the parent directory if workspace_dir is a nested child variant (e.g., Monster/BasePal/Variant).
+    # Never check if the parent is the category directory (e.g., Monster/), as that would scan all other Pals!
+    norm_path = os.path.normpath(workspace_dir).replace("\\", "/")
+    parts = norm_path.split("/")
+    if "Character" in parts:
+        char_idx = parts.index("Character")
+        # Structure: Character (idx) / Category (idx+1) / BasePal (idx+2) / Variant (idx+3+)
+        if len(parts) > char_idx + 3:
+            parent = os.path.dirname(workspace_dir)
+            category_names = {"monster", "pending monster", "player", "npc", "boss", "palmi", "normal", "raidmonster", "raidboss"}
+            if parent and os.path.exists(parent) and os.path.basename(parent).lower() not in category_names:
+                for f in os.listdir(parent):
+                    full_p = os.path.join(parent, f)
+                    if os.path.isfile(full_p):
+                        scan_file(full_p, f)
 
     if not candidates:
         return None
 
-    # Sort descending by score to pick the most complete AnimBlueprint
     candidates.sort(key=lambda x: x[0], reverse=True)
-    best_path = candidates[0][1]
-    return best_path
-
+    return candidates[0][1]
 
 def _normalize_uassetgui_value(val):
     """Recursively unwraps UAssetAPI list-of-structs into clean FModel-style dictionaries."""

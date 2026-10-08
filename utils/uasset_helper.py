@@ -425,12 +425,95 @@ def inject_sequence_notifies(base_ast: dict, notifies_list: list, sequence_name:
         # ---------------------------------------------------------------------
         if notify_name in ["PalEffect", "PlayNiagaraEffect"]:
             system_name = n.get("NiagaraSystem", "NS_UniqueSkill_Kamitsuki_dust")
-            system_pkg = f"/Game/Pal/Effect/Skill/{system_name.replace('NS_UniqueSkill_', '')}/{system_name}"
+            
+            # Prefer recorded package path from scraper; fallback to skill root folder (NOT sub-suffixes)
+            system_pkg = n.get("NiagaraPackage")
+            if not system_pkg:
+                folder_cand = system_name.replace("NS_UniqueSkill_", "").replace("NS_CommonSkill_", "").replace("NS_", "")
+                for sfx in ["_trail", "_dust", "_Bite", "_Impact", "_hit", "_start", "_loop", "_end"]:
+                    if folder_cand.lower().endswith(sfx.lower()):
+                        folder_cand = folder_cand[:-len(sfx)]
+                        break
+                system_pkg = f"/Game/Pal/Effect/Skill/{folder_cand}/{system_name}"
+
             system_import = ensure_package_and_class_import(imports, system_pkg, system_name, "NiagaraSystem", "/Script/Niagara")
 
             if dur_val > 0.0:
                 exp_name = f"PalAnimNotifyState_Effect_{effect_state_counter}"
                 effect_state_counter += 1
+
+                sub_data = [
+                    {
+                        "$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
+                        "Name": "Template",
+                        "ArrayIndex": 0,
+                        "IsZero": False,
+                        "Value": system_import
+                    }
+                ]
+
+                # Re-inject bone socket attachment if present
+                sock_name = n.get("SocketName") or n.get("AttachBone")
+                if sock_name and sock_name not in ["None", "root"]:
+                    sub_data.append({
+                        "$type": "UAssetAPI.PropertyTypes.Objects.NamePropertyData, UAssetAPI",
+                        "Name": "SocketName",
+                        "ArrayIndex": 0,
+                        "IsZero": False,
+                        "Value": sock_name
+                    })
+
+                # Re-inject 3D LocationOffset struct
+                loc = n.get("LocationOffset")
+                if loc and isinstance(loc, dict) and any(float(loc.get(k, 0.0)) != 0.0 for k in ["X", "Y", "Z"]):
+                    sub_data.append({
+                        "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
+                        "StructType": "Vector",
+                        "SerializeNone": True,
+                        "StructGUID": "{00000000-0000-0000-0000-000000000000}",
+                        "Name": "LocationOffset",
+                        "ArrayIndex": 0,
+                        "IsZero": False,
+                        "Value": [
+                            {
+                                "$type": "UAssetAPI.PropertyTypes.Structs.VectorPropertyData, UAssetAPI",
+                                "Name": "LocationOffset",
+                                "ArrayIndex": 0,
+                                "IsZero": False,
+                                "Value": {
+                                    "X": float(loc.get("X", 0.0)),
+                                    "Y": float(loc.get("Y", 0.0)),
+                                    "Z": float(loc.get("Z", 0.0))
+                                }
+                            }
+                        ]
+                    })
+
+                # Re-inject 3D RotationOffset struct
+                rot = n.get("RotationOffset")
+                if rot and isinstance(rot, dict) and any(float(rot.get(k, 0.0)) != 0.0 for k in ["Pitch", "Yaw", "Roll"]):
+                    sub_data.append({
+                        "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
+                        "StructType": "Rotator",
+                        "SerializeNone": True,
+                        "StructGUID": "{00000000-0000-0000-0000-000000000000}",
+                        "Name": "RotationOffset",
+                        "ArrayIndex": 0,
+                        "IsZero": False,
+                        "Value": [
+                            {
+                                "$type": "UAssetAPI.PropertyTypes.Structs.RotatorPropertyData, UAssetAPI",
+                                "Name": "RotationOffset",
+                                "ArrayIndex": 0,
+                                "IsZero": False,
+                                "Value": {
+                                    "Pitch": float(rot.get("Pitch", 0.0)),
+                                    "Yaw": float(rot.get("Yaw", 0.0)),
+                                    "Roll": float(rot.get("Roll", 0.0))
+                                }
+                            }
+                        ]
+                    })
 
                 sub_export = {
                     "$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
@@ -439,15 +522,7 @@ def inject_sequence_notifies(base_ast: dict, notifies_list: list, sequence_name:
                     "ClassIndex": pal_effect_state_class,
                     "TemplateIndex": pal_effect_state_default,
                     "ObjectFlags": "RF_Transactional",
-                    "Data": [
-                        {
-                            "$type": "UAssetAPI.PropertyTypes.Objects.ObjectPropertyData, UAssetAPI",
-                            "Name": "Template",
-                            "ArrayIndex": 0,
-                            "IsZero": False,
-                            "Value": system_import
-                        }
-                    ],
+                    "Data": sub_data,
                     "SerializationBeforeSerializationDependencies": [],
                     "CreateBeforeSerializationDependencies": [system_import],
                     "SerializationBeforeCreateDependencies": [pal_effect_state_class, pal_effect_state_default],
@@ -655,8 +730,57 @@ def inject_sequence_notifies(base_ast: dict, notifies_list: list, sequence_name:
                 shape_class_idx = sphere_class
                 shape_default_idx = sphere_default
 
-            shape_export = {
-                "$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
+            rel_loc = n.get("RelativeLocation") or n.get("LocationOffset")
+            if rel_loc and isinstance(rel_loc, dict) and any(float(rel_loc.get(k, 0.0)) != 0.0 for k in ["X", "Y", "Z"]):
+                shape_data.append({
+                    "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
+                    "StructType": "Vector",
+                    "SerializeNone": True,
+                    "StructGUID": "{00000000-0000-0000-0000-000000000000}",
+                    "Name": "RelativeLocation",
+                    "ArrayIndex": 0,
+                    "IsZero": False,
+                    "Value": [
+                        {
+                            "$type": "UAssetAPI.PropertyTypes.Structs.VectorPropertyData, UAssetAPI",
+                            "Name": "RelativeLocation",
+                            "ArrayIndex": 0,
+                            "IsZero": False,
+                            "Value": {
+                                "X": float(rel_loc.get("X", 0.0)),
+                                "Y": float(rel_loc.get("Y", 0.0)),
+                                "Z": float(rel_loc.get("Z", 0.0))
+                            }
+                        }
+                    ]
+                })
+
+            rel_rot = n.get("RelativeRotation") or n.get("RotationOffset")
+            if rel_rot and isinstance(rel_rot, dict) and any(float(rel_rot.get(k, 0.0)) != 0.0 for k in ["Pitch", "Yaw", "Roll"]):
+                shape_data.append({
+                    "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
+                    "StructType": "Rotator",
+                    "SerializeNone": True,
+                    "StructGUID": "{00000000-0000-0000-0000-000000000000}",
+                    "Name": "RelativeRotation",
+                    "ArrayIndex": 0,
+                    "IsZero": False,
+                    "Value": [
+                        {
+                            "$type": "UAssetAPI.PropertyTypes.Structs.RotatorPropertyData, UAssetAPI",
+                            "Name": "RelativeRotation",
+                            "ArrayIndex": 0,
+                            "IsZero": False,
+                            "Value": {
+                                "Pitch": float(rel_rot.get("Pitch", 0.0)),
+                                "Yaw": float(rel_rot.get("Yaw", 0.0)),
+                                "Roll": float(rel_rot.get("Roll", 0.0))
+                            }
+                        }
+                    ]
+                })
+
+            shape_export = {                "$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI",
                 "ObjectName": shape_exp_name,
                 "OuterIndex": idx_state,
                 "ClassIndex": shape_class_idx,
@@ -819,7 +943,7 @@ def patch_montage_ast(
     return data
 
 def patch_anim_sequence_ast(
-    seed_data: dict | str,
+    seed_data,
     template_id: str = "",
     target_pal: str = "",
     anim_name: str = None,
@@ -875,7 +999,7 @@ def patch_anim_sequence_ast(
     return data
 
 def patch_blendspace_ast(
-    seed_data: dict | str,
+    seed_data,
     template_id: str = "",
     target_pal: str = "",
     bs_name: str = None,

@@ -149,9 +149,9 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
         if not prev_entry:
             for k, v in existing_anims.items():
                 if isinstance(v, dict):
-                    v_track = v.get("nla_track_name", "").lower()
-                    v_seq = v.get("sequence_asset", "").lower()
-                    v_mont = v.get("montage_asset", "").lower()
+                    v_track = (v.get("nla_track_name") or "").lower()
+                    v_seq = (v.get("sequence_asset") or "").lower()
+                    v_mont = (v.get("montage_asset") or "").lower()
                     if clean_track.lower() in [v_track, v_seq, v_mont] or k.lower() == clean_track.lower():
                         prev_entry = v
                         break
@@ -295,7 +295,7 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
     for old_k, old_v in existing_anims.items():
         if not isinstance(old_v, dict):
             continue
-        old_track = old_v.get("nla_track_name", "")
+        old_track = old_v.get("nla_track_name") or ""
         as_key = f"AS_{mod_name}_{old_track}" if old_track else old_k
         if as_key not in new_anims and old_k not in new_anims:
             preserved = dict(old_v)

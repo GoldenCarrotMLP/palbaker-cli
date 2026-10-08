@@ -20,6 +20,13 @@
 #include "Engine/SkeletalMeshSocket.h"
 #include "Animation/BlendProfile.h"
 
+#include "MaterialEditingLibrary.h"
+#include "EdGraph/EdGraph.h"
+#include "Materials/MaterialExpression.h"
+
+
+
+
 
 static void ApplyAlphaScaleBiasClamp(FInputScaleBiasClamp& Clamp, const TSharedPtr<FJsonObject>& ClampObj)
 {
@@ -45,6 +52,40 @@ static void ApplyAlphaScaleBiasClamp(FInputScaleBiasClamp& Clamp, const TSharedP
         Clamp.OutRange.Max = (*OutRangeObj)->GetNumberField(TEXT("max"));
     }
 }
+
+bool UAnimScriptingLibrary::ConnectWorldPositionOffset(UMaterialExpression* FromExpression, const FString& FromOutputName)
+{
+    if (!FromExpression) return false;
+    return UMaterialEditingLibrary::ConnectMaterialProperty(FromExpression, FromOutputName, EMaterialProperty::MP_WorldPositionOffset);
+}
+
+bool UAnimScriptingLibrary::ConnectMaterialPropertyCustom(UMaterialExpression* FromExpression, const FString& FromOutputName, const FString& PropertyName)
+{
+    if (!FromExpression) return false;
+
+    EMaterialProperty TargetProp = EMaterialProperty::MP_MAX;
+
+    if (PropertyName.Equals(TEXT("WorldPositionOffset"), ESearchCase::IgnoreCase) || PropertyName.Equals(TEXT("WPO"), ESearchCase::IgnoreCase))
+    {
+        TargetProp = EMaterialProperty::MP_WorldPositionOffset;
+    }
+    else if (PropertyName.Equals(TEXT("PixelDepthOffset"), ESearchCase::IgnoreCase) || PropertyName.Equals(TEXT("PDO"), ESearchCase::IgnoreCase))
+    {
+        TargetProp = EMaterialProperty::MP_PixelDepthOffset;
+    }
+    else if (PropertyName.Equals(TEXT("MaterialAttributes"), ESearchCase::IgnoreCase))
+    {
+        TargetProp = EMaterialProperty::MP_MaterialAttributes;
+    }
+
+    if (TargetProp != EMaterialProperty::MP_MAX)
+    {
+        return UMaterialEditingLibrary::ConnectMaterialProperty(FromExpression, FromOutputName, TargetProp);
+    }
+
+    return false;
+}
+
 
 bool UAnimScriptingLibrary::ApplyPalBakerRigging(UAnimBlueprint* AnimBP, const FString& JsonPath)
 {
