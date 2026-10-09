@@ -919,18 +919,14 @@ def patch_montage_ast(
     if notifies is not None:
         notifies_prop = next((p for p in main_exp.get("Data", []) if p.get("Name") == "Notifies"), None)
         if notifies_prop:
-            serialized_notifies = []
-            proto = template_notify
-            if not proto and notifies_prop.get("Value"):
-                proto = notifies_prop["Value"][0]
-
-            for n in notifies:
-                if proto:
-                    item = json.loads(json.dumps(proto))
+            existing_items = notifies_prop.get("Value", [])
+            # Update matching existing items in place to preserve UObject pointers
+            if len(existing_items) == len(notifies):
+                serialized_notifies = []
+                for idx, n in enumerate(notifies):
+                    item = existing_items[idx]
                     for p in item.get("Value", []):
-                        if p.get("Name") == "NotifyName":
-                            p["Value"] = n.get("Name", "PalCustomNotify")
-                        elif p.get("Name") in ["LinkValue", "DisplayTime"]:
+                        if p.get("Name") in ["LinkValue", "DisplayTime"]:
                             p["Value"] = float(n.get("Time", 0.0))
                         elif p.get("Name") == "Duration":
                             p["Value"] = float(n.get("Duration", 0.0))

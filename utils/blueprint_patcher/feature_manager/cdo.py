@@ -22,11 +22,9 @@ class CDOManagerMixin:
 
         action_class_idx = self.ensure_import_chain(action_class_path.rsplit(".", 1)[0], action_class_path.split(".")[-1])
 
-        # --- FIX: Register import dependency for Unreal's Event Driven Loader ---
         comp_deps = comp.setdefault("CreateBeforeSerializationDependencies", [])
         if action_class_idx not in comp_deps:
             comp_deps.append(action_class_idx)
-        # ------------------------------------------------------------------------
 
         comp_data = comp.get("Data")
         if not isinstance(comp_data, list):
@@ -118,7 +116,16 @@ class CDOManagerMixin:
             }
             comp_data.append(waza_prop)
 
+        clean_waza_key = waza_id_enum if "::" in waza_id_enum else f"EPalWazaID::{waza_id_enum}"
+
         map_val = waza_prop.setdefault("Value", [])
+        # In-place deduplication to prevent map collision
+        waza_prop["Value"] = [
+            e for e in map_val
+            if not (isinstance(e, list) and len(e) >= 1 and isinstance(e[0], dict) and e[0].get("Value") == clean_waza_key)
+        ]
+        map_val = waza_prop["Value"]
+
         map_val.append([
             {
                 "$type": "UAssetAPI.PropertyTypes.Objects.EnumPropertyData, UAssetAPI",
@@ -131,14 +138,14 @@ class CDOManagerMixin:
                 "PropertyTagFlags": "None",
                 "PropertyTypeName": None,
                 "PropertyTagExtensions": "NoExtension",
-                "Value": waza_id_enum if "::" in waza_id_enum else f"EPalWazaID::{waza_id_enum}"
+                "Value": clean_waza_key
             },
             {
                 "$type": "UAssetAPI.PropertyTypes.Objects.SoftObjectPropertyData, UAssetAPI",
                 "Name": "WazaActionDeclarationMap",
                 "ArrayIndex": 0,
                 "PropertyGuid": None,
-                "IsZero": false,
+                "IsZero": False,
                 "PropertyTagFlags": "None",
                 "PropertyTypeName": None,
                 "PropertyTagExtensions": "NoExtension",

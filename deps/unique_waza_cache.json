@@ -132,5 +132,17 @@
         "Source": "montage"
       }
     ]
-  }
+  },
+  "Unique_BlackPuppy_BiteV2": [
+    {
+      "montage_asset": "AM_BlackPuppy_Kamitsuki_ver2",
+      "clean_track": "Kamitsuki_ver2"
+    }
+  ],
+  "Unique_BlackPuppy_Bite": [
+    {
+      "montage_asset": "AM_BlackPuppy_Kamitsuki",
+      "clean_track": "Kamitsuki"
+    }
+  ]
 }
