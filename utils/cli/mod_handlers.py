@@ -806,13 +806,17 @@ def handle_edit_anim(settings: dict, mod_data: dict | None, base_pal: str, mod_n
         error_print("Missing target animation key (--key <anim_key>).")
         sys.exit(1)
 
-    # Resolve target entry case-insensitively without corrupting slot keys
+    from utils.blender_dump_anims import extract_track_name_simple
+    clean_t = extract_track_name_simple(anim_key, base_pal, mod_name)
+    canonical_seq_key = f"AS_{mod_name}_{clean_t}"
+
+    # Resolve target entry case-insensitively
     target_key = None
     target_entry = None
     anim_key_lower = anim_key.lower().strip()
 
     for k, v in anims_dict.items():
-        if k.lower() == anim_key_lower:
+        if k.lower() in [anim_key_lower, canonical_seq_key.lower()]:
             target_key = k
             target_entry = v
             break
@@ -823,13 +827,14 @@ def handle_edit_anim(settings: dict, mod_data: dict | None, base_pal: str, mod_n
                 v_track = (v.get("nla_track_name") or "").lower()
                 v_seq = (v.get("sequence_asset") or "").lower()
                 v_mont = (v.get("montage_asset") or "").lower()
-                if anim_key_lower in [v_track, v_seq, v_mont]:
+                if clean_t.lower() in [v_track, v_seq, v_mont]:
                     target_key = k
                     target_entry = v
                     break
 
-    if not target_key:
-        target_key = anim_key
+    # Always enforce canonical AS_ key for sidecar dictionary consistency
+    if not target_key or target_key.startswith("AM_"):
+        target_key = canonical_seq_key
 
     # 1. Action: Delete animation
     if op in ["delete_anim", "remove_anim"]:

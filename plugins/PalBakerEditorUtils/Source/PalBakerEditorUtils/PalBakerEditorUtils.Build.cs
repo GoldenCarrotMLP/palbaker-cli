@@ -9,7 +9,7 @@ public class PalBakerEditorUtils : ModuleRules
         PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine" });
         PrivateDependencyModuleNames.AddRange(new string[] { 
             "UnrealEd", "BlueprintGraph", "AnimGraph", "AnimGraphRuntime", "Json", "JsonUtilities" ,
-            "MaterialEditor"
+            "MaterialEditor", "IKRig", "IKRigEditor", "AssetTools"
         });
     }
 }

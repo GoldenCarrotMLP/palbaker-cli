@@ -368,6 +368,23 @@ def inject_sequence_notifies(base_ast: dict, notifies_list: list, sequence_name:
                 pass
             break
 
+    # --- OUT-OF-BOUNDS NOTIFY GUARD ---
+    oob_notifies = []
+    for n in notifies_list:
+        n_name = n.get("Name", "Unknown")
+        time_val = float(n.get("Time", 0.0))
+        if time_val > (seq_length + 0.001):
+            oob_notifies.append((n_name, time_val))
+
+    if oob_notifies:
+        oob_desc = ", ".join([f"'{name}' at {t:.4f}s" for name, t in oob_notifies])
+        raise ValueError(
+            f"[Out-of-Bounds Error] AnimSequence '{sequence_name}' length is only {seq_length:.4f}s, "
+            f"but contains notify(s) scheduled beyond its duration: {oob_desc}! "
+            f"Extend the animation timeline in Blender to cover all notify timestamps."
+        )
+    # ----------------------------------
+
     ast["HasUnversionedProperties"] = False
     pkg_flags = ast.get("PackageFlags", "")
     if isinstance(pkg_flags, str):
@@ -1031,6 +1048,274 @@ def patch_blendspace_ast(
     sync_namemap(data)
     return data
 
+# =============================================================================
+# 5b. SIDECAR -> DONOR MONTAGE MERGE
+# =============================================================================
+# Sidecar fields that identify *which* notify an entry is, mapped to the property
+# that holds the same value on the donor's notify UObject.
+_NOTIFY_DISCRIMINATORS = {
+    "PlayMontageNotify": ("EventName", "NotifyName"),
+    "PlayMontageNotifyWindow": ("EventName", "NotifyName"),
+    "PalFacialEye": ("EyeType", "EyeType"),
+    "AkEvent_C": ("AudioEvent", "Event"),
+    "PalAttackCollision": ("WazaID", "AttackFilter.Waza"),
+}
+
+
+def _enum_tail(v):
+    return str(v).split("::")[-1] if v not in (None, "") else None
+
+
+def _props(entry: dict) -> dict:
+    return {p.get("Name"): p for p in entry.get("Value", entry.get("Data", [])) if isinstance(p, dict)}
+
+
+def _set_float(prop: dict, value: float):
+    value = float(value)
+    prop["Value"] = value
+    if value != 0.0:
+        prop["IsZero"] = False
+
+
+def _export_at(ast: dict, idx):
+    if isinstance(idx, int) and 0 < idx <= len(ast["Exports"]):
+        return ast["Exports"][idx - 1]
+    return None
+
+
+def _donor_discriminator(ast: dict, notify_struct: dict):
+    props = _props(notify_struct)
+    name = props.get("NotifyName", {}).get("Value")
+    spec = _NOTIFY_DISCRIMINATORS.get(name)
+    if not spec:
+        return None
+    obj_idx = props.get("Notify", {}).get("Value") or props.get("NotifyStateClass", {}).get("Value")
+    exp = _export_at(ast, obj_idx)
+    if not exp:
+        return None
+    path = spec[1].split(".")
+    for i, key in enumerate(path):
+        prop = _props(exp).get(key)
+        if prop is None:
+            return None
+        if i < len(path) - 1:
+            exp = _export_at(ast, prop.get("Value"))
+            if not exp:
+                return None
+            continue
+        val = prop.get("Value")
+        if key == "Event" and isinstance(val, int) and val < 0:
+            return ast["Imports"][-val - 1].get("ObjectName")
+        return _enum_tail(val)
+    return None
+
+
+def _sidecar_discriminator(n: dict):
+    spec = _NOTIFY_DISCRIMINATORS.get(n.get("Name"))
+    return _enum_tail(n.get(spec[0])) if spec else None
+
+
+def _apply_notify_properties(ast: dict, notify_struct: dict, n: dict, log):
+    """Push simple user-editable fields (EyeType / EventName / WazaID) onto the notify UObject."""
+    props = _props(notify_struct)
+    exp = _export_at(ast, props.get("Notify", {}).get("Value") or props.get("NotifyStateClass", {}).get("Value"))
+    if not exp:
+        return
+    exp_props = _props(exp)
+    name = n.get("Name")
+    if name in ("PlayMontageNotify", "PlayMontageNotifyWindow") and n.get("EventName") and "NotifyName" in exp_props:
+        exp_props["NotifyName"]["Value"] = n["EventName"]
+    elif name == "PalFacialEye" and n.get("EyeType") and "EyeType" in exp_props:
+        exp_props["EyeType"]["Value"] = _enum_tail(n["EyeType"])
+    elif name == "PalAttackCollision" and n.get("WazaID"):
+        filt = _export_at(ast, exp_props.get("AttackFilter", {}).get("Value"))
+        if filt and "Waza" in _props(filt):
+            _props(filt)["Waza"]["Value"] = _enum_tail(n["WazaID"])
+    elif name == "AkEvent_C" and n.get("AudioEvent"):
+        donor_event = _donor_discriminator(ast, notify_struct)
+        if donor_event and donor_event != n["AudioEvent"] and log:
+            log(f"    ⚠ Notify AkEvent_C: changing the audio event ({donor_event} -> {n['AudioEvent']}) on a cloned montage is not supported; kept donor event.", "warning")
+
+
+def _set_notify_timing(notify_struct: dict, time: float, duration: float, track, seg_length: float):
+    props = _props(notify_struct)
+    if "LinkValue" in props:
+        _set_float(props["LinkValue"], time)
+    if "Duration" in props:
+        _set_float(props["Duration"], duration)
+    if track is not None and "TrackIndex" in props:
+        props["TrackIndex"]["Value"] = int(track)
+        props["TrackIndex"]["IsZero"] = int(track) == 0
+    if "SegmentLength" in props:
+        _set_float(props["SegmentLength"], seg_length)
+    end_link = props.get("EndLink")
+    if end_link and duration > 0.0:
+        el = _props(end_link)
+        if "LinkValue" in el:
+            _set_float(el["LinkValue"], time + duration)
+        if "SegmentLength" in el and el.get("SegmentIndex", {}).get("Value", -1) != -1:
+            _set_float(el["SegmentLength"], seg_length)
+
+
+def _clone_notify_subtree(ast: dict, root_idx: int) -> int:
+    """Duplicates a notify UObject export and all exports nested under it. Returns the new root index."""
+    exports = ast["Exports"]
+    subtree = [root_idx]
+    for idx in subtree:
+        subtree.extend(i for i, e in enumerate(exports, 1) if e.get("OuterIndex") == idx and i not in subtree)
+
+    taken = {e.get("ObjectName") for e in exports}
+    remap = {}
+    for old in subtree:
+        remap[old] = len(exports) + len(remap) + 1
+
+    def rename(name):
+        base = re.sub(r"_\d+$", "", name)
+        n = 0
+        while f"{base}_{n}" in taken:
+            n += 1
+        taken.add(f"{base}_{n}")
+        return f"{base}_{n}"
+
+    def remap_refs(node):
+        if isinstance(node, dict):
+            if "ObjectPropertyData" in str(node.get("$type", "")) and node.get("Value") in remap:
+                node["Value"] = remap[node["Value"]]
+            for v in node.values():
+                remap_refs(v)
+        elif isinstance(node, list):
+            for v in node:
+                remap_refs(v)
+
+    for old in subtree:
+        new_exp = copy.deepcopy(exports[old - 1])
+        new_exp["ObjectName"] = rename(new_exp["ObjectName"])
+        if new_exp.get("OuterIndex") in remap:
+            new_exp["OuterIndex"] = remap[new_exp["OuterIndex"]]
+        for dep_key in ("CreateBeforeSerializationDependencies", "CreateBeforeCreateDependencies",
+                        "SerializationBeforeSerializationDependencies", "SerializationBeforeCreateDependencies"):
+            if isinstance(new_exp.get(dep_key), list):
+                new_exp[dep_key] = [remap.get(d, d) for d in new_exp[dep_key]]
+        remap_refs(new_exp.get("Data", []))
+        exports.append(new_exp)
+        if isinstance(ast.get("DependsMap"), list):
+            ast["DependsMap"].append([])
+
+    main_deps = exports[0].setdefault("CreateBeforeSerializationDependencies", [])
+    main_deps.append(remap[root_idx])
+    return remap[root_idx]
+
+
+def merge_sidecar_into_donor_montage(ast: dict, sidecar_notifies: list, duration: float = None, log=None) -> dict:
+    """Makes the sidecar the source of truth for a cloned donor montage.
+
+    - The montage length is set to `duration` (the target pal's own AnimSequence length).
+    - Sidecar notifies that match a donor notify (same Name + EventName/EyeType/AudioEvent/WazaID)
+      override its time, duration, track, and simple properties.
+    - Donor notifies the sidecar does not define keep their donor values, rescaled to the new length.
+    - Sidecar notifies with no donor counterpart are cloned from a donor notify of the same type.
+    """
+    main_exp = ast["Exports"][0]
+    main_props = _props(main_exp)
+    old_len = float(main_props.get("SequenceLength", {}).get("Value", 0.0) or 0.0)
+    new_len = float(duration) if duration and duration > 0 else old_len
+    scale = (new_len / old_len) if old_len > 0 else 1.0
+
+    def say(msg, lvl="standard"):
+        if log:
+            log(msg, lvl)
+
+    # 1. Montage length
+    if "SequenceLength" in main_props:
+        _set_float(main_props["SequenceLength"], new_len)
+    for sec in main_props.get("CompositeSections", {}).get("Value", []):
+        sp = _props(sec)
+        if "SegmentLength" in sp:
+            _set_float(sp["SegmentLength"], new_len)
+        if "LinkValue" in sp:
+            _set_float(sp["LinkValue"], float(sp["LinkValue"].get("Value", 0) or 0) * scale)
+    for track in main_props.get("SlotAnimTracks", {}).get("Value", []):
+        for seg in _props(_props(track).get("AnimTrack", {})).get("AnimSegments", {}).get("Value", []):
+            sp = _props(seg)
+            if "AnimEndTime" in sp:
+                _set_float(sp["AnimEndTime"], float(sp.get("AnimStartTime", {}).get("Value", 0) or 0) + new_len)
+
+    notifies_prop = main_props.get("Notifies")
+    donor_items = notifies_prop.get("Value", []) if notifies_prop else []
+    timing = {}  # notify index -> (time, duration)
+
+    # 2. Match sidecar entries to donor notifies: exact discriminator first, then same Name in order.
+    unmatched_side = list(range(len(sidecar_notifies)))
+    taken = set()
+    pairs = {}
+    for strict in (True, False):
+        for si in list(unmatched_side):
+            n = sidecar_notifies[si]
+            want = _sidecar_discriminator(n)
+            for di, item in enumerate(donor_items):
+                if di in taken or _props(item).get("NotifyName", {}).get("Value") != n.get("Name"):
+                    continue
+                if strict and _donor_discriminator(ast, item) != want:
+                    continue
+                pairs[di] = si
+                taken.add(di)
+                unmatched_side.remove(si)
+                break
+
+    for di, item in enumerate(donor_items):
+        props = _props(item)
+        if di in pairs:
+            n = sidecar_notifies[pairs[di]]
+            t, d = float(n.get("Time", 0.0)), float(n.get("Duration", 0.0))
+            _set_notify_timing(item, t, d, n.get("Track"), new_len)
+            _apply_notify_properties(ast, item, n, log)
+        else:
+            t = float(props.get("LinkValue", {}).get("Value", 0) or 0) * scale
+            d = float(props.get("Duration", {}).get("Value", 0) or 0) * scale
+            t = min(t, new_len)
+            d = min(d, max(0.0, new_len - t))
+            _set_notify_timing(item, t, d, None, new_len)
+            say(f"    • Notify '{props.get('NotifyName', {}).get('Value')}' not defined in sidecar; using donor default at {t:.4f}s")
+        timing[di] = (t, d)
+
+    # 3. Sidecar-only notifies: clone a donor notify of the same type as a template.
+    for si in unmatched_side:
+        n = sidecar_notifies[si]
+        template = next((it for it in donor_items if _props(it).get("NotifyName", {}).get("Value") == n.get("Name")), None)
+        if template is None:
+            say(f"    ⚠ Sidecar notify '{n.get('Name')}' at {float(n.get('Time', 0)):.4f}s has no donor notify of the same type to clone; skipped.", "warning")
+            continue
+        new_item = copy.deepcopy(template)
+        new_item["Name"] = str(len(donor_items))
+        tp = _props(new_item)
+        for key in ("Notify", "NotifyStateClass"):
+            if tp.get(key, {}).get("Value", 0) > 0:
+                tp[key]["Value"] = _clone_notify_subtree(ast, tp[key]["Value"])
+        t, d = float(n.get("Time", 0.0)), float(n.get("Duration", 0.0))
+        _set_notify_timing(new_item, t, d, n.get("Track"), new_len)
+        _apply_notify_properties(ast, new_item, n, log)
+        donor_items.append(new_item)
+        timing[len(donor_items) - 1] = (t, d)
+        say(f"    • Added sidecar notify '{n.get('Name')}' at {t:.4f}s (cloned from donor template)")
+
+    # 4. Branching point markers follow their notify.
+    for marker in main_props.get("BranchingPointMarkers", {}).get("Value", []):
+        mp = _props(marker)
+        idx = mp.get("NotifyIndex", {}).get("Value")
+        if idx in timing and "TriggerTime" in mp:
+            t, d = timing[idx]
+            is_end = str(mp.get("NotifyEventType", {}).get("Value", "")).endswith("End")
+            _set_float(mp["TriggerTime"], t + d if is_end else t)
+
+    # 5. Out-of-bounds guard (CLAUDE.md rule 6)
+    oob = [(i, t) for i, (t, _) in timing.items() if t > new_len + 0.001]
+    if oob:
+        raise ValueError(f"Montage notify(s) past montage length {new_len:.4f}s: {oob}")
+
+    sync_namemap(ast)
+    return ast
+
+
 patch_sequence_ast = patch_anim_sequence_ast
 patch_anim_montage_ast = patch_montage_ast
 sanitize_uasset_ast = sanitize_anim_sequence_notifies
@@ -1114,13 +1399,11 @@ def process_cooked_anim_sequences(
                 processed_count += 1
                 print(f"  [PalBaker Anims] ✓ Injected {len(sequence_notifies)} notifies & sub-objects into {base_name}.uasset", flush=True)
         except Exception as e:
-            print(f"  [PalBaker Anims Warning] Failed to process {base_name}: {e}", flush=True)
-        finally:
+            print(f"  ❌ [PalBaker Anims Fatal Error] Failed to process {base_name}: {e}", flush=True)
             if os.path.exists(json_path):
-                try:
-                    os.remove(json_path)
-                except OSError:
-                    pass
+                try: os.remove(json_path)
+                except OSError: pass
+            raise e  # Abort packaging pipeline
 
     return processed_count
 
@@ -1142,4 +1425,5 @@ __all__ = [
     "sanitize_notifies",
     "clean_anim_sequence_ast",
     "inject_sequence_notifies",
+    "merge_sidecar_into_donor_montage",
 ]

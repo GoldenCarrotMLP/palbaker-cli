@@ -103,7 +103,6 @@ def sanitize_json_filename(name: str, default_name: str) -> str:
     clean = re.sub(r'[\\/*?:"<>|]', '_', clean).strip()
     return clean or default_name
 
-
 def get_available_materials_for_context(fmodel_root: str, fmodel_dir: str | None, character_id: str, category: str = "Monster") -> list[str]:
     materials = []
     paths_to_check = []
@@ -202,6 +201,28 @@ def sync_sidecar_metadata(blender_path: str, blend_file_path: str) -> dict:
     base_name = os.path.splitext(os.path.basename(blend_file_path))[0]
     sidecar_path = os.path.join(root_dir, f"{base_name}_blend.json")
 
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    extractor_script = os.path.normpath(os.path.join(repo_root, "utils", "blender_extractor.py"))
+
+    # Execute full headless extraction to sync materials, bones, and animation metadata
+    if os.path.exists(extractor_script) and blender_path and os.path.exists(blender_path):
+        from utils.builder.blender_helper import run_headless_blender
+        try:
+            print(f"[PalBaker Sync] Running full metadata & animation extraction for {os.path.basename(blend_file_path)}...", flush=True)
+            result = run_headless_blender(
+                blender_path,
+                blend_file_path,
+                extractor_script,
+                ["--output", sidecar_path]
+            )
+            if result.stdout and result.stdout.strip():
+                print(result.stdout, flush=True)
+            if result.returncode == 0 and os.path.exists(sidecar_path):
+                return load_sidecar(sidecar_path)
+        except Exception as e:
+            print(f"[PalBaker Sync Warning] Headless extractor failed: {e}", flush=True)
+
+    # Fallback to mesh-only merge if full extractor fails
     existing_data = load_sidecar(sidecar_path)
     fresh_metadata = extract_blend_metadata(blender_path, blend_file_path)
     synced_data = delta_merge_sidecar(
@@ -660,7 +681,6 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
         return True, f"SUCCESS: Compiled and deployed Dynamic Pals V2 config to ModelJSON/{os.path.basename(target_path)}"
     except Exception as e:
         return False, f"Failed to write deployment JSON: {e}"
-
 
 def load_traits_database() -> dict:
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

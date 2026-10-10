@@ -23,7 +23,8 @@ from utils.uasset_helper import (
     patch_montage_ast, 
     sanitize_anim_sequence_notifies,
     patch_anim_sequence_ast,
-    encode_guid_to_extras
+    encode_guid_to_extras,
+    merge_sidecar_into_donor_montage
 )
 
 
@@ -199,6 +200,50 @@ def _synthesize_montage_from_seed(
 
     with open(seed_json, "r", encoding="utf-8") as f_seed:
         seed_data = json.load(f_seed)
+
+    # =========================================================================
+    # OUT-OF-BOUNDS NOTIFY VALIDATION GUARD
+    # =========================================================================
+    oob_notifies = []
+    for n in notifies:
+        n_name = n.get("Name", "PalCustomNotify")
+        n_time = float(n.get("Time", 0.0))
+        if n_time > (duration + 0.001):
+            oob_notifies.append((n_name, n_time))
+
+    if oob_notifies:
+        oob_desc = ", ".join([f"'{name}' at {t:.4f}s" for name, t in oob_notifies])
+        log(f"  ❌ [Out-of-Bounds Error] Montage '{montage_name}' has duration {duration:.4f}s, but contains notify(s) scheduled beyond its duration: {oob_desc}!", "error")
+        log(f"     Aborting montage synthesis to prevent infinite animation loops in-game.", "error")
+        return False
+
+    # Also verify against actual cooked AnimSequence length on disk if present
+    cooked_seq_path = os.path.join(cooked_anims_dir, f"{sequence_name}.uasset")
+    if os.path.exists(cooked_seq_path):
+        temp_seq_json = os.path.join(temp_dir, f"chk_{sequence_name}.json")
+        if decompile_uasset(uasset_gui_exe, cooked_seq_path, temp_seq_json, usmap_path):
+            try:
+                with open(temp_seq_json, "r", encoding="utf-8") as f_chk:
+                    chk_ast = json.load(f_chk)
+                chk_len = None
+                for p in chk_ast.get("Exports", [{}])[0].get("Data", []):
+                    if p.get("Name") == "SequenceLength":
+                        chk_len = float(p.get("Value", 0.0))
+                        break
+                if chk_len is not None and chk_len > 0:
+                    seq_oob = [n for n in notifies if float(n.get("Time", 0.0)) > (chk_len + 0.001)]
+                    if seq_oob:
+                        seq_oob_desc = ", ".join([f"'{n.get('Name')}' at {float(n.get('Time', 0.0)):.4f}s" for n in seq_oob])
+                        log(f"  ❌ [Out-of-Bounds Error] Sequence '{sequence_name}.uasset' is only {chk_len:.4f}s long, but montage '{montage_name}' requires notifies at: {seq_oob_desc}!", "error")
+                        log(f"     The underlying sequence must be lengthened in Blender to cover all notifies.", "error")
+                        return False
+            except Exception:
+                pass
+            finally:
+                if os.path.exists(temp_seq_json):
+                    try: os.remove(temp_seq_json)
+                    except OSError: pass
+    
 
     # =========================================================================
     # REPAIR MISSING HEADER CUSTOM VERSIONS
@@ -466,6 +511,25 @@ def _synthesize_montage_from_seed(
         return False
 
 
+def _read_cooked_sequence_length(cooked_anims_dir: str, sequence_name: str, temp_dir: str, uasset_gui_exe: str, usmap_path: str):
+    """Returns SequenceLength of a cooked AnimSequence, or None if it is not on disk / unreadable."""
+    seq_path = os.path.join(cooked_anims_dir, f"{sequence_name}.uasset")
+    if not os.path.exists(seq_path):
+        return None
+    seq_json = os.path.join(temp_dir, f"len_{sequence_name}.json")
+    if not decompile_uasset(uasset_gui_exe, seq_path, seq_json, usmap_path):
+        return None
+    try:
+        with open(seq_json, "r", encoding="utf-8-sig") as f:
+            ast = json.load(f)
+        for p in ast.get("Exports", [{}])[0].get("Data", []):
+            if p.get("Name") == "SequenceLength":
+                return float(p.get("Value", 0.0)) or None
+    except Exception:
+        return None
+    return None
+
+
 def _process_unique_waza_actions(
     settings: dict,
     pal_id: str,
@@ -486,6 +550,8 @@ def _process_unique_waza_actions(
     base_json_data: dict,
     log
 ) -> bool:
+    from utils.creator.waza_scraper import find_action_path_in_bp_ast, resolve_donor_pals
+
     anims_dict = custom_anims.get("anims", {}) if isinstance(custom_anims, dict) else {}
 
     assigned_wazas = []
@@ -504,97 +570,69 @@ def _process_unique_waza_actions(
     if not assigned_wazas:
         return True
 
-    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     cat_sanitized = category.replace(" ", "_")
     target_anims_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
-    target_skel_folder = f"{base_pal}/{pal_id}" if is_variant else pal_id
     v_new_anim_pkg = f"/Game/Pal/Animation/Character/{cat_sanitized}/{target_anims_folder}"
 
     action_dest_dir = os.path.join(cooked_base_content, "Pal", "Blueprint", "Action", "Waza", pal_id)
     os.makedirs(action_dest_dir, exist_ok=True)
 
-    log(f"  [Unique Attacks] Evaluating {len(assigned_wazas)} assigned unique attack(s)...", "standard")
+    log(f"  [Unique Attacks] Dynamically resolving {len(assigned_wazas)} attack(s) from Actor Blueprints...", "standard")
 
     waza_declarations_to_add = {}
 
     for waza in assigned_wazas:
         clean_waza = str(waza).replace("EPalWazaID::", "").strip()
-        suffix = clean_waza.replace("Unique_", "")
-        parts = suffix.split("_")
-        donor_pal = parts[0] if parts else ""
-        skill_name = "_".join(parts[1:]) if len(parts) > 1 else suffix
+        donor_candidates = resolve_donor_pals(clean_waza)
+        donor_pal = donor_candidates[0] if donor_candidates else template_id
 
-        if (donor_pal and donor_pal.lower() == pal_id.lower()) or not donor_pal:
-            donor_pal = template_id
+        # -------------------------------------------------------------
+        # STEP 1: RESOLVE EXACT ACTION BLUEPRINT FROM DONOR BP WazaActionDeclarationMap
+        # -------------------------------------------------------------
+        action_asset_path = None
+        for cand in donor_candidates:
+            bp_rel = f"Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/{cand}/BP_{cand}.uasset"
+            extract_game_files(settings, [bp_rel, bp_rel.replace(".uasset", ".uexp"), f"*{cand}*BP_{cand}*.uasset"], temp_dir, format_type="raw")
 
-        skill_name_lower = (skill_name or "").lower()
-        donor_pal_lower = (donor_pal or "").lower()
-        clean_waza_lower = (clean_waza or "").lower()
-        waza_full = f"EPalWazaID::{clean_waza}"
-
-        has_matching_montage = False
-
-        for ak, av in anims_dict.items():
-            if not isinstance(av, dict):
-                continue
-            if av.get("enum_key") in (clean_waza, waza_full):
-                has_matching_montage = True
-                break
-
-            t_name = str(av.get("nla_track_name") or "").lower()
-            m_name = str(av.get("montage_asset") or "").lower()
-
-            if (skill_name_lower and skill_name_lower in t_name) or (skill_name_lower and skill_name_lower in m_name):
-                has_matching_montage = True
-                break
-
-            for notif in av.get("montage_notifies") or []:
-                if isinstance(notif, dict) and notif.get("WazaID") in (clean_waza, waza_full):
-                    has_matching_montage = True
-                    break
-            if has_matching_montage:
-                break
-
-        if not has_matching_montage:
-            if donor_pal_lower == (template_id or "").lower() and not has_anims:
-                has_matching_montage = True
-            else:
-                log(f"  ❌ Error: Unique attack '{clean_waza}' in learnset has no animation montages configured in animations/sidecar for '{pal_id}'.", "error")
-                return False
-
-        donor_extract_patterns = [
-            f"Pal/Content/Pal/Blueprint/Action/Waza/{donor_pal}/*{skill_name}*",
-            f"Pal/Content/Pal/Blueprint/Action/Waza/{donor_pal}/*",
-            f"Pal/Content/Pal/Blueprint/Action/*{donor_pal}*{skill_name}*",
-            f"Pal/Content/Pal/Animation/Character/*/{donor_pal}/*{skill_name}*"
-        ]
-        extract_game_files(settings, donor_extract_patterns, temp_dir, format_type="raw")
-
-        donor_action_uasset = None
-        for root, _, files in os.walk(temp_dir):
-            root_clean = root.lower().replace("\\", "/")
-            for f in files:
-                f_low = (f or "").lower()
-                if f_low.endswith(".uasset") and ("action" in f_low or "waza" in f_low):
-                    if skill_name_lower in f_low and (donor_pal_lower in f_low or f"/{donor_pal_lower}/" in root_clean):
-                        donor_action_uasset = os.path.join(root, f)
-                        break
-            if donor_action_uasset:
-                break
-
-        if not donor_action_uasset:
+            donor_bp_disk = None
             for root, _, files in os.walk(temp_dir):
                 for f in files:
-                    f_low = (f or "").lower()
-                    if f_low.endswith(".uasset") and ("action" in f_low or "waza" in f_low):
-                        if skill_name_lower in f_low:
-                            donor_action_uasset = os.path.join(root, f)
-                            break
-                if donor_action_uasset:
+                    if f.lower() == f"bp_{cand.lower()}.uasset":
+                        donor_bp_disk = os.path.join(root, f)
+                        break
+                if donor_bp_disk: break
+
+            if donor_bp_disk and os.path.exists(donor_bp_disk):
+                bp_json = donor_bp_disk.replace(".uasset", ".json")
+                if decompile_uasset(uasset_gui_exe, donor_bp_disk, bp_json, usmap_path):
+                    with open(bp_json, "r", encoding="utf-8-sig") as f_bp:
+                        bp_ast = json.load(f_bp)
+                    found_path = find_action_path_in_bp_ast(bp_ast, clean_waza)
+                    if found_path:
+                        action_asset_path = found_path
+                        donor_pal = cand
+                        break
+
+        if not action_asset_path:
+            log(f"  ❌ Error: Waza '{clean_waza}' not found in WazaActionDeclarationMap of donor Pal(s): {donor_candidates}.", "error")
+            return False
+
+        # -------------------------------------------------------------
+        # STEP 2: EXTRACT AND DECOMPILE THE EXACT ACTION BLUEPRINT
+        # -------------------------------------------------------------
+        clean_action_pkg = action_asset_path.split(".")[0].replace("/Game/", "Pal/Content/")
+        act_rel = f"{clean_action_pkg}.uasset"
+        extract_game_files(settings, [act_rel, act_rel.replace(".uasset", ".uexp")], temp_dir, format_type="raw")
+
+        donor_action_uasset = os.path.join(temp_dir, act_rel)
+        if not os.path.exists(donor_action_uasset):
+            for r, _, fs in os.walk(temp_dir):
+                if os.path.basename(act_rel).lower() in [f.lower() for f in fs]:
+                    donor_action_uasset = os.path.join(r, os.path.basename(act_rel))
                     break
 
         if not donor_action_uasset or not os.path.exists(donor_action_uasset):
-            log(f"  ❌ Error: Could not locate Action Blueprint for waza '{clean_waza}' (Donor: {donor_pal}).", "error")
+            log(f"  ❌ Error: Action Blueprint '{act_rel}' failed to extract from game paks.", "error")
             return False
 
         donor_action_name = os.path.splitext(os.path.basename(donor_action_uasset))[0]
@@ -607,75 +645,68 @@ def _process_unique_waza_actions(
         with open(donor_action_json, "r", encoding="utf-8") as f_daj:
             action_content = f_daj.read()
 
-        module_pattern = re.compile(rf'((?:/Game|Pal/Content)/Pal/Blueprint/Action/[\w/]*/(BP_UniqueSkillModule_[a-zA-Z0-9_]+))', re.IGNORECASE)
-        found_modules = set(module_pattern.findall(action_content))
-        for m_path, m_name in found_modules:
-            norm_m_path = m_path.replace("/Game/", "Pal/Content/")
-            extract_game_files(settings, [f"{norm_m_path}.uasset", f"{norm_m_path}.uexp"], temp_dir, format_type="raw")
-            mod_uasset = os.path.join(temp_dir, f"{norm_m_path}.uasset")
-            if os.path.exists(mod_uasset):
+        # -------------------------------------------------------------
+        # STEP 3: DISCOVER & DECOMPILE SKILL MODULES (e.g. FireKirin HorseTackle)
+        # -------------------------------------------------------------
+        module_matches = set(re.findall(r'(BP_UniqueSkillModule_[a-zA-Z0-9_]+)', action_content))
+        module_entries = [] # [(norm_m_path, clean_m_name, mod_json, m_content)]
+
+        for mod_name_raw in module_matches:
+            clean_m_name = mod_name_raw.replace("_C", "")
+            extract_game_files(settings, [f"*{clean_m_name}*.uasset", f"*{clean_m_name}*.uexp"], temp_dir, format_type="raw")
+
+            mod_uasset = None
+            for r, _, fs in os.walk(temp_dir):
+                for f in fs:
+                    if f.lower() == f"{clean_m_name.lower()}.uasset":
+                        mod_uasset = os.path.join(r, f)
+                        break
+                if mod_uasset: break
+
+            if mod_uasset and os.path.exists(mod_uasset):
+                actual_rel_pkg = os.path.splitext(os.path.relpath(mod_uasset, temp_dir).replace("\\", "/"))[0]
+                
+                # Only clone donor-specific modules (skip shared base modules like UniqueSkillModule/BP_UniqueSkillModule_Tackle)
+                is_donor_specific = (
+                    f"/{donor_pal.lower()}/" in actual_rel_pkg.lower() 
+                    or donor_pal.lower() in clean_m_name.lower()
+                )
+                if not is_donor_specific:
+                    continue
+
                 mod_json = mod_uasset.replace(".uasset", ".json")
-                decompile_uasset(uasset_gui_exe, mod_uasset, mod_json, usmap_path)
-                with open(mod_json, "r", encoding="utf-8") as f_mj:
-                    m_content = f_mj.read()
+                if decompile_uasset(uasset_gui_exe, mod_uasset, mod_json, usmap_path):
+                    with open(mod_json, "r", encoding="utf-8") as f_mj:
+                        m_content = f_mj.read()
+                    norm_m_path = f"Pal/Content/Pal/Blueprint/Action/Waza/{donor_pal}/{clean_m_name}"
+                    module_entries.append((norm_m_path, clean_m_name, mod_json, m_content))
 
-                new_mod_name = m_name.replace(donor_pal, pal_id)
-                new_mod_path_core = norm_m_path.replace(donor_pal, pal_id)
-
-                m_content = m_content.replace(donor_pal, pal_id)
-                m_content = m_content.replace(m_name, new_mod_name)
-
-                try:
-                    m_data = json.loads(m_content)
-                    if "FolderName" in m_data:
-                        m_data["FolderName"] = new_mod_path_core.replace("Pal/Content/", "/Game/")
-                    _collect_and_sync_namemap(m_data)
-                    with open(mod_json, "w", encoding="utf-8") as f_mj:
-                        json.dump(m_data, f_mj, indent=4)
-                except Exception:
-                    with open(mod_json, "w", encoding="utf-8") as f_mj:
-                        f_mj.write(m_content)
-
-                mod_dest_dir = os.path.join(cooked_base_content, os.path.dirname(new_mod_path_core.replace("Pal/Content/", "")))
-                os.makedirs(mod_dest_dir, exist_ok=True)
-                compile_uasset(uasset_gui_exe, mod_json, os.path.join(mod_dest_dir, f"{new_mod_name}.uasset"), usmap_path)
-                log(f"  ✓ Compiled Unique Skill Module: {new_mod_name}", "standard")
-
-        montage_remap = {}
-        montage_refs = re.findall(rf'AM_{donor_pal}_[a-zA-Z0-9_]+', action_content)
+        # -------------------------------------------------------------
+        # STEP 4: GATHER ALL MONTAGES FROM ACTION + MODULES
+        # -------------------------------------------------------------
+        combined_text = action_content + "\n" + "\n".join([m[3] for m in module_entries])
+        montage_refs = set(re.findall(rf'AM_{donor_pal}_[a-zA-Z0-9_]+', combined_text))
 
         if montage_refs:
             extract_patterns = []
-            for m in set(montage_refs):
+            for m in montage_refs:
                 extract_patterns.append(f"Pal/Content/Pal/Animation/Character/*/{donor_pal}/{m}.uasset")
                 extract_patterns.append(f"Pal/Content/Pal/Animation/Character/*/{donor_pal}/{m}.uexp")
+                extract_patterns.append(f"*{m}.uasset")
             extract_game_files(settings, extract_patterns, temp_dir, format_type="raw")
 
-        for d_am in set(montage_refs):
+        montage_remap = {}
+        for d_am in montage_refs:
             m_track = d_am.replace(f"AM_{donor_pal}_", "")
             target_am_name = f"AM_{pal_id}_{m_track}"
 
-            user_am_entry = None
-            for ak, av in anims_dict.items():
-                if isinstance(av, dict):
-                    user_m = av.get("montage_asset")
-                    user_t = av.get("nla_track_name")
-                    if user_m and str(user_m).lower() == target_am_name.lower():
-                        user_am_entry = av
-                        break
-                    if user_t and str(user_t).lower() == m_track.lower():
-                        user_am_entry = av
-                        break
-                    if av.get("enum_key") in (clean_waza, waza_full):
-                        user_m_str = str(user_m).lower() if user_m else ""
-                        user_t_str = str(user_t).lower() if user_t else ""
-                        if (m_track and m_track.lower() in user_m_str) or (m_track and m_track.lower() in user_t_str):
-                            user_am_entry = av
-                            break
-
-            if user_am_entry:
-                if user_am_entry.get("montage_asset"):
-                    target_am_name = user_am_entry["montage_asset"]
+            # Sidecar entry for this track (user-customized montage name, notifies, length)
+            sidecar_entry = next(
+                (av for av in anims_dict.values() if isinstance(av, dict) and av.get("nla_track_name") == m_track),
+                None
+            )
+            if sidecar_entry and sidecar_entry.get("montage_asset"):
+                target_am_name = sidecar_entry["montage_asset"]
 
             donor_am_uasset = None
             for root, _, files in os.walk(temp_dir):
@@ -684,11 +715,10 @@ def _process_unique_waza_actions(
                         donor_am_uasset = os.path.join(root, f)
                         break
                 if donor_am_uasset: break
-            
-            if donor_am_uasset:
+
+            if donor_am_uasset and os.path.exists(donor_am_uasset):
                 d_json = donor_am_uasset.replace(".uasset", ".json")
                 if decompile_uasset(uasset_gui_exe, donor_am_uasset, d_json, usmap_path):
-                    
                     patched_ast = patch_montage_ast(
                         seed_data=d_json,
                         template_id=donor_pal,
@@ -697,59 +727,165 @@ def _process_unique_waza_actions(
                         skeleton_guid=custom_guid if has_anims else vanilla_guid,
                         notifies=None
                     )
-                    
                     if "FolderName" in patched_ast:
                         patched_ast["FolderName"] = f"{v_new_anim_pkg}/{target_am_name}"
-                        
+
+                    # Sidecar is the source of truth: overlay user notifies & length onto the donor montage
+                    if sidecar_entry:
+                        side_notifies = sidecar_entry.get("montage_notifies")
+                        if side_notifies is None:
+                            side_notifies = [n for n in sidecar_entry.get("notifies", []) if n.get("Source") == "montage"]
+                        seq_name = sidecar_entry.get("sequence_asset") or f"AS_{pal_id}_{m_track}"
+                        seq_len = _read_cooked_sequence_length(cooked_anims_dir, seq_name, temp_dir, uasset_gui_exe, usmap_path)
+                        if not seq_len:
+                            seq_len = float(sidecar_entry.get("duration", 0.0) or 0.0) or None
+                        log(f"  [Unique Attacks] Merging sidecar into {target_am_name}: {len(side_notifies)} notify(s), length {seq_len if seq_len else 'donor'}", "standard")
+                        try:
+                            patched_ast = merge_sidecar_into_donor_montage(patched_ast, side_notifies, seq_len, log)
+                        except ValueError as e:
+                            log(f"  ❌ {target_am_name}: {e}", "error")
+                            return False
+
                     _collect_and_sync_namemap(patched_ast)
-                    
+
                     out_am_json = os.path.join(temp_dir, f"{target_am_name}_cloned.json")
-                    with open(out_am_json, "w", encoding="utf-8") as f:
-                        json.dump(patched_ast, f, indent=2)
-                        
+                    with open(out_am_json, "w", encoding="utf-8") as f_out:
+                        json.dump(patched_ast, f_out, indent=2)
+
                     dest_am = os.path.join(cooked_anims_dir, f"{target_am_name}.uasset")
                     if compile_uasset(uasset_gui_exe, out_am_json, dest_am, usmap_path):
-                        log(f"  ✓ Cloned & Retargeted Donor Montage: {target_am_name}", "success")
-                        if user_am_entry:
-                            user_am_entry["_is_cloned"] = True
-                    else:
-                        log(f"  ❌ Failed to compile Cloned Montage: {target_am_name}", "error")
-            else:
-                log(f"  ⚠️ Warning: Donor montage {d_am} not found on disk! It will be synthesized from scratch.", "warning")
+                        log(f"  ✓ Cloned Donor Montage: {target_am_name}", "success")
+                        for ak, av in anims_dict.items():
+                            if isinstance(av, dict) and av.get("nla_track_name") == m_track:
+                                av["_is_cloned"] = True
 
             montage_remap[d_am] = target_am_name
 
+        # -------------------------------------------------------------
+        # STEP 5: RETARGET & COMPILE MODULES FIRST
+        # -------------------------------------------------------------
+        for norm_m_path, clean_m_name, mod_json, m_content in module_entries:
+            new_mod_name = clean_m_name.replace(donor_pal, pal_id)
+            if new_mod_name == clean_m_name:
+                new_mod_name = f"{clean_m_name}_{pal_id}"
+            new_mod_path_core = f"Pal/Content/Pal/Blueprint/Action/Waza/{pal_id}/{new_mod_name}"
+            new_mod_game_pkg = f"/Game/Pal/Blueprint/Action/Waza/{pal_id}/{new_mod_name}"
+            old_mod_game_pkg = f"/Game/Pal/Blueprint/Action/Waza/{donor_pal}/{clean_m_name}"
+
+            # 1. Update module package and class declarations
+            m_content = m_content.replace(old_mod_game_pkg, new_mod_game_pkg)
+            m_content = m_content.replace(norm_m_path, new_mod_path_core)
+            m_content = m_content.replace(f"Default__{clean_m_name}_C", f"Default__{new_mod_name}_C")
+            m_content = m_content.replace(f"Default__{clean_m_name}", f"Default__{new_mod_name}")
+            m_content = m_content.replace(f"ExecuteUbergraph_{clean_m_name}", f"ExecuteUbergraph_{new_mod_name}")
+            m_content = m_content.replace(f"{clean_m_name}_C", f"{new_mod_name}_C")
+            m_content = m_content.replace(f'"{clean_m_name}"', f'"{new_mod_name}"')
+            m_content = m_content.replace(f"'{clean_m_name}'", f"'{new_mod_name}'")
+            m_content = re.sub(rf"(?<![A-Za-z0-9_]){clean_m_name}(?![A-Za-z0-9_])", new_mod_name, m_content)
+
+            # 2. Retarget montages: Replace full paths FIRST, then bare names
+            for d_am, target_am_name in montage_remap.items():
+                # Replace full directory paths (matching both donor and target montage name variants)
+                for pfx in ["/Game/Pal/Animation/Character", "Pal/Content/Pal/Animation/Character"]:
+                    dest_pkg = v_new_anim_pkg if pfx.startswith("/") else f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{target_anims_folder}"
+                    m_content = re.sub(
+                        rf"{pfx}/[\w\s_]+/{re.escape(donor_pal)}/{re.escape(d_am)}",
+                        f"{dest_pkg}/{target_am_name}",
+                        m_content
+                    )
+                    m_content = re.sub(
+                        rf"{pfx}/[\w\s_]+/{re.escape(donor_pal)}/{re.escape(target_am_name)}",
+                        f"{dest_pkg}/{target_am_name}",
+                        m_content
+                    )
+
+                # Replace bare names and quoted references
+                m_content = m_content.replace(f'"{d_am}"', f'"{target_am_name}"')
+                m_content = m_content.replace(f"'{d_am}'", f"'{target_am_name}'")
+                m_content = re.sub(rf"(?<![A-Za-z0-9_]){d_am}(?![A-Za-z0-9_])", target_am_name, m_content)
+
+            try:
+                m_data = json.loads(m_content)
+                if "FolderName" in m_data:
+                    m_data["FolderName"] = new_mod_game_pkg
+                if m_data.get("Exports") and len(m_data["Exports"]) > 0:
+                    if "Package" in m_data["Exports"][0]:
+                        m_data["Exports"][0]["Package"] = new_mod_path_core
+                _collect_and_sync_namemap(m_data)
+                with open(mod_json, "w", encoding="utf-8") as f_mj:
+                    json.dump(m_data, f_mj, indent=4)
+            except Exception:
+                with open(mod_json, "w", encoding="utf-8") as f_mj:
+                    f_mj.write(m_content)
+
+            mod_dest_dir = os.path.join(cooked_base_content, "Pal", "Blueprint", "Action", "Waza", pal_id)
+            os.makedirs(mod_dest_dir, exist_ok=True)
+            compile_uasset(uasset_gui_exe, mod_json, os.path.join(mod_dest_dir, f"{new_mod_name}.uasset"), usmap_path)
+            log(f"  ✓ Compiled Skill Module: {new_mod_name}", "standard")
+
+        # -------------------------------------------------------------
+        # STEP 6: RETARGET & COMPILE ACTION BLUEPRINT
+        # -------------------------------------------------------------
         new_action_name = donor_action_name.replace(donor_pal, pal_id)
+        if new_action_name == donor_action_name:
+            new_action_name = f"{donor_action_name}_{pal_id}"
         new_action_pkg = f"/Game/Pal/Blueprint/Action/Waza/{pal_id}/{new_action_name}"
         new_action_class = f"{new_action_name}_C"
+        new_action_path_core = f"Pal/Content/Pal/Blueprint/Action/Waza/{pal_id}/{new_action_name}"
 
         donor_action_pkg = f"/Game/Pal/Blueprint/Action/Waza/{donor_pal}/{donor_action_name}"
-        action_content = action_content.replace(donor_action_pkg, new_action_pkg)
+        donor_action_raw_pkg = f"Pal/Content/Pal/Blueprint/Action/Waza/{donor_pal}/{donor_action_name}"
 
+        action_content = action_content.replace(donor_action_pkg, new_action_pkg)
+        action_content = action_content.replace(donor_action_raw_pkg, new_action_path_core)
         action_content = action_content.replace(f"Default__{donor_action_name}_C", f"Default__{new_action_name}_C")
         action_content = action_content.replace(f"Default__{donor_action_name}", f"Default__{new_action_name}")
         action_content = action_content.replace(f"ExecuteUbergraph_{donor_action_name}", f"ExecuteUbergraph_{new_action_name}")
-        action_content = action_content.replace(f"{donor_action_name}_C", f"{new_action_class}")
+        action_content = action_content.replace(f"{donor_action_name}_C", new_action_class)
         action_content = re.sub(rf"(?<![A-Za-z0-9_]){donor_action_name}(?![A-Za-z0-9_])", new_action_name, action_content)
 
+        # Retarget montage references in action: Replace full paths FIRST, then bare names
         for d_am, target_am_name in montage_remap.items():
+            for pfx in ["/Game/Pal/Animation/Character", "Pal/Content/Pal/Animation/Character"]:
+                dest_pkg = v_new_anim_pkg if pfx.startswith("/") else f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{target_anims_folder}"
+                action_content = re.sub(
+                    rf"{pfx}/[\w\s_]+/{re.escape(donor_pal)}/{re.escape(d_am)}",
+                    f"{dest_pkg}/{target_am_name}",
+                    action_content
+                )
+                action_content = re.sub(
+                    rf"{pfx}/[\w\s_]+/{re.escape(donor_pal)}/{re.escape(target_am_name)}",
+                    f"{dest_pkg}/{target_am_name}",
+                    action_content
+                )
+
             action_content = action_content.replace(f'"{d_am}"', f'"{target_am_name}"')
             action_content = action_content.replace(f"'{d_am}'", f"'{target_am_name}'")
-            action_content = action_content.replace(
-                f"/Game/Pal/Animation/Character/Monster/{donor_pal}/{d_am}",
-                f"{v_new_anim_pkg}/{target_am_name}"
-            )
-            action_content = action_content.replace(
-                f"Pal/Content/Pal/Animation/Character/Monster/{donor_pal}/{d_am}",
-                f"Pal/Content/Pal/Animation/Character/{cat_sanitized}/{target_anims_folder}/{target_am_name}"
-            )
             action_content = re.sub(rf"(?<![A-Za-z0-9_]){d_am}(?![A-Za-z0-9_])", target_am_name, action_content)
 
-        for m_path, m_name in found_modules:
-            new_mod_name = m_name.replace(donor_pal, pal_id)
-            new_mod_pkg = m_path.replace("/Game/", "").replace("Pal/Content/", "").replace(donor_pal, pal_id)
-            action_content = action_content.replace(m_name, new_mod_name)
-            action_content = action_content.replace(m_path, f"/Game/{new_mod_pkg}")
+        # Retarget module references in action: BOTH PACKAGES AND NAMES!
+        for norm_m_path, clean_m_name, _, _ in module_entries:
+            new_mod_name = clean_m_name.replace(donor_pal, pal_id)
+            if new_mod_name == clean_m_name:
+                new_mod_name = f"{clean_m_name}_{pal_id}"
+
+            old_mod_game_pkg = f"/Game/Pal/Blueprint/Action/Waza/{donor_pal}/{clean_m_name}"
+            new_mod_game_pkg = f"/Game/Pal/Blueprint/Action/Waza/{pal_id}/{new_mod_name}"
+            old_mod_raw_pkg = f"Pal/Content/Pal/Blueprint/Action/Waza/{donor_pal}/{clean_m_name}"
+            new_mod_raw_pkg = f"Pal/Content/Pal/Blueprint/Action/Waza/{pal_id}/{new_mod_name}"
+
+            # 1. Full Package & Class references (fixes SkillModuleClass.ObjectPath!)
+            action_content = action_content.replace(f"{old_mod_game_pkg}.{clean_m_name}_C", f"{new_mod_game_pkg}.{new_mod_name}_C")
+            action_content = action_content.replace(old_mod_game_pkg, new_mod_game_pkg)
+            action_content = action_content.replace(old_mod_raw_pkg, new_mod_raw_pkg)
+
+            # 2. Class, Default Object, and bare name references
+            action_content = action_content.replace(f"Default__{clean_m_name}_C", f"Default__{new_mod_name}_C")
+            action_content = action_content.replace(f"Default__{clean_m_name}", f"Default__{new_mod_name}")
+            action_content = action_content.replace(f"{clean_m_name}_C", f"{new_mod_name}_C")
+            action_content = action_content.replace(f'"{clean_m_name}"', f'"{new_mod_name}"')
+            action_content = action_content.replace(f"'{clean_m_name}'", f"'{new_mod_name}'")
+            action_content = re.sub(rf"(?<![A-Za-z0-9_]){clean_m_name}(?![A-Za-z0-9_])", new_mod_name, action_content)
 
         try:
             act_data = json.loads(action_content)
@@ -763,14 +899,14 @@ def _process_unique_waza_actions(
                 f_daj.write(action_content)
 
         dest_action_uasset = os.path.join(action_dest_dir, f"{new_action_name}.uasset")
-        compile_ok = compile_uasset(uasset_gui_exe, donor_action_json, dest_action_uasset, usmap_path)
-        if compile_ok and os.path.exists(dest_action_uasset):
+        if compile_uasset(uasset_gui_exe, donor_action_json, dest_action_uasset, usmap_path):
             log(f"  ✓ Compiled Action Blueprint: {new_action_name}.uasset", "success")
             waza_declarations_to_add[clean_waza] = (new_action_pkg, new_action_class)
         else:
             log(f"  ❌ Failed to compile Action Blueprint: {new_action_name}", "error")
             return False
 
+    # Bind the compiled actions into the Pal's WazaActionDeclarationMap
     for waza_name, (act_pkg, act_cls) in waza_declarations_to_add.items():
         waza_enum = f"EPalWazaID::{waza_name}"
         _inject_waza_declaration(base_json_data, waza_enum, act_pkg, act_cls)
@@ -1375,8 +1511,19 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                 t_name = anim_meta.get("nla_track_name") or extract_track_name(m_asset)
                 s_asset = anim_meta.get("sequence_asset") or f"AS_{pal_id}_{t_name}"
                 
+                seq_meta = custom_anims.get("anims", {}).get(s_asset)
+                if not seq_meta:
+                    seq_meta = next((v for v in custom_anims.get("anims", {}).values() if v.get("sequence_asset") == s_asset), None)
+
                 notifies = anim_meta.get("montage_notifies") or anim_meta.get("notifies") or []
-                duration = float(anim_meta.get("duration", 0.0))
+                
+                # ROOT FIX: Pull duration from sequence
+                duration = 0.0
+                if seq_meta:
+                    duration = float(seq_meta.get("duration", 0.0))
+                if duration <= 0.0:
+                    duration = float(anim_meta.get("duration", 0.0))
+                    
                 if duration <= 0.0:
                     max_time = max([float(n.get("Time", 0.0)) + float(n.get("Duration", 0.0)) for n in notifies], default=1.5)
                     duration = max(2.0, max_time + 0.5)

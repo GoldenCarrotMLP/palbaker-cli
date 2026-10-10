@@ -12,5 +12,11 @@
             "Type": "Editor",
             "LoadingPhase": "PostEngineInit"
         }
+    ],
+    "Plugins": [
+        {
+            "Name": "IKRig",
+            "Enabled": true
+        }
     ]
 }

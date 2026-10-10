@@ -144,5 +144,19 @@
       "montage_asset": "AM_BlackPuppy_Kamitsuki",
       "clean_track": "Kamitsuki"
     }
+  ],
+  "Unique_FireKirin_Tackle": [
+    {
+      "montage_asset": "AM_FireKirin_Tossin_End",
+      "clean_track": "Tossin_End"
+    },
+    {
+      "montage_asset": "AM_FireKirin_Tossin_Loop",
+      "clean_track": "Tossin_Loop"
+    },
+    {
+      "montage_asset": "AM_FireKirin_Tossin_Start",
+      "clean_track": "Tossin_Start"
+    }
   ]
 }

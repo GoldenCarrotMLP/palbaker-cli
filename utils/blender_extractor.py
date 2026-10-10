@@ -71,7 +71,7 @@ def clean_track_name_simple(name: str, base_pal: str = "", mod_name: str = "") -
     prefixes = []
     if mod_name: prefixes.extend([f"AM_{mod_name}_", f"AS_{mod_name}_", f"{mod_name}_"])
     if base_pal: prefixes.extend([f"AM_{base_pal}_", f"AS_{base_pal}_", f"{base_pal}_"])
-    prefixes.extend(["AM_", "AS_"])
+    prefixes.extend(["Armature_", "Anim_Armature_", "AM_", "AS_"])
     prefixes.sort(key=len, reverse=True)
 
     changed = True
@@ -83,11 +83,172 @@ def clean_track_name_simple(name: str, base_pal: str = "", mod_name: str = "") -
                 changed = True
                 break
 
+    # Strip donor Pal prefixes if imported from another species (e.g. AS_FireKirin_Tossin_Start -> Tossin_Start)
+    m_donor = re.match(r'^(?:AM|AS)_[a-zA-Z0-9]+?_(.+)$', clean)
+    if m_donor:
+        clean = m_donor.group(1)
+
     return clean
+
+def find_action_in_blender(track_name: str, seq_asset: str = "", base_pal: str = "", mod_name: str = ""):
+    """Finds an Action object in bpy.data.actions strictly matching names beginning with AS_."""
+    if not track_name and not seq_asset:
+        return None
+
+    # Only look for candidate action names that begin with AS_
+    candidates = [c for c in [seq_asset, f"AS_{mod_name}_{track_name}", f"AS_{base_pal}_{track_name}"] if c and c.upper().startswith("AS_")]
+    for c in candidates:
+        act = bpy.data.actions.get(c)
+        if act and act.name.upper().startswith("AS_"):
+            return act
+
+    cand_lowers = [c.lower() for c in candidates]
+    for act in bpy.data.actions:
+        if not act.name.upper().startswith("AS_"):
+            continue
+        clean_name = re.sub(r'\.\d+$', '', act.name)
+        if clean_name.lower() in cand_lowers or act.name.lower() in cand_lowers:
+            return act
+
+    track_lower = track_name.lower()
+    for act in bpy.data.actions:
+        if act.name.startswith(".") or "[action stash]" in act.name.lower() or not act.name.upper().startswith("AS_"):
+            continue
+        if clean_track_name_simple(act.name, base_pal, mod_name).lower() == track_lower:
+            return act
+        if act.name.lower().endswith(f"_{track_lower}"):
+            return act
+
+    return None
+
+def is_action_empty(act) -> bool:
+    """Version-safe checker that works across Blender 3.x, 4.x, and 5.x Slotted Actions."""
+    if not act:
+        return True
+    if hasattr(act, "is_empty"):
+        try:
+            if act.is_empty:
+                return True
+        except Exception:
+            pass
+    # Blender < 5.0 Legacy Action API
+    if hasattr(act, "fcurves"):
+        try:
+            return len(act.fcurves) == 0
+        except Exception:
+            pass
+    # Blender 5.0+ Slotted / Layered Action API
+    if hasattr(act, "layers"):
+        try:
+            has_curves = False
+            for layer in getattr(act, "layers", []):
+                for strip in getattr(layer, "strips", []):
+                    for cb in getattr(strip, "channelbags", []):
+                        if hasattr(cb, "fcurves") and len(cb.fcurves) > 0:
+                            has_curves = True
+                            break
+            if not has_curves and hasattr(act, "slots") and len(act.slots) == 0:
+                return True
+        except Exception:
+            pass
+    return False
 
 def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, base_pal: str = "") -> dict | None:
     existing_custom = existing_sidecar_data.get("custom_animations", {})
     was_active = existing_custom.get("is_active", False)
+
+    # Fallback search if Armature object is named differently
+    if not arm_obj or arm_obj.type != 'ARMATURE':
+        arm_obj = next((obj for obj in bpy.data.objects if obj.type == 'ARMATURE'), None)
+
+    # 0. Synchronize all standalone and active actions into muted NLA tracks so nothing gets orphaned
+    tracks_modified = False
+    if arm_obj:
+        if not arm_obj.animation_data:
+            arm_obj.animation_data_create()
+
+        # If an active action is currently assigned on the armature, stash it to an NLA track ONLY if it starts with AS_
+        if arm_obj.animation_data.action:
+            active_act = arm_obj.animation_data.action
+            if (
+                not active_act.name.startswith(".")
+                and "[action stash]" not in active_act.name.lower()
+                and active_act.name.upper().startswith("AS_")
+            ):
+                act_track = clean_track_name_simple(active_act.name, base_pal, mod_name)
+                if act_track:
+                    nla_track = arm_obj.animation_data.nla_tracks.get(act_track)
+                    if not nla_track:
+                        nla_track = arm_obj.animation_data.nla_tracks.new()
+                        nla_track.name = act_track
+                        tracks_modified = True
+                    act_strip = next((s for s in nla_track.strips if s.action == active_act), None)
+                    if not act_strip:
+                        for old_strip in list(nla_track.strips):
+                            nla_track.strips.remove(old_strip)
+                        start_f = int(round(active_act.frame_range[0]))
+                        try:
+                            nla_track.strips.new(act_track, start_f, active_act)
+                            tracks_modified = True
+                        except Exception as e:
+                            print(f"[PalBaker Extractor] Warning creating NLA strip for active action {act_track}: {e}", flush=True)
+                    nla_track.mute = True
+
+        # Check all actions in bpy.data.actions and ensure they have an NLA track (STRICTLY ONLY actions starting with AS_)
+        for act in bpy.data.actions:
+            if (
+                not act
+                or act.name.startswith(".")
+                or "[action stash]" in act.name.lower()
+                or not act.name.upper().startswith("AS_")
+            ):
+                continue
+            if is_action_empty(act):
+                continue
+
+            clean_t = clean_track_name_simple(act.name, base_pal, mod_name)
+            if not clean_t:
+                continue
+
+            nla_track = None
+            for t in arm_obj.animation_data.nla_tracks:
+                if t.name == clean_t or clean_track_name_simple(t.name, base_pal, mod_name).lower() == clean_t.lower():
+                    nla_track = t
+                    break
+                if any(strip.action == act for strip in t.strips):
+                    nla_track = t
+                    break
+
+            if not nla_track:
+                try:
+                    nla_track = arm_obj.animation_data.nla_tracks.new()
+                    nla_track.name = clean_t
+                    tracks_modified = True
+                except Exception:
+                    pass
+
+            if nla_track:
+                act_strip = next((s for s in nla_track.strips if s.action == act), None)
+                if not act_strip:
+                    try:
+                        for old_strip in list(nla_track.strips):
+                            nla_track.strips.remove(old_strip)
+                        start_f = int(round(act.frame_range[0]))
+                        nla_track.strips.new(clean_t, start_f, act)
+                        tracks_modified = True
+                    except Exception as e:
+                        print(f"[PalBaker Extractor] Warning creating NLA strip for {clean_t}: {e}", flush=True)
+                nla_track.mute = True
+
+        # Unassign active action so NLA evaluation runs cleanly
+        arm_obj.animation_data.action = None
+
+        if tracks_modified and bpy.data.filepath and os.path.exists(bpy.data.filepath):
+            try:
+                bpy.ops.wm.save_mainfile()
+                print(f"[PalBaker Extractor] Synchronized new NLA tracks into {os.path.basename(bpy.data.filepath)}.", flush=True)
+            except Exception:
+                pass
 
     # Filter out Blender internal stash / dummy tracks AND any rogue AM_ tracks
     valid_tracks = []
@@ -101,7 +262,7 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 continue
             valid_tracks.append(t)
 
-    if not valid_tracks and not existing_custom.get("anims"):
+    if not valid_tracks and not existing_custom.get("anims") and len(bpy.data.actions) == 0:
         return {
             "is_active": False,
             "anims": {},
@@ -166,50 +327,93 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
         saved_is_modified = prev_entry.get("is_modified", False)
         saved_root_motion = prev_entry.get("enable_root_motion", False)
 
-        # 1. Pattern: Random Rests
-        if re.match(r'^Rest_?\d+$', clean_track, re.IGNORECASE) or "rest0" in clean_track.lower():
-            category = "RandomRest"
-            enum_key = f"Rest_{clean_track}"
-            display_name = f"Idle/Rest: {clean_track}"
-            rest_props = saved_rest_props or {
-                "weight": 1.0,
-                "loop_min": 1,
-                "loop_max": 2,
-                "after_idle_time": 2.0
-            }
-            new_anims[asset_key] = {
-                "category": category,
-                "enum_key": enum_key,
-                "display_name": display_name,
-                "montage_asset": montage_asset,
-                "sequence_asset": final_sequence_asset,
-                "nla_track_name": clean_track,
-                "in_nla": True,
-                "is_modified": saved_is_modified,
-                "notifies": saved_notifies,
-                "sequence_notifies": saved_seq_notifies,
-                "montage_notifies": saved_montage_notifies,
-                "rest_props": rest_props,
-                "enable_root_motion": saved_root_motion
-            }
+        # -------------------------------------------------------------
+        # EXACT BLENDER KEYFRAME DURATION EXTRACTION
+        # -------------------------------------------------------------
+        track_duration = 0.0
+        track_frames = 0
+        scene_fps = bpy.context.scene.render.fps / (bpy.context.scene.render.fps_base or 1.0) or 30.0
 
-        # 2. Pattern: BlendSpace Samples
-        elif clean_track.lower() in ["idle", "walk", "run", "idle_swim", "transport", "move", "swim"]:
-            category = "BlendSpaceSample"
-            new_anims[asset_key] = {
-                "category": category,
-                "enum_key": f"BS_Move_{clean_track}",
-                "display_name": f"BlendSpace: {clean_track}",
-                "sequence_asset": final_sequence_asset,
-                "montage_asset": None,
-                "nla_track_name": clean_track,
-                "in_nla": True,
-                "is_modified": saved_is_modified,
-                "notifies": [],
-                "sequence_notifies": [],
-                "montage_notifies": [],
-                "enable_root_motion": saved_root_motion
+        target_act = None
+        if track.strips:
+            strip = track.strips[0]
+            target_act = strip.action
+            if not target_act:
+                track_frames = max(1, int(round(strip.frame_end - strip.frame_start)))
+                track_duration = round(float(track_frames / scene_fps), 4)
+
+        if not target_act:
+            target_act = find_action_in_blender(clean_track, default_sequence_asset, base_pal, mod_name)
+
+        if target_act:
+            f_start = target_act.frame_range[0]
+            f_end = target_act.frame_range[1]
+            track_frames = max(1, int(round(f_end - f_start)))
+            track_duration = round(float(track_frames / scene_fps), 4)
+
+        # Fallback to existing saved values if action cannot be measured
+        final_duration = track_duration if track_duration > 0.0 else float(prev_entry.get("duration", 0.0) or prev_entry.get("required_duration", 0.0))
+        final_frames = track_frames if track_frames > 0 else int(prev_entry.get("frame_count", 0) or prev_entry.get("required_frames", 0))
+
+        # Preserve user-assigned category, enum_key, display_name if already set
+        category = prev_entry.get("category")
+        enum_key = prev_entry.get("enum_key")
+        display_name = prev_entry.get("display_name")
+        action_bp = prev_entry.get("action_bp")
+
+        if not category or not enum_key:
+            # 1. Pattern: Random Rests
+            if re.match(r'^Rest_?\d+$', clean_track, re.IGNORECASE) or "rest0" in clean_track.lower():
+                category = "RandomRest"
+                enum_key = f"Rest_{clean_track}"
+                display_name = f"Idle/Rest: {clean_track}"
+            # 2. Pattern: BlendSpace Samples
+            elif clean_track.lower() in ["idle", "walk", "run", "idle_swim", "transport", "move", "swim"]:
+                category = "BlendSpaceSample"
+                enum_key = f"BS_Move_{clean_track}"
+                display_name = f"BlendSpace: {clean_track}"
+            # 3. Pattern: Canonical Map Lookup
+            elif clean_track in mapping_cache:
+                meta = mapping_cache[clean_track]
+                category = meta.get("category", "GeneralMontage")
+                enum_key = meta.get("enum_key", f"EPalGeneralMontageType::{clean_track}")
+                display_name = meta.get("display_name", f"Montage: {clean_track}")
+            # 4. Pattern: Unique Attack Waza Skills (includes tossin/charge/tackle)
+            elif any(kw in clean_track.lower() for kw in ["unique", "skill", "attack", "waza", "machete", "tackle", "punch", "kick", "tossin", "charge", "dash", "bite", "strike"]):
+                category = "UniqueAttack"
+                enum_key = f"EPalWazaID::Unique_{mod_name}_{clean_track}"
+                display_name = f"Unique: {clean_track.replace('_', ' ')}"
+            # 5. Fallback: General Montage
+            else:
+                category = "GeneralMontage"
+                enum_key = f"EPalGeneralMontageType::{clean_track}"
+                display_name = f"Montage: {clean_track.replace('_', ' ')}"
+
+        entry_data = {
+            "category": category,
+            "enum_key": enum_key,
+            "display_name": display_name or clean_track.replace('_', ' '),
+            "montage_asset": prev_entry.get("montage_asset") or montage_asset,
+            "sequence_asset": final_sequence_asset,
+            "nla_track_name": clean_track,
+            "in_nla": True,
+            "is_modified": saved_is_modified,
+            "notifies": saved_notifies,
+            "sequence_notifies": saved_seq_notifies,
+            "montage_notifies": saved_montage_notifies,
+            "enable_root_motion": saved_root_motion,
+            "duration": final_duration,
+            "frame_count": final_frames
+        }
+
+        if category == "RandomRest":
+            entry_data["rest_props"] = saved_rest_props or {
+                "weight": 1.0, "loop_min": 1, "loop_max": 2, "after_idle_time": 2.0
             }
+        elif category == "UniqueAttack":
+            entry_data["action_bp"] = action_bp or f"BP_Action_Unique_{mod_name}_{clean_track}"
+        elif category == "BlendSpaceSample":
+            entry_data["montage_asset"] = None
             if "Move" not in blend_spaces:
                 blend_spaces["Move"] = {
                     "enum_key": "EPalGeneralBlendSpaceType::GeneralMove",
@@ -233,74 +437,73 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
                 existing_sample["in_nla"] = True
                 existing_sample["animation"] = final_sequence_asset
 
-        # 3. Pattern: Canonical Map Lookup
-        elif clean_track in mapping_cache:
-            meta = mapping_cache[clean_track]
-            category = meta.get("category", "GeneralMontage")
-            enum_key = meta.get("enum_key", f"EPalGeneralMontageType::{clean_track}")
-            display_name = meta.get("display_name", f"Montage: {clean_track}")
+        new_anims[asset_key] = entry_data
 
-            new_anims[asset_key] = {
-                "category": category,
-                "enum_key": enum_key,
-                "display_name": display_name,
-                "montage_asset": montage_asset,
-                "sequence_asset": final_sequence_asset,
-                "nla_track_name": clean_track,
-                "in_nla": True,
-                "is_modified": saved_is_modified,
-                "notifies": saved_notifies,
-                "sequence_notifies": saved_seq_notifies,
-                "montage_notifies": saved_montage_notifies,
-                "enable_root_motion": saved_root_motion
-            }
-
-        # 4. Pattern: Unique Attack Waza Skills
-        elif any(kw in clean_track.lower() for kw in ["unique", "skill", "attack", "waza", "machete", "tackle", "punch", "kick"]):
-            new_anims[asset_key] = {
-                "category": "UniqueAttack",
-                "enum_key": f"EPalWazaID::Unique_{mod_name}_{clean_track}",
-                "display_name": f"Unique: {clean_track.replace('_', ' ')}",
-                "montage_asset": montage_asset,
-                "sequence_asset": final_sequence_asset,
-                "action_bp": f"BP_Action_Unique_{mod_name}_{clean_track}",
-                "nla_track_name": clean_track,
-                "in_nla": True,
-                "is_modified": saved_is_modified,
-                "notifies": saved_notifies,
-                "sequence_notifies": saved_seq_notifies,
-                "montage_notifies": saved_montage_notifies,
-                "enable_root_motion": saved_root_motion
-            }
-
-        # 5. Fallback: General Montage
-        else:
-            new_anims[asset_key] = {
-                "category": "GeneralMontage",
-                "enum_key": f"EPalGeneralMontageType::{clean_track}",
-                "display_name": f"Montage: {clean_track.replace('_', ' ')}",
-                "montage_asset": montage_asset,
-                "sequence_asset": final_sequence_asset,
-                "nla_track_name": clean_track,
-                "in_nla": True,
-                "is_modified": saved_is_modified,
-                "notifies": saved_notifies,
-                "sequence_notifies": saved_seq_notifies,
-                "montage_notifies": saved_montage_notifies,
-                "enable_root_motion": saved_root_motion
-            }
-
-
-    # PRESERVE USER-MODIFIED ENTRIES THAT ARE NOT CURRENTLY IN BLENDER NLA TRACKS
+    # PRESERVE USER-MODIFIED ENTRIES & HARVEST ANY UNMAPPED BLENDER ACTIONS
     for old_k, old_v in existing_anims.items():
         if not isinstance(old_v, dict):
             continue
-        old_track = old_v.get("nla_track_name") or ""
+        old_track = old_v.get("nla_track_name") or clean_track_name_simple(old_k, base_pal, mod_name)
         as_key = f"AS_{mod_name}_{old_track}" if old_track else old_k
         if as_key not in new_anims and old_k not in new_anims:
             preserved = dict(old_v)
-            preserved["in_nla"] = False
+            
+            # Resolve duration from any matching Blender action (whether pushed to NLA or not)
+            matched_act = find_action_in_blender(old_track, old_v.get("sequence_asset", as_key), base_pal, mod_name)
+            if matched_act:
+                scene_fps = bpy.context.scene.render.fps / (bpy.context.scene.render.fps_base or 1.0) or 30.0
+                f_start = matched_act.frame_range[0]
+                f_end = matched_act.frame_range[1]
+                act_frames = max(1, int(round(f_end - f_start)))
+                act_dur = round(float(act_frames / scene_fps), 4)
+                preserved["duration"] = act_dur
+                preserved["frame_count"] = act_frames
+                preserved["in_nla"] = True
+                print(f"[PalBaker Extractor] Resolved duration from Blender action '{matched_act.name}' for '{as_key}': {act_dur}s ({act_frames} frames)", flush=True)
+            else:
+                preserved["in_nla"] = False
+                if not preserved.get("duration") and preserved.get("required_duration"):
+                    preserved["duration"] = float(preserved["required_duration"])
+                    preserved["frame_count"] = int(preserved.get("required_frames", round(preserved["duration"] * 30)))
+
             new_anims[as_key] = preserved
+
+    # HARVEST ANY REMAINING ACTIONS IN BLENDER (STRICTLY ONLY actions starting with AS_)
+    scene_fps = bpy.context.scene.render.fps / (bpy.context.scene.render.fps_base or 1.0) or 30.0
+    for act in bpy.data.actions:
+        if (
+            not act
+            or act.name.startswith(".")
+            or "[action stash]" in act.name.lower()
+            or not act.name.upper().startswith("AS_")
+        ):
+            continue
+        if is_action_empty(act):
+            continue
+        clean_t = clean_track_name_simple(act.name, base_pal, mod_name)
+        as_key = f"AS_{mod_name}_{clean_t}"
+        if as_key not in new_anims and clean_t not in [v.get("nla_track_name") for v in new_anims.values() if isinstance(v, dict)]:
+            f_start = act.frame_range[0]
+            f_end = act.frame_range[1]
+            act_frames = max(1, int(round(f_end - f_start)))
+            act_dur = round(float(act_frames / scene_fps), 4)
+            new_anims[as_key] = {
+                "category": "GeneralMontage",
+                "enum_key": f"EPalGeneralMontageType::{clean_t}",
+                "display_name": f"Montage: {clean_t.replace('_', ' ')}",
+                "montage_asset": f"AM_{mod_name}_{clean_t}",
+                "sequence_asset": as_key,
+                "nla_track_name": clean_t,
+                "in_nla": True,
+                "is_modified": True,
+                "notifies": [],
+                "sequence_notifies": [],
+                "montage_notifies": [],
+                "enable_root_motion": False,
+                "duration": act_dur,
+                "frame_count": act_frames
+            }
+            print(f"[PalBaker Extractor] Discovered standalone Blender action '{act.name}' -> added '{as_key}' ({act_dur}s)", flush=True)
 
     has_valid_tracks = len(new_anims) > 0
     final_is_active = was_active and has_valid_tracks
@@ -310,6 +513,7 @@ def harvest_nla_animations(arm_obj, mod_name: str, existing_sidecar_data: dict, 
         "anims": new_anims,
         "blend_spaces": blend_spaces
     }
+    
 def extract_metadata(output_path: str, fbx_path: str = None):
     print(f"\n[PalBaker Extractor] Starting metadata extraction for {os.path.basename(output_path)}...", flush=True)
     working_dir = os.path.dirname(output_path)
@@ -503,7 +707,7 @@ def extract_metadata(output_path: str, fbx_path: str = None):
     if custom_anims_data:
         layout_data["custom_animations"] = custom_anims_data
 
-    for k in ["Gender", "IsRarePal", "SkinName", "ReqTrait", "PrefTrait", "MaterialOverrides", "MorphTarget", "preserve_materials", "push_materials", "push_textures", "push_animbp", "active_vanilla_replacer", "custom_blacklist"]:
+    for k in ["Gender", "IsRarePal", "SkinName", "ReqTrait", "PrefTrait", "MaterialOverrides", "MorphTarget", "ShapeKeys", "preserve_materials", "push_materials", "push_textures", "push_animbp", "active_vanilla_replacer", "custom_blacklist"]:
         if k in existing_data and k not in layout_data:
             layout_data[k] = existing_data[k]
 
@@ -515,15 +719,6 @@ def extract_metadata(output_path: str, fbx_path: str = None):
         translator.export_fbx(fbx_path, "Armature")
         
     print("[PalBaker Extractor] Extraction routine complete!\n", flush=True)
-
-if __name__ == "__main__":
-    try:
-        out_json, fbx_out = parse_args()
-        extract_metadata(out_json, fbx_out)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
 
 if __name__ == "__main__":
     try:

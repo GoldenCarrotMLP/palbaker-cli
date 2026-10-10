@@ -199,7 +199,17 @@ class FeatureDependencyValidator:
             def check_anim(feature_name: str, required_anim: str, required_notifies: list):
                 anim_node = next((v for v in user_anims.values() if v.get("nla_track_name", "").lower() == required_anim.lower()), None)
                 
-                if not anim_node or not anim_node.get("in_nla"):
+                # ROOT FIX: Also check if the sequence itself is in NLA if it's a shared track
+                seq_asset = anim_node.get("sequence_asset") if anim_node else None
+                seq_node = user_anims.get(seq_asset) if seq_asset else None
+                if not seq_node and seq_asset:
+                    seq_node = next((v for v in user_anims.values() if v.get("sequence_asset") == seq_asset or v.get("nla_track_name") == seq_asset.replace(f"AS_{pal_data.get('CharacterID', '')}_", "")), None)
+
+                is_active = False
+                if anim_node and anim_node.get("in_nla"): is_active = True
+                if seq_node and seq_node.get("in_nla"): is_active = True
+
+                if not anim_node or not is_active:
                     missing.append({
                         "feature": feature_name,
                         "missing_type": "animation",
@@ -208,9 +218,13 @@ class FeatureDependencyValidator:
                     })
                     return
 
-                raw_notifies = (
-                    anim_node.get("sequence_notifies", []) + anim_node.get("montage_notifies", [])
-                ) if ("sequence_notifies" in anim_node or "montage_notifies" in anim_node) else anim_node.get("notifies", [])
+                # ROOT FIX: Pull sequence notifies from the linked sequence entry!
+                seq_notifies = seq_node.get("sequence_notifies", []) if seq_node else anim_node.get("sequence_notifies", [])
+                mont_notifies = anim_node.get("montage_notifies", [])
+                raw_notifies = seq_notifies + mont_notifies
+                if not raw_notifies:
+                    raw_notifies = anim_node.get("notifies", [])
+
                 user_notifies = [n.get("Name") for n in raw_notifies]
                 for req_notify in required_notifies:
                     if req_notify not in user_notifies:
