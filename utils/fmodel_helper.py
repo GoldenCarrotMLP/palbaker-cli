@@ -17,6 +17,8 @@ def normalize_ue_package_path(raw_path: str) -> str:
         return "/Game/" + clean[len("Pal/Content/"):]
     elif clean.startswith("Game/"):
         return "/" + clean
+    elif clean.startswith("Engine/Content/"):
+        return "/Engine/" + clean[len("Engine/Content/"):]
     elif clean.startswith("Engine/"):
         return "/" + clean
     elif not clean.startswith("/"):
@@ -622,3 +624,50 @@ def resolve_and_copy_material_json(material_name: str, fmodel_dir: str, fmodel_r
     if not json_path or not os.path.exists(json_path):
         print(f"  [Failure] Could not resolve JSON for material: {material_name}", flush=True)
         return None
+
+VANILLA_EFFECT_TEXTURE_ROOT = "/Game/Pal/Effect/Textures/"
+
+def collect_vanilla_effect_textures(sidecar_paths: list[str], project_dir: str, fmodel_root: str, settings: dict) -> list[dict]:
+    """
+    Vanilla VFX textures (/Game/Pal/Effect/Textures/*) are no longer shipped with the plugin.
+    Finds the ones referenced by these sidecars that are missing from the UE project, extracts their
+    PNGs from the game paks into the FModel export tree, and returns import entries for ue_import.py.
+    They are blacklisted from packaging (blacklist_helper.BLACKLIST_PREFIXES); the game provides them at runtime.
+    """
+    referenced = set()
+    for sc_path in sidecar_paths:
+        if not os.path.exists(sc_path):
+            continue
+        try:
+            with open(sc_path, "r", encoding="utf-8") as f:
+                sc_data = json.load(f)
+        except Exception:
+            continue
+        for mat_data in sc_data.get("materials", {}).values():
+            for tex_pkg in mat_data.get("baseline_settings", {}).get("texture_paths", {}).values():
+                if isinstance(tex_pkg, str) and tex_pkg.lower().startswith(VANILLA_EFFECT_TEXTURE_ROOT.lower()):
+                    referenced.add(tex_pkg.split(".")[0])
+
+    entries = []
+    to_extract = []
+    for pkg in sorted(referenced):
+        rel = pkg[len("/Game/"):]
+        if os.path.exists(os.path.join(project_dir, "Content", os.path.normpath(rel) + ".uasset")):
+            continue
+        png = os.path.join(fmodel_root, "Exports", "Pal", "Content", os.path.normpath(rel) + ".png")
+        if not os.path.exists(png):
+            to_extract.append(f"Pal/Content/{rel}.uasset")
+        entries.append({"png": png, "destination_path": os.path.dirname(pkg), "name": os.path.basename(pkg)})
+
+    if to_extract:
+        from utils.extractor.core import extract_game_files
+        print(f"[PalBaker] Extracting {len(to_extract)} vanilla VFX texture(s) from game paks...", flush=True)
+        success, msg = extract_game_files(settings, to_extract, os.path.join(fmodel_root, "Exports"), format_type="png")
+        if not success:
+            print(f"[PalBaker] Warning: VFX texture extraction failed: {msg}", flush=True)
+
+    found = [e for e in entries if os.path.exists(e["png"])]
+    for e in entries:
+        if e not in found:
+            print(f"[PalBaker] Warning: Could not extract {e['destination_path']}/{e['name']}; material slot will be empty in the editor.", flush=True)
+    return found

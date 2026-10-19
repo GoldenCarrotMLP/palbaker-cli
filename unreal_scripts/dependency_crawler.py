@@ -18,6 +18,7 @@ def crawl_dependencies():
 
     root_packages = cfg.get("root_packages", [])
     blacklist = set(p.lower() for p in cfg.get("blacklist", []))
+    blacklist_prefixes = tuple(p.lower() for p in cfg.get("blacklist_prefixes", []))
     has_anims = cfg.get("has_anims", False)
 
     ar = unreal.AssetRegistryHelpers.get_asset_registry()
@@ -55,7 +56,7 @@ def crawl_dependencies():
                 continue
             if "physicsasset" in dep_lower:
                 continue
-            if dep_lower in blacklist:
+            if dep_lower in blacklist or (blacklist_prefixes and dep_lower.startswith(blacklist_prefixes)):
                 continue
 
             discovered.add(dep_str)

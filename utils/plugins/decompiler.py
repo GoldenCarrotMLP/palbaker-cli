@@ -31,6 +31,8 @@ def run_decompile_pipeline(ue_root: str, uproject_path: str, mod_name: str, fmod
     sys.path.append(os.path.join(ue_root, "Engine", "Plugins", "Experimental", "PythonScriptPlugin", "Content", "Python"))
     try:
         import remote_execution  # type: ignore
+        from utils.builder.unreal_helper import patch_remote_execution
+        patch_remote_execution(remote_execution)
     except ImportError:
         return False, "Could not locate remote_execution.py."
 

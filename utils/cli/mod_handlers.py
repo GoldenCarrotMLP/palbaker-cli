@@ -247,7 +247,7 @@ def handle_mod_command(args, settings):
             json_print({"status": "error", "error_code": err_code, "message": err_msg})
             sys.exit(1)
 
-    if action in ["push", "full", "cook", "pack", "decompile"]:
+    if action in ["push", "full", "cook", "pack", "cook-only", "pack-only", "decompile"]:
         is_intact, integrity_msg = verify_project_integrity(settings)
         if not is_intact:
             json_print({"status": "error", "message": integrity_msg})
@@ -266,7 +266,7 @@ def handle_mod_command(args, settings):
     mod_data = mods[0] if mods else None
 
     # Vanilla Collision Lock Evaluator
-    if action in ["push", "full", "cook", "pack"] and mod_data:
+    if action in ["push", "full", "cook", "pack", "cook-only", "pack-only"] and mod_data:
         is_safe, collision_msg = check_vanilla_collision(mods, mod_data)
         if not is_safe:
             error_print(collision_msg)
@@ -534,6 +534,14 @@ def handle_mod_command(args, settings):
         )
         if blender_res.stdout and blender_res.stdout.strip():
             print(blender_res.stdout, flush=True)
+
+        exported_fbx = [f for f in os.listdir(export_anims_dir) if f.lower().endswith(".fbx")]
+        if blender_res.returncode != 0 or not exported_fbx:
+            if blender_res.stderr and blender_res.stderr.strip():
+                print(blender_res.stderr, flush=True)
+            shutil.rmtree(export_anims_dir, ignore_errors=True)
+            error_print(f"Blender exported 0 animations from {mod_name}.blend. Nothing was pushed to Unreal.")
+            sys.exit(1)
 
         source_pal, is_custom = resolve_source_template(mod_data, settings, base_pal, mod_name)
 

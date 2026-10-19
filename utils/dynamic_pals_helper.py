@@ -234,6 +234,40 @@ def sync_sidecar_metadata(blender_path: str, blend_file_path: str) -> dict:
     save_sidecar(sidecar_path, synced_data)
     return synced_data
 
+def get_actor_bp_path(category: str, base_pal: str, mod_name: str) -> str:
+    """Actor Blueprint package path, mirroring ModWorkspace.blueprint_virtual_path + BP_{mod_name}."""
+    is_var = base_pal.lower() != mod_name.lower()
+    if "npc" in category.lower():
+        root = "/Game/Pal/Blueprint/Character/NPC"
+    elif "player" in category.lower():
+        root = "/Game/Pal/Blueprint/Character/Player"
+    else:
+        root = "/Game/Pal/Blueprint/Character/Monster/PalActorBP"
+    bp_dir = f"{root}/{base_pal}/{mod_name}" if is_var else f"{root}/{mod_name}"
+    return f"{bp_dir}/BP_{mod_name}"
+
+def resolve_anim_target(fmodel_root: str, category: str, target_pal: str, skeleton_source: str, target_has_custom_anims: bool) -> str:
+    """
+    Resolves a bare AnimTarget selection (character folder + SkeletonSource blend) into the ModelJSON value:
+      - vanilla character        -> its character ID
+      - custom (Creator) pal     -> its actor Blueprint path
+      - variant with custom anims -> the variant's actor Blueprint path
+    """
+    creator_json = os.path.join(fmodel_root, "Exports", "Pal", "Content", "Palbaker", "Creator", f"{target_pal}_creator.json")
+    if os.path.exists(creator_json):
+        return get_actor_bp_path(category, target_pal, target_pal)
+
+    variant_name = os.path.splitext(os.path.basename(skeleton_source or "base"))[0]
+    if variant_name.lower() in ("base", target_pal.lower()):
+        return target_pal
+
+    if target_has_custom_anims:
+        return get_actor_bp_path(category, target_pal, variant_name)
+
+    # Variants without custom animations never get an actor Blueprint cooked; they animate as the vanilla Pal
+    print(f"[Dynamic Pals] AnimTarget '{target_pal}/{variant_name}' has no custom animations (no actor Blueprint); falling back to '{target_pal}'.", flush=True)
+    return target_pal
+
 def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_dir: str, target_dir: str, legacy_dir: str = None) -> tuple[bool, str]:
     """Compiles local variant manifests into clean, clutter-free Dynamic Pals Format V2 JSON in ~Mods/ModelJSON and cleans legacy SwapJSON."""
     manifest_name = f"{monster_name}_dynamic_pals.json"
@@ -314,9 +348,10 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
         fmodel_root = os.path.normpath(os.path.join(dynamic_pals_staging_dir, "..", "..", "..", "..", "..", ".."))
 
 
-    creator_json = os.path.join(fmodel_root, "Pal", "Content", "Palbaker", "Creator", f"{monster_name}_creator.json")
+    creator_json = os.path.join(fmodel_root, "Exports", "Pal", "Content", "Palbaker", "Creator", f"{monster_name}_creator.json")
     is_custom_pal = os.path.exists(creator_json)
-    final_character_id = f"MOD_{monster_name}" if is_custom_pal else monster_name
+    # Creator Pals are registered in PalSchema as MOD_<id>; that row name is their in-game character ID.
+    final_character_id = monster_name if monster_name.startswith("MOD_") or not is_custom_pal else f"MOD_{monster_name}"
 
     material_to_virtual_dir = {}
     vanilla_dir = os.path.normpath(os.path.join(fmodel_root, "Exports", "Pal", "Content", "Pal", "Model", "Character", category, monster_name))
@@ -484,16 +519,7 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
                 variant_mod_name = skin_label if skin_label != "Default" else monster_name
 
             is_var = (variant_mod_name.lower() != monster_name.lower() and not (v.get("is_base") and is_custom_pal))
-            cat_sanitized = category.replace(" ", "_")
-
-            if "npc" in category.lower():
-                bp_virtual_dir = f"/Game/Pal/Blueprint/Character/NPC/{monster_name}/{variant_mod_name}" if is_var else f"/Game/Pal/Blueprint/Character/NPC/{variant_mod_name}"
-            elif "player" in category.lower():
-                bp_virtual_dir = f"/Game/Pal/Blueprint/Character/Player/{monster_name}/{variant_mod_name}" if is_var else f"/Game/Pal/Blueprint/Character/Player/{variant_mod_name}"
-            else:
-                bp_virtual_dir = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{monster_name}/{variant_mod_name}" if is_var else f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{variant_mod_name}"
-
-            expected_bp_location = f"{bp_virtual_dir}/BP_{variant_mod_name}"
+            expected_bp_location = get_actor_bp_path(category, monster_name if is_var else variant_mod_name, variant_mod_name)
 
             # Special Materials
             special_materials = []
@@ -546,7 +572,11 @@ def compile_unified_dynamic_pals_json(monster_name: str, dynamic_pals_staging_di
                 "SkinPath": mesh_resolved_path
             }
 
-            if has_custom_anims:
+            if anim_target and target_base_pal == anim_target:
+                # Bare AnimTarget selection: vanilla -> character ID, variant/custom pal -> actor Blueprint path.
+                # The manifest keeps the bare selection so the UI and target_base_pal resolution keep working.
+                skin_obj["AnimTarget"] = resolve_anim_target(fmodel_root, category, anim_target, v.get("SkeletonSource", "base"), has_custom_anims)
+            elif has_custom_anims:
                 skin_obj["AnimTarget"] = expected_bp_location
                 if v.get("AnimTarget") != expected_bp_location:
                     v["AnimTarget"] = expected_bp_location

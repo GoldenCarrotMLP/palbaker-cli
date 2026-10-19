@@ -2,7 +2,7 @@
 import os
 import json
 import tempfile
-from utils.builder.blacklist_helper import get_packaging_blacklist
+from utils.builder.blacklist_helper import get_packaging_blacklist, BLACKLIST_PREFIXES
 from utils.builder.unreal_helper import run_remote_command
 
 def run_dependency_crawler(workspace) -> list[str]:
@@ -31,6 +31,7 @@ def run_dependency_crawler(workspace) -> list[str]:
     cfg_payload = {
         "root_packages": root_packages,
         "blacklist": sorted(list(blacklist)),
+        "blacklist_prefixes": list(BLACKLIST_PREFIXES),
         "has_anims": workspace.has_anims
     }
 

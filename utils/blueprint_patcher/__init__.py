@@ -6,8 +6,10 @@ import json
 import shutil
 import glob
 import subprocess
+import time
 
 from utils.extractor.core import extract_game_files
+from utils import tool_cache
 from .build_variants import build_boss_variant, build_predator_variant, build_raid_variant
 from .feature_manager import (
     BlueprintFeatureManager,
@@ -15,6 +17,7 @@ from .feature_manager import (
     synthesize_flamethrower_cluster
 )
 from utils.anim_patcher.anim_discovery import extract_track_name
+from utils.bone_frames import frames_from_sidecar, load_template_frames, bone_delta, remap_axis
 
 from utils.uasset_helper import (
     decompile_uasset, 
@@ -509,6 +512,44 @@ def _synthesize_montage_from_seed(
     else:
         log(f"  ❌ Failed to compile synthesized montage: {montage_name}.uasset", "error")
         return False
+
+
+def _remap_abp_bone_axes(abp_data: dict, template_frames: dict, custom_frames: dict, log) -> int:
+    """Re-expresses bone-local LookAt axes from the template rig in the custom rig's bone frames."""
+    changed = 0
+
+    def props(node):
+        return {p.get("Name"): p for p in node.get("Value", []) if isinstance(p, dict)}
+
+    def walk(node):
+        nonlocal changed
+        if isinstance(node, dict):
+            if str(node.get("Name", "")).startswith("AnimGraphNode_LookAt") and isinstance(node.get("Value"), list):
+                np = props(node)
+                bone = props(np.get("BoneToModify", {})).get("BoneName", {}).get("Value")
+                delta = bone_delta(bone, template_frames, custom_frames) if bone else None
+                if delta:
+                    for axis_key in ("LookAt_Axis", "LookUp_Axis"):
+                        ap = props(np.get(axis_key, {}))
+                        if not ap.get("bInLocalSpace", {}).get("Value", False):
+                            continue
+                        vec_prop = props(ap.get("Axis", {})).get("Axis")
+                        vec = vec_prop.get("Value") if vec_prop else None
+                        if not isinstance(vec, dict):
+                            continue
+                        old = tuple(float(vec.get(c, 0.0) or 0.0) for c in ("X", "Y", "Z"))
+                        new = remap_axis(old, delta)
+                        vec["X"], vec["Y"], vec["Z"] = new
+                        log(f"  ↻ {node['Name']} ({bone}) {axis_key}: {old} -> {new}", "standard")
+                        changed += 1
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(abp_data.get("Exports", []))
+    return changed
 
 
 def _read_cooked_sequence_length(cooked_anims_dir: str, sequence_name: str, temp_dir: str, uasset_gui_exe: str, usmap_path: str):
@@ -1113,6 +1154,21 @@ def _retarget_additive_hit_animations(
 
 
 def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_data: dict = None, log_callback=None, has_anims: bool = False, category: str = "Monster", base_pal: str = "", keep_temp: bool = False) -> bool:
+    before = tool_cache.stats()
+    t0 = time.perf_counter()
+    try:
+        return _patch_actor_blueprint(settings, pal_id, template_id, pal_data, log_callback, has_anims, category, base_pal, keep_temp)
+    finally:
+        after = tool_cache.stats()
+        hits, misses = after["hit"] - before["hit"], after["miss"] - before["miss"]
+        msg = f"Tool cache: {hits} reused, {misses} rebuilt ({time.perf_counter() - t0:.1f}s)"
+        if not tool_cache.enabled():
+            msg = f"Tool cache disabled by PALBAKER_NO_CACHE ({time.perf_counter() - t0:.1f}s)"
+        if log_callback: log_callback(msg, "standard")
+        else: print(f"[Blueprint Patch] {msg}", flush=True)
+
+
+def _patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_data: dict = None, log_callback=None, has_anims: bool = False, category: str = "Monster", base_pal: str = "", keep_temp: bool = False) -> bool:
     def log(msg, cat="standard"):
         if log_callback: log_callback(msg, cat)
         else: print(f"[Blueprint Patch] {msg}", flush=True)
@@ -1307,6 +1363,7 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
         discovered_blendspaces = set()
         discovered_abps = set()
         custom_anims = {}
+        bone_rest_ue = {}
 
         sidecar_candidates = [
             os.path.join(fmodel_output, "Exports", "Pal", "Content", "Pal", "Model", "Character", category, base_pal, pal_id, f"{pal_id}_blend.json"),
@@ -1320,7 +1377,8 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                 with open(sidecar_path, "r", encoding="utf-8") as f_sc:
                     sc_data = json.load(f_sc)
                     custom_anims = sc_data.get("custom_animations", {})
-                    
+                    bone_rest_ue = sc_data.get("bone_rest_ue") or {}
+
                     for bs_key, bs_val in custom_anims.get("blend_spaces", {}).items():
                         bs_asset = bs_val.get("asset_name")
                         if bs_asset:
@@ -1594,6 +1652,15 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
         # -----------------------------------------------------------------
         # STEP 4b: Retarget & Compile AnimBlueprints (ABP_)
         # -----------------------------------------------------------------
+        template_frames, custom_frames = {}, {}
+        if discovered_abps and bone_rest_ue:
+            custom_frames = frames_from_sidecar({"bone_rest_ue": bone_rest_ue})
+            template_frames = load_template_frames(settings, template_id, temp_dir)
+            if not template_frames:
+                log(f"  ⚠ Could not read SK_{template_id}_Skeleton; ABP bone axes copied unchanged.", "warning")
+        elif discovered_abps:
+            log("  ⚠ Sidecar has no bone_rest_ue (refresh the blend); ABP bone axes copied unchanged.", "warning")
+
         for abp in discovered_abps:
             abp_uasset = None
             for root, _, files in os.walk(temp_dir):
@@ -1612,6 +1679,8 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                     abp_data = json.loads(abp_str)
                     if "FolderName" in abp_data:
                         abp_data["FolderName"] = f"/Game/Pal/Blueprint/Character/Monster/PalActorBP/{target_bp_folder}/{new_abp_name}"
+                    if template_frames and custom_frames:
+                        _remap_abp_bone_axes(abp_data, template_frames, custom_frames, log)
                     _collect_and_sync_namemap(abp_data)
                     with open(abp_json, "w", encoding="utf-8") as f:
                         json.dump(abp_data, f, indent=4)
@@ -1727,6 +1796,30 @@ def patch_actor_blueprint(settings: dict, pal_id: str, template_id: str, pal_dat
                     else:
                         clean_props.append(p)
                 exp["Data"] = clean_props
+
+        # Random rests come from the sidecar; the template's list only survives when the sidecar defines none
+        if has_anims and base_json_data:
+            rests = []
+            for anim_meta in custom_anims.get("anims", {}).values():
+                if not isinstance(anim_meta, dict) or anim_meta.get("category") != "RandomRest":
+                    continue
+                m_asset = anim_meta.get("montage_asset")
+                # Same condition as STEP 4/2: only montages that actually get built
+                if not m_asset or not (anim_meta.get("in_nla") or anim_meta.get("is_modified") or anim_meta.get("_is_cloned")):
+                    continue
+                props = anim_meta.get("rest_props") or {}
+                rests.append({
+                    "package": f"/Game/Pal/Animation/Character/{cat_sanitized}/{target_anims_folder}/{m_asset}",
+                    "asset": m_asset,
+                    "weight": props.get("weight", 1.0),
+                    "loop_min": props.get("loop_min", 1),
+                    "loop_max": max(props.get("loop_max", 1), props.get("loop_min", 1)),
+                    "after_idle_time": props.get("after_idle_time", 2.0),
+                })
+            if rests:
+                rests.sort(key=lambda r: r["asset"])
+                BlueprintFeatureManager(base_json_data).set_random_rests(rests)
+                log(f"  ✓ Random rests from sidecar: {', '.join(r['asset'] for r in rests)}", "standard")
 
         if base_json_data:
             if is_custom_pal:

@@ -214,6 +214,11 @@ class PalSchemaExporter:
             "Z": float(mesh_loc.get("Z", -30.0))
         }
 
+        # Paldeck slot. Never fall through to the template's index, or the custom Pal shares its Paldeck entry.
+        zukan_index = int(p.get("ZukanIndex", -1)) if p.get("EnablePaldeck", True) is not False else -1
+        new_monster_props["ZukanIndex"] = zukan_index
+        new_monster_props["ZukanIndexSuffix"] = str(p.get("ZukanIndexSuffix", "") or "") if zukan_index != -1 else ""
+
         # Clean rogue keys (Keep PartnerSkill so it is correctly serialized into the monster parameter table!)
         for rogue in ["BaseSkills", "PassiveSkills"]:
             new_monster_props.pop(rogue, None)
@@ -242,6 +247,15 @@ class PalSchemaExporter:
                 pref = s_key if s_key.startswith("WorkSuitability_") else f"WorkSuitability_{s_key}"
                 new_monster_props[pref] = lvl
 
+        # BestWorkSuitability is inherited from the template, so re-derive it from the final levels.
+        # Prefer the template's pick when it is still tied for the top level (matches vanilla ordering).
+        suit_levels = {k[len("WorkSuitability_"):]: v for k, v in new_monster_props.items() if k.startswith("WorkSuitability_")}
+        top_level = max(suit_levels.values(), default=0)
+        if top_level > 0:
+            template_best = str(base_properties.get("BestWorkSuitability", "")).split("::")[-1]
+            best = template_best if suit_levels.get(template_best) == top_level else next(k for k, v in suit_levels.items() if v == top_level)
+            new_monster_props["BestWorkSuitability"] = f"EPalWorkSuitability::{best}"
+
         # 2. Build Multi-Row Pals Dictionary (Standard, Boss, and Predator)
         pals_payload = {
             f"MOD_{pal_id}": new_monster_props
@@ -252,6 +266,8 @@ class PalSchemaExporter:
             boss_props = dict(new_monster_props)
             boss_hp_mult = float(p.get("BossHPMultiplier", 5.0))
             boss_props["IsBoss"] = True
+            boss_props["ZukanIndex"] = -1  # Vanilla BOSS_ rows never own a Paldeck slot
+            boss_props["ZukanIndexSuffix"] = ""
             boss_props["Size"] = "EPalSizeType::XL"
             boss_props["Rarity"] = min(10, int(p.get("Rarity", 6)) + 2)
             boss_props["Hp"] = int(base_hp * boss_hp_mult)
@@ -279,6 +295,9 @@ class PalSchemaExporter:
             pred_props["IsBoss"] = True
             pred_props["Predator"] = True
             pred_props["IsUncapturable"] = True
+            pred_props["ZukanIndex"] = -1
+            pred_props["ZukanIndexSuffix"] = ""
+            pred_props["IgnoreCombi"] = True
             pred_props["CaptureRateCorrect"] = 0.0
             pred_props["ExpRatio"] = 25.0
             pred_props["Size"] = "EPalSizeType::XL"
@@ -369,7 +388,13 @@ class PalSchemaExporter:
                         "WazaID": f"EPalWazaID::{entry['WazaID']}",
                         "Level": entry["Level"]
                     }
-                
+                if p.get("GeneratePredator", False):
+                    learnset_rows[f"PREDATOR_{row_key}"] = {
+                        "PalId": f"MOD_PREDATOR_{pal_id}",
+                        "WazaID": f"EPalWazaID::{entry['WazaID']}",
+                        "Level": entry["Level"]
+                    }
+
             with open(os.path.join(raw_dir, "DT_WazaMasterLevel_Common.json"), "w", encoding="utf-8") as f:
                 json.dump({ "DT_WazaMasterLevel_Common": learnset_rows }, f, indent=4)
 
@@ -399,17 +424,29 @@ class PalSchemaExporter:
                 parent_drops = self.c.pal_drop_item_cache.get(f"{template_id}000", {})
             if not parent_drops:
                 parent_drops = { "ItemId1": "Money", "Rate1": 100.0, "min1": 10, "Max1": 50 }
-            loot_table[f"MOD_{pal_id}000"] = parent_drops
+            # The game matches drop rows by CharacterID, not row name. The cached row still points at the template.
+            loot_table[f"MOD_{pal_id}000"] = {**parent_drops, "CharacterID": f"MOD_{pal_id}", "Level": 0}
+
+        def variant_drops(prefix: str) -> dict:
+            # Custom drops apply to every variant; otherwise mirror the template's own BOSS_/PREDATOR_ loot.
+            parent_variant = {}
+            if not item_drops and hasattr(self.c, "pal_drop_item_cache"):
+                parent_variant = self.c.pal_drop_item_cache.get(f"{prefix}_{template_id}000", {})
+            base_row = parent_variant or loot_table[f"MOD_{pal_id}000"]
+            return {**base_row, "CharacterID": f"MOD_{prefix}_{pal_id}", "Level": 0}
 
         # Boss loot with token
         if p.get("GenerateBoss", True) is not False:
-            boss_drops = dict(loot_table[f"MOD_{pal_id}000"])
+            boss_drops = variant_drops("BOSS")
             if p.get("GenerateBountyToken"):
                 boss_drops["ItemId1"] = f"BossDefeatReward_{pal_id}"
                 boss_drops["Rate1"] = 100.0
                 boss_drops["min1"] = 1
                 boss_drops["Max1"] = 1
             loot_table[f"MOD_BOSS_{pal_id}000"] = boss_drops
+
+        if p.get("GeneratePredator", False):
+            loot_table[f"MOD_PREDATOR_{pal_id}000"] = variant_drops("PREDATOR")
 
         with open(os.path.join(raw_dir, "DT_PalDropItem.json"), "w", encoding="utf-8") as f_drop:
             json.dump({ "DT_PalDropItem": loot_table }, f_drop, indent=4)
@@ -709,6 +746,8 @@ class PalSchemaExporter:
             f"MOD_{pal_id}": parent_offset,
             f"MOD_BOSS_{pal_id}": parent_offset
         }
+        if p.get("GeneratePredator", False):
+            camera_payload[f"MOD_PREDATOR_{pal_id}"] = parent_offset
         with open(os.path.join(raw_dir, "DT_PalUICaptureCameraOffsetData.json"), "w", encoding="utf-8") as f_cam:
             json.dump({ "DT_PalUICaptureCameraOffsetData": camera_payload }, f_cam, indent=4)
 

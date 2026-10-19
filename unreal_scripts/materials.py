@@ -235,7 +235,8 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
 
             # 2. Validate all required textures exist in Unreal or local import queue
             missing_textures = []
-            for p_name, t_name in active_textures.items():
+            skipped_defaults = []
+            for p_name, t_name in list(active_textures.items()):
                 if not t_name or t_name == "None":
                     continue
                 clean_t = t_name.split(".")[0]
@@ -272,7 +273,19 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                 if "/" in clean_t and unreal.EditorAssetLibrary.does_asset_exist(clean_t):
                     continue
 
+                # FModel material JSONs list the master material's inherited defaults (e.g. DefaultTangent,
+                # T_Black_Linear) alongside real overrides. Those live outside character model folders and the
+                # parent material already supplies them, so leave the parameter unset instead of failing.
+                if known_full_path and not known_full_path.lower().startswith("/game/pal/model/"):
+                    skipped_defaults.append((p_name, known_full_path))
+                    active_textures.pop(p_name, None)
+                    active_paths.pop(p_name, None)
+                    continue
+
                 missing_textures.append((p_name, clean_t))
+
+            for p_k, path_k in skipped_defaults:
+                print(f"  [Material Warning] '{mat_name}': '{p_k}' -> {path_k} not in project; inheriting parent material default.", flush=True)
 
             if missing_textures:
                 print("\n" + "=" * 70, flush=True)

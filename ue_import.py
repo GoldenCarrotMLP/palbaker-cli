@@ -12,7 +12,7 @@ for k in list(sys.modules.keys()):
     if k.startswith("unreal_scripts"):
         del sys.modules[k]
 
-from unreal_scripts.importer import clear_cache, import_assets, harvest_materials
+from unreal_scripts.importer import clear_cache, import_assets, harvest_materials, import_vanilla_textures
 from unreal_scripts.materials import build_materials, bind_materials_to_mesh
 from unreal_scripts.rigging import apply_rigging
 
@@ -52,6 +52,9 @@ def run_pipeline():
     if not models and config.get("fbx_file"):
         models = [{"fbx_file": config.get("fbx_file"), "bone_data_file": config.get("bone_data_file", "bone_data.json"), "import_name": target_mesh_name}]
         
+    # Vanilla VFX textures referenced by materials must exist in the editor before build_materials resolves them
+    import_vanilla_textures(config.get("vanilla_textures", []))
+
     for i, model in enumerate(models):
         fbx_file = model["fbx_file"]
         bone_data_file = model["bone_data_file"]

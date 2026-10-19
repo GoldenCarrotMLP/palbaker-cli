@@ -240,9 +240,16 @@ def main():
             push_textures = bool(target_sidecar_data.get("push_textures", True))
             push_animbp = bool(target_sidecar_data.get("push_animbp", True))
 
+            vanilla_textures = []
+            if push_materials:
+                from utils.fmodel_helper import collect_vanilla_effect_textures
+                model_sidecars = [os.path.join(target_dir, m["bone_data_file"]) for m in models]
+                vanilla_textures = collect_vanilla_effect_textures(model_sidecars, workspace.project_dir, workspace.fmodel_root, settings)
+
             config = {
                 "ue_target_path": virtual_path,
                 "textures": pngs,
+                "vanilla_textures": vanilla_textures,
                 "models": models,
                 "mi_jsons": jsons,
                 "icon_file": workspace.icon_fmodel_path if workspace.has_icon else None,
@@ -470,7 +477,8 @@ def main():
     # -------------------------------------------------------------
     # PHASE 3: PACK (Package only)
     # -------------------------------------------------------------
-    if ACTION in ["pack", "full", "pack_only"]:
+    # "cook" is Cook & Pack; "cook_only" stops after Phase 2
+    if ACTION in ["cook", "pack", "full", "pack_only"]:
         from utils.builder.cooker_helper import verify_unreal_animation_assets
         anims_valid, anim_errors = verify_unreal_animation_assets(workspace, sidecar_data)
         if not anims_valid:

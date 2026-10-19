@@ -16,7 +16,7 @@ def create_cli_parser() -> argparse.ArgumentParser:
     # mod
     mod_parser = subparsers.add_parser("mod", help="Pipeline execution")
     mod_parser.add_argument("action", choices=[
-        "extract", "create-blend", "push", "cook", "pack", "full", "decompile",
+        "extract", "create-blend", "push", "cook", "pack", "cook-only", "pack-only", "full", "decompile",
         "set-icon", "browse-ue", "open-source", "open-ue", "open-pak", "ping",
         "set-preserve-materials", "refresh-blend", "recursive-cook", "set-push-setting",
         "set-blacklist", "dump-anims", "push-anims", "save-notifies", "toggle-anims",

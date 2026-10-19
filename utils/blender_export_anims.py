@@ -88,6 +88,10 @@ def export_individual_animations(output_dir: str, mod_name: str, base_pal: str):
         if clean_track not in actions_map:
             actions_map[clean_track] = act
 
+    if not actions_map:
+        print("[PalBaker Anims Export] Error: No animation actions found in the .blend (NLA strips are empty). Re-run Dump Animations with Blender closed.", flush=True)
+        sys.exit(1)
+
     os.makedirs(output_dir, exist_ok=True)
     print(f"[PalBaker Anims Export] Exporting {len(actions_map)} individual animation FBXs...", flush=True)
 

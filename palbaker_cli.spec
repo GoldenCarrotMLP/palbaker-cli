@@ -57,6 +57,20 @@ for b in a.binaries:
         
 a.binaries = filtered_binaries
 
+# Drop dev-only payload from the bundled data folders: debug symbols, IntelliSense docs,
+# the unused deps/Mappings/ duplicate (code reads deps/Mappings.usmap), and Python bytecode caches.
+def _is_shipped_data(dest):
+    d = dest.replace("\\", "/").lower()
+    if d.endswith((".pdb", ".pyc")) or "/__pycache__/" in d:
+        return False
+    if d == "deps/uassetapi.xml":  # Wwise ships real .xml configs, so only drop this one
+        return False
+    if d.startswith("deps/mappings/"):
+        return False
+    return True
+
+a.datas = [entry for entry in a.datas if _is_shipped_data(entry[0])]
+
 pyz = PYZ(a.pure)
 
 exe = EXE(

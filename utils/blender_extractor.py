@@ -21,6 +21,7 @@ if current_dir not in sys.path:
 try:
     from blender_utils import translator
     from sidecar_helper import load_sidecar, save_sidecar
+    from bone_frames import blender_rest_to_ue
 except Exception as e:
     import traceback
     print("\n❌ CRITICAL: ImportError inside Blender's python runtime!", flush=True)
@@ -574,6 +575,18 @@ def extract_metadata(output_path: str, fbx_path: str = None):
 
         copy_bones = list(copy_map.values())
 
+    # 2b. Rest frames in UE convention, used to carry template bone-local values (LookAt axes, sockets)
+    # onto this rig when its bones are oriented differently (see utils/bone_frames.py).
+    bone_rest_ue = {}
+    if arm_obj and arm_obj.type == 'ARMATURE':
+        world = arm_obj.matrix_world
+        for bone in arm_obj.data.bones:
+            m = world @ bone.matrix_local
+            rot = m.to_3x3().normalized()
+            bone_rest_ue[bone.name] = blender_rest_to_ue(
+                tuple(tuple(rot[i][j] for j in range(3)) for i in range(3)), tuple(m.translation)
+            )
+
     # 3. Material Harvesting
     slots_in_order = translator.get_skeletal_mesh_material_slots()
     materials_compile = {}
@@ -698,6 +711,7 @@ def extract_metadata(output_path: str, fbx_path: str = None):
         "lookat_bones": merged_lookat_bones,
         "copy_bones": merged_copy_bones,
         "offset_bones": merged_offset_bones,
+        "bone_rest_ue": bone_rest_ue,
         "materials": merged_materials,
         "morph_targets": [],
         "default_shapekeys": default_shapekeys,

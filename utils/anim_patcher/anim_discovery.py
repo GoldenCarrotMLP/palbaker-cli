@@ -535,20 +535,23 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
     if bp_disk and os.path.exists(bp_disk):
         bp_json = os.path.join(temp_dir, f"BP_{base_pal}.json")
         try:
-            subprocess.run([uasset_gui_exe, "tojson", bp_disk, bp_json, "VER_UE5_1", usmap_path], check=True, creationflags=creation_flags)
+            if not decompile_uasset(uasset_gui_exe, bp_disk, bp_json, usmap_path): raise RuntimeError("UAssetGUI tojson failed: bp_disk")
             with open(bp_json, "r", encoding="utf-8") as f:
                 raw_bp = json.load(f)
 
             rest_map = find_key_globally(raw_bp, "RandomRestMontageInfos") or []
+            bp_imports = raw_bp.get("Imports", [])
             for rest in rest_map:
-                asset = rest.get("RandomRestMontage", {}).get("ObjectName", "")
-                clean_asset = asset.split("'")[-2] if "'" in asset else asset
+                # UAssetGUI AST: a PalRandomRestInfo struct whose montage is an import index
+                fields = {p.get("Name"): p.get("Value") for p in rest.get("Value", []) if isinstance(p, dict)}
+                ref = fields.get("RandomRestMontage")
+                clean_asset = bp_imports[-ref - 1].get("ObjectName", "") if isinstance(ref, int) and 0 < -ref <= len(bp_imports) else ""
                 if clean_asset:
                     rest_infos_by_montage[clean_asset] = {
-                        "weight": float(rest.get("Weight", 1.0)),
-                        "loop_min": int(rest.get("LoopNum_Min", 1)),
-                        "loop_max": int(rest.get("LoopNum_Max", 1)),
-                        "after_idle_time": float(rest.get("AfterIdleTime", 2.0))
+                        "weight": float(fields.get("Weight", 1.0)),
+                        "loop_min": int(fields.get("LoopNum_Min", 1)),
+                        "loop_max": int(fields.get("LoopNum_Max", 1)),
+                        "after_idle_time": float(fields.get("AfterIdleTime", 2.0))
                     }
         except Exception as e:
             log(f"Warning parsing Actor Blueprint: {e}", "warning")
@@ -565,7 +568,7 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
         bs_json = bs_path.replace(".uasset", ".json")
 
         try:
-            subprocess.run([uasset_gui_exe, "tojson", bs_path, bs_json, "VER_UE5_1", usmap_path], check=True, creationflags=creation_flags)
+            if not decompile_uasset(uasset_gui_exe, bs_path, bs_json, usmap_path): raise RuntimeError("UAssetGUI tojson failed: bs_path")
             with open(bs_json, "r", encoding="utf-8") as f_bs:
                 bs_raw = json.load(f_bs)
 
@@ -632,7 +635,7 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
 
         scraped_montage_notifies = []
         try:
-            subprocess.run([uasset_gui_exe, "tojson", am_path, am_json, "VER_UE5_1", usmap_path], check=True, creationflags=creation_flags)
+            if not decompile_uasset(uasset_gui_exe, am_path, am_json, usmap_path): raise RuntimeError("UAssetGUI tojson failed: am_path")
             scraped_montage_notifies = scrape_notifies_from_json(am_json, source="montage")
         except Exception: pass
 

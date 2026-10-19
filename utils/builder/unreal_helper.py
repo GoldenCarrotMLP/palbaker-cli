@@ -2,6 +2,37 @@
 import sys
 import os
 import time
+import json
+
+def patch_remote_execution(remote_execution) -> None:
+    """
+    UE's _RemoteExecutionCommandConnection._receive_message does a single recv(DEFAULT_RECEIVE_BUFFER_SIZE = 8192).
+    Command results carry the full print log, so long imports get truncated mid-JSON and the call raises
+    'Remote party failed to send a valid response!'. Keep reading until the TCP stream holds a complete JSON message.
+    """
+    conn_cls = getattr(remote_execution, "_RemoteExecutionCommandConnection", None)
+    if conn_cls is None or getattr(conn_cls, "_palbaker_patched", False):
+        return
+
+    def _receive_message(self, expected_type):
+        buffer = b""
+        while True:
+            data = self._command_channel_socket.recv(1024 * 1024)
+            if not data:
+                break
+            buffer += data
+            try:
+                json.loads(buffer.decode("utf-8"))
+            except (UnicodeDecodeError, ValueError):
+                continue  # Partial message (possibly split mid UTF-8 sequence); wait for the rest
+            message = remote_execution._RemoteExecutionMessage(None, None)
+            if message.from_json_bytes(buffer) and message.passes_receive_filter(self._node_id) and message.type_ == expected_type:
+                return message
+            break
+        raise RuntimeError('Remote party failed to send a valid response!')
+
+    conn_cls._receive_message = _receive_message
+    conn_cls._palbaker_patched = True
 
 def run_remote_command(ue_root: str, project_name: str, cmd: str) -> tuple[bool, str]:
     """
@@ -13,16 +44,11 @@ def run_remote_command(ue_root: str, project_name: str, cmd: str) -> tuple[bool,
     
     try:
         import remote_execution  # type: ignore
-        for attr in ["BUFFER_SIZE", "DEFAULT_BUFFER_SIZE"]:
-            if hasattr(remote_execution, attr):
-                setattr(remote_execution, attr, 1024 * 1024 * 8)
+        patch_remote_execution(remote_execution)
     except ImportError:
         return False, "Could not find remote_execution.py in Unreal installation directory."
 
     remote_exec = remote_execution.RemoteExecution()
-    for attr in ["_buffer_size", "buffer_size"]:
-        if hasattr(remote_exec, attr):
-            setattr(remote_exec, attr, 1024 * 1024 * 8)
     remote_exec.start()
     
     # Non-blocking polling loop to connect to Unreal Node instantly
@@ -121,16 +147,11 @@ def run_remote_import(ue_root: str, project_name: str, fmodel_dir: str, ue_scrip
     
     try:
         import remote_execution  # type: ignore
-        for attr in ["BUFFER_SIZE", "DEFAULT_BUFFER_SIZE"]:
-            if hasattr(remote_execution, attr):
-                setattr(remote_execution, attr, 1024 * 1024 * 8)
+        patch_remote_execution(remote_execution)
     except ImportError:
         return False, "Could not find remote_execution.py in Unreal installation directory."
 
     remote_exec = remote_execution.RemoteExecution()
-    for attr in ["_buffer_size", "buffer_size"]:
-        if hasattr(remote_exec, attr):
-            setattr(remote_exec, attr, 1024 * 1024 * 8)
     remote_exec.start()
     
     node = None

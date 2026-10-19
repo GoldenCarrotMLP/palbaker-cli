@@ -6,7 +6,13 @@ import re
 import struct
 import base64
 import copy
+import shutil
 import subprocess
+
+try:
+    from utils import tool_cache
+except ImportError:  # loaded with utils/ itself on sys.path (Blender / Unreal runtimes)
+    import tool_cache
 
 # =============================================================================
 # 1. UASSETGUI CLI ENGINE WRAPPERS
@@ -16,29 +22,71 @@ def decompile_uasset(uasset_gui_exe: str, uasset_path: str, json_path: str, usma
     if not uasset_gui_exe or not os.path.exists(uasset_gui_exe) or not uasset_path or not os.path.exists(uasset_path):
         return False
     os.makedirs(os.path.dirname(os.path.abspath(json_path)), exist_ok=True)
+    use_usmap = bool(usmap_path and os.path.exists(usmap_path))
+
+    # Output depends only on the package bytes + tool + mappings (see utils/tool_cache.py)
+    key = tool_cache.make_key(
+        "tojson", tool_cache.tool_fingerprint(uasset_gui_exe, usmap_path if use_usmap else ""), "VER_UE5_1",
+        *[f"{os.path.splitext(p)[1]}:{tool_cache.file_hash(p)}" for p in tool_cache.package_files(uasset_path)]
+    )
+    hit = tool_cache.lookup("tojson", key)
+    if hit:
+        tool_cache.restore(hit, os.path.dirname(os.path.abspath(json_path)), {"out.json": os.path.basename(json_path)})
+        return True
+
     cmd = [uasset_gui_exe, "tojson", uasset_path, json_path, "VER_UE5_1"]
-    if usmap_path and os.path.exists(usmap_path):
+    if use_usmap:
         cmd.append(usmap_path)
     creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, creationflags=creation_flags)
-        return res.returncode == 0 and os.path.exists(json_path) and os.path.getsize(json_path) > 0
+        ok = res.returncode == 0 and os.path.exists(json_path) and os.path.getsize(json_path) > 0
     except Exception:
         return False
+    if ok:
+        tool_cache.store("tojson", key, {"out.json": json_path})
+    return ok
 
 def compile_uasset(uasset_gui_exe: str, json_path: str, uasset_path: str, usmap_path: str = None) -> bool:
     if not uasset_gui_exe or not os.path.exists(uasset_gui_exe) or not json_path or not os.path.exists(json_path):
         return False
-    os.makedirs(os.path.dirname(os.path.abspath(uasset_path)), exist_ok=True)
-    cmd = [uasset_gui_exe, "fromjson", json_path, uasset_path]
-    if usmap_path and os.path.exists(usmap_path):
+    dest_dir = os.path.dirname(os.path.abspath(uasset_path))
+    os.makedirs(dest_dir, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(uasset_path))[0]
+    use_usmap = bool(usmap_path and os.path.exists(usmap_path))
+
+    # Output depends only on the JSON bytes + tool + mappings (see utils/tool_cache.py)
+    key = tool_cache.make_key(
+        "fromjson", tool_cache.tool_fingerprint(uasset_gui_exe, usmap_path if use_usmap else ""),
+        tool_cache.file_hash(json_path)
+    )
+    hit = tool_cache.lookup("fromjson", key)
+    if hit:
+        with open(os.path.join(hit, ".complete")) as f:
+            stored = json.load(f)
+        tool_cache.restore(hit, dest_dir, {n: stem + os.path.splitext(n)[1] for n in stored})
+        return True
+
+    # Compile into a clean staging folder so only this compile's outputs are copied and cached
+    staging = tool_cache.new_staging_dir("compile")
+    staged_uasset = os.path.join(staging, f"{stem}.uasset")
+    cmd = [uasset_gui_exe, "fromjson", json_path, staged_uasset]
+    if use_usmap:
         cmd.append(usmap_path)
     creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, creationflags=creation_flags)
-        return res.returncode == 0 and os.path.exists(uasset_path) and os.path.getsize(uasset_path) > 0
+        ok = res.returncode == 0 and os.path.exists(staged_uasset) and os.path.getsize(staged_uasset) > 0
+        if ok:
+            produced = {f"pkg{os.path.splitext(p)[1]}": p for p in tool_cache.package_files(staged_uasset)}
+            for src in produced.values():
+                shutil.copyfile(src, os.path.join(dest_dir, os.path.basename(src)))
+            tool_cache.store("fromjson", key, produced)
+        return ok
     except Exception:
         return False
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 def sync_namemap(data: dict) -> None:
     if not isinstance(data, dict):

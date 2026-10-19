@@ -36,7 +36,7 @@ def harvest_materials(ue_path, target_mesh_name):
                     harvested[str(i)] = mat.material_interface
     return harvested
 
-def inject_vanilla_skeleton_metadata(palbaker_root, custom_skel_path, template_id):
+def inject_vanilla_skeleton_metadata(palbaker_root, custom_skel_path, template_id, sidecar_path=""):
     """Extracts vanilla skeleton JSON offline, parses Sockets/VBs/Slots, and injects them natively into Unreal."""
     import os
     import json
@@ -148,6 +148,28 @@ def inject_vanilla_skeleton_metadata(palbaker_root, custom_skel_path, template_i
                         slot_names.append(slot.get("Value"))
                         slot_groups.append(grp_name)
 
+    # Re-express template socket offsets in the custom rig's bone frames (e.g. a head bone rolled 180 deg)
+    bone_rest_ue = {}
+    if sidecar_path and os.path.exists(sidecar_path):
+        try:
+            with open(sidecar_path, "r", encoding="utf-8") as f:
+                bone_rest_ue = json.load(f).get("bone_rest_ue") or {}
+        except Exception as e:
+            print(f"[PalBaker] Warning reading bone_rest_ue from sidecar: {e}")
+    if sockets_data and bone_rest_ue:
+        from utils.bone_frames import frames_from_sidecar, load_template_frames, bone_delta, remap_vector, remap_rotator
+        template_frames = load_template_frames(settings, clean_template, temp_dir)
+        custom_frames = frames_from_sidecar({"bone_rest_ue": bone_rest_ue})
+        for s_data in sockets_data:
+            delta = bone_delta(s_data["BoneName"], template_frames, custom_frames)
+            if not delta:
+                continue
+            s_data["Loc"] = remap_vector(s_data.get("Loc", (0.0, 0.0, 0.0)), delta)
+            s_data["Rot"] = remap_rotator(*s_data.get("Rot", (0.0, 0.0, 0.0)), delta)
+            print(f"[PalBaker] Socket {s_data['SocketName']} remapped to custom '{s_data['BoneName']}' frame: loc={s_data['Loc']} rot={s_data['Rot']}")
+    elif sockets_data:
+        print("[PalBaker] Warning: sidecar has no bone_rest_ue (refresh the blend); sockets copied in template bone frames.")
+
     # --- INJECT NATIVELY INTO UNREAL ---
     custom_skel = unreal.EditorAssetLibrary.load_asset(custom_skel_path)
     if not custom_skel: return
@@ -241,8 +263,11 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
                     baseline = mat_data.get("baseline_settings", {})
                     for param_name, tex_pkg in baseline.get("texture_paths", {}).items():
                         if tex_pkg and not tex_pkg.lower().startswith(ue_path.lower()):
-                            tex_asset_name = tex_pkg.split("/")[-1].lower()
-                            shared_textures.add(tex_asset_name)
+                            # Only treat as shared if the vanilla asset is actually present in this project;
+                            # otherwise materials.py falls back to {ue_path}/{tex}, which must be imported.
+                            if unreal.EditorAssetLibrary.does_asset_exist(tex_pkg.split(".")[0]):
+                                tex_asset_name = tex_pkg.split("/")[-1].lower()
+                                shared_textures.add(tex_asset_name)
         except Exception as e:
             print(f"[PalBaker] Warning reading sidecar for shared textures: {e}")
 
@@ -335,9 +360,10 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         task.set_editor_property('destination_path', ue_path)
         task.set_editor_property('destination_name', target_mesh_name)
         task.set_editor_property('replace_existing', True)
+        task.set_editor_property('replace_existing_settings', True)
         task.set_editor_property('automated', True)
         task.set_editor_property('save', True)
-        
+
         import_ui = unreal.FbxImportUI()
         import_ui.set_editor_property('import_mesh', True)
         import_ui.set_editor_property('import_as_skeletal', True)
@@ -351,6 +377,8 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         skel_data.set_editor_property('import_morph_targets', True)
         skel_data.set_editor_property('use_t0_as_ref_pose', False)
         skel_data.set_editor_property('normal_import_method', unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
+        # FbxImportUI inherits the last manual dialog values from EditorPerProjectUserSettings.ini; never trust them
+        skel_data.set_editor_property('import_uniform_scale', 1.0)
         
         # Skeleton routing: nest variant skeleton inside base pal folder
         skel_folder = f"{base_pal}/{clean_mesh_name}" if (has_custom_anims and base_pal.lower() != clean_mesh_name.lower()) else base_pal
@@ -427,9 +455,35 @@ def import_assets(ue_path, textures, fbx_file, target_mesh_name, base_pal, templ
         # 3. Native Skeleton Metadata Injection
         if has_custom_anims:
             target_skeleton_name = template_id if (is_custom_pal and template_id) else base_pal
-            inject_vanilla_skeleton_metadata(palbaker_root, expected_skeleton_path, target_skeleton_name)
+            inject_vanilla_skeleton_metadata(palbaker_root, expected_skeleton_path, target_skeleton_name, sidecar_path)
 
         return target_asset_path, shared_phys_path
+
+def import_vanilla_textures(entries):
+    """Imports on-demand extracted vanilla textures (e.g. /Game/Pal/Effect/Textures) at their original game paths."""
+    import_tasks = []
+    for entry in entries or []:
+        png = entry.get("png", "")
+        dest_path = entry.get("destination_path", "")
+        name = entry.get("name", "")
+        if not (png and dest_path and name and os.path.exists(png)):
+            continue
+        if unreal.EditorAssetLibrary.does_asset_exist(f"{dest_path}/{name}"):
+            continue
+
+        task = unreal.AssetImportTask()
+        task.set_editor_property('filename', os.path.normpath(png).replace("\\", "/"))
+        task.set_editor_property('destination_path', dest_path)
+        task.set_editor_property('destination_name', name)
+        task.set_editor_property('replace_existing', True)
+        task.set_editor_property('automated', True)
+        task.set_editor_property('save', True)
+        task.set_editor_property('factory', unreal.TextureFactory())
+        import_tasks.append(task)
+
+    if import_tasks:
+        print(f"[PalBaker] Importing {len(import_tasks)} vanilla VFX texture(s) (editor-only, never packaged)...", flush=True)
+        unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(import_tasks)
 
 def import_icon(icon_file, destination_path):
     if icon_file and os.path.exists(icon_file):

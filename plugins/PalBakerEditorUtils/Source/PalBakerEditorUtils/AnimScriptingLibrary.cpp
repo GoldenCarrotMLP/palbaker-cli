@@ -544,11 +544,40 @@ FString UAnimScriptingLibrary::InjectVirtualBonesAndSlots(USkeleton* TargetSkele
     TargetSkeleton->Modify();
     FString Report = TEXT("");
 
+    // USkeleton::AddNewVirtualBone never checks that the bones exist. A virtual bone on a bone the custom mesh
+    // lacks gets parent index -1 and hard-crashes the editor (Array.h index -1) once animations evaluate it.
+    const FReferenceSkeleton& RefSkeleton = TargetSkeleton->GetReferenceSkeleton();
+    auto IsKnownBone = [&](const FName& BoneName)
+    {
+        if (RefSkeleton.FindRawBoneIndex(BoneName) != INDEX_NONE) return true;
+        for (const FVirtualBone& VB : TargetSkeleton->GetVirtualBones()) {
+            if (VB.VirtualBoneName == BoneName) return true; // Virtual bones may chain off other virtual bones
+        }
+        return false;
+    };
+
+    // 0. Purge virtual bones from earlier pushes that point at bones this skeleton doesn't have
+    TArray<FName> StaleVirtualBones;
+    for (const FVirtualBone& VB : TargetSkeleton->GetVirtualBones()) {
+        if (!IsKnownBone(VB.SourceBoneName) || !IsKnownBone(VB.TargetBoneName)) {
+            StaleVirtualBones.Add(VB.VirtualBoneName);
+            Report += FString::Printf(TEXT("  - Removed stale Virtual Bone: %s -> %s (Missing bone in custom mesh)\n"), *VB.SourceBoneName.ToString(), *VB.TargetBoneName.ToString());
+        }
+    }
+    if (StaleVirtualBones.Num() > 0) {
+        TargetSkeleton->RemoveVirtualBones(StaleVirtualBones);
+    }
+
     // 1. Inject Virtual Bones
     for (int32 i = 0; i < VBSources.Num() && i < VBTargets.Num(); i++)
     {
         FName SourceName = FName(*VBSources[i]);
         FName TargetName = FName(*VBTargets[i]);
+
+        if (!IsKnownBone(SourceName) || !IsKnownBone(TargetName)) {
+            Report += FString::Printf(TEXT("  - Skipped Virtual Bone: %s -> %s (Missing bone in custom mesh)\n"), *VBSources[i], *VBTargets[i]);
+            continue;
+        }
 
         bool bExists = false;
         for (const FVirtualBone& VB : TargetSkeleton->GetVirtualBones()) {

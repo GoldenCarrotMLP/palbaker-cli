@@ -279,6 +279,8 @@ def import_psas_to_nla(blend_path: str, psa_dir: str, sidecar_path: str, base_pa
                 nla_track = arm_obj.animation_data.nla_tracks.new()
                 nla_track.name = track_name
 
+            for dead_strip in [s for s in nla_track.strips if s.action is None]:
+                nla_track.strips.remove(dead_strip)
             has_strip = any(strip.action == existing_action for strip in nla_track.strips)
             if not has_strip:
                 start_frame = int(existing_action.frame_range[0])
@@ -313,6 +315,9 @@ def import_psas_to_nla(blend_path: str, psa_dir: str, sidecar_path: str, base_pa
             nla_track = arm_obj.animation_data.nla_tracks.new()
             nla_track.name = track_name
 
+        # Drop dead strips whose action was lost (e.g. .blend overwritten by an older GUI session)
+        for dead_strip in [s for s in nla_track.strips if s.action is None]:
+            nla_track.strips.remove(dead_strip)
         if len(nla_track.strips) == 0:
             nla_track.strips.new(track_name, int(new_action.frame_range[0]), new_action)
         nla_track.mute = True

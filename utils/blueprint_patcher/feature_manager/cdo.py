@@ -95,6 +95,68 @@ class CDOManagerMixin:
             ]
         sync_namemap(self.data)
 
+    def set_random_rests(self, rests: list):
+        """Replaces StaticCharacterParameterComponent.RandomRestMontageInfos.
+        rests: [{"package": "/Game/.../AM_X_Rest01", "asset": "AM_X_Rest01", "weight", "loop_min", "loop_max", "after_idle_time"}]
+        """
+        comp = self.find_static_char_param_export()
+        if not comp:
+            return
+        comp_data = comp.get("Data")
+        if not isinstance(comp_data, list):
+            comp_data = []
+            comp["Data"] = comp_data
+
+        def prop(type_name: str, name: str, value) -> dict:
+            return {
+                "$type": f"UAssetAPI.PropertyTypes.Objects.{type_name}, UAssetAPI",
+                "Name": name,
+                "ArrayIndex": 0,
+                "PropertyGuid": None,
+                "IsZero": False,
+                "PropertyTagFlags": "None",
+                "PropertyTypeName": None,
+                "PropertyTagExtensions": "NoExtension",
+                "Value": value
+            }
+
+        comp_deps = comp.setdefault("CreateBeforeSerializationDependencies", [])
+        entries = []
+        for i, r in enumerate(rests):
+            montage_idx = self.ensure_import_chain(r["package"], r["asset"], "AnimMontage")
+            if montage_idx not in comp_deps:
+                comp_deps.append(montage_idx)
+            entries.append({
+                "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI",
+                "StructType": "PalRandomRestInfo",
+                "SerializeNone": True,
+                "StructGUID": "{00000000-0000-0000-0000-000000000000}",
+                "SerializationControl": "NoExtension",
+                "Operation": "None",
+                "Name": str(i),
+                "ArrayIndex": 0,
+                "PropertyGuid": None,
+                "IsZero": False,
+                "PropertyTagFlags": "None",
+                "PropertyTypeName": None,
+                "PropertyTagExtensions": "NoExtension",
+                "Value": [
+                    prop("ObjectPropertyData", "RandomRestMontage", montage_idx),
+                    prop("FloatPropertyData", "Weight", float(r.get("weight", 1.0))),
+                    prop("IntPropertyData", "LoopNum_Min", int(r.get("loop_min", 1))),
+                    prop("IntPropertyData", "LoopNum_Max", int(r.get("loop_max", 1))),
+                    prop("FloatPropertyData", "AfterIdleTime", float(r.get("after_idle_time", 2.0))),
+                ]
+            })
+
+        rest_prop = next((p for p in comp_data if isinstance(p, dict) and p.get("Name") == "RandomRestMontageInfos"), None)
+        if not rest_prop:
+            rest_prop = prop("ArrayPropertyData", "RandomRestMontageInfos", [])
+            rest_prop["ArrayType"] = "StructProperty"
+            comp_data.append(rest_prop)
+        rest_prop["Value"] = entries
+        sync_namemap(self.data)
+
     def set_waza_declaration(self, waza_id_enum: str, action_class_package: str, action_class_name: str):
         """Sets or updates WazaActionDeclarationMap (e.g. Unique_SheepBall_Roll)."""
         comp = self.find_static_char_param_export()

@@ -1,6 +1,10 @@
 # utils/builder/blacklist_helper.py
 import os
 
+# Vanilla folders whose assets are imported into the editor on demand (see fmodel_helper.collect_vanilla_effect_textures)
+# and must never be packaged: the game already ships them at the same paths.
+BLACKLIST_PREFIXES = ("/game/pal/effect/textures/",)
+
 def get_packaging_blacklist(repo_root: str) -> set[str]:
     """
     Dynamically scans plugins/PalBakerEditorUtils/Assets/Content/ and returns 
@@ -38,7 +42,7 @@ def is_package_blacklisted(package_name: str, blacklist: set[str], has_anims: bo
         return True
     if "physicsasset" in pkg_lower:
         return True
-    if pkg_lower in blacklist:
+    if pkg_lower in blacklist or pkg_lower.startswith(BLACKLIST_PREFIXES):
         return True
 
     return False

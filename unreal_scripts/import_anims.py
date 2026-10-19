@@ -107,6 +107,7 @@ def run_animation_import():
         import_ui.set_editor_property('skeleton', skel_asset)
 
         anim_data = import_ui.anim_sequence_import_data
+        anim_data.set_editor_property('import_uniform_scale', 1.0)
         anim_data.set_editor_property('import_custom_attribute', True)
         anim_data.set_editor_property('snap_to_closest_frame_boundary', True)
         anim_data.set_editor_property('animation_length', unreal.FBXAnimationLengthImportType.FBXALIT_EXPORTED_TIME)
