@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import re
 import shutil
 import subprocess
 from utils.config import validate_settings
@@ -122,6 +123,9 @@ def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action
     
     creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
     error_context = []
+    # Scans the whole log for known failure signatures the final error line may not mention
+    from utils.builder.log_analyzer import LogAnalyzer
+    analyzer = LogAnalyzer()
     
     try:
         proc = subprocess.Popen(
@@ -140,6 +144,7 @@ def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action
                 if not line: break
                 line_clean = line.strip()
                 if not line_clean: continue
+                analyzer.analyze_line(line_clean)
                 
                 if line_clean.startswith("{") and line_clean.endswith("}"):
                     try:
@@ -174,21 +179,45 @@ def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action
                 json_print({"type": "log", "level": level, "message": line_clean})
                 
         proc.wait()
+        # Only real signature matches, not the analyzer's generic "N warnings detected" fallback cards
+        diagnosis = [
+            {"title": r["title"], "solution": r["solution"], "assets": r.get("assets", [])}
+            for r in analyzer.matched_rules
+        ]
         if proc.returncode == 0:
-            json_print({"type": "result", "status": "success", "message": f"Successfully completed action: {action}"})
+            result: dict = {"type": "result", "status": "success", "message": f"Successfully completed action: {action}"}
+            if diagnosis:
+                result["diagnostics"] = diagnosis
+            json_print(result)
             if settings:
                 from utils.notifications import trigger_action_complete
                 trigger_action_complete(action, mod_name, settings, success=True)
         else:
                 err_msg = f"Pipeline action {action} failed with exit code: {proc.returncode}"
-                if error_context:
+                texture_reports = [e for e in error_context if "[PalBaker Missing Textures]" in e]
+                if texture_reports:
+                    # Structured report the UI turns into placement instructions
+                    err_msg += f"\n{texture_reports[-1]}"
+                elif error_context:
                     # Prioritize logs that specifically identify the broken asset or compiler failure
                     asset_errors = [
                         e for e in error_context 
                         if "[assetlog]" in e.lower() or ".uasset" in e.lower() or "[compiler]" in e.lower()
                     ]
+                    # Headlines PalBaker prints right before aborting, plus the exception that ended a traceback
+                    headline_idx = [
+                        i for i, e in enumerate(error_context)
+                        if re.match(r"^(ERROR:|CRITICAL ERROR:|❌)", e)
+                    ]
+                    exception_idx = [i for i, e in enumerate(error_context) if re.match(r"^[A-Za-z_.]*(Error|Exception): ", e)]
                     if asset_errors:
                         err_msg += f"\n{asset_errors[-1]}"
+                    elif headline_idx or exception_idx:
+                        if headline_idx:
+                            err_msg += f"\n{error_context[headline_idx[-1]]}"
+                        later_exceptions = [i for i in exception_idx if not headline_idx or i > headline_idx[-1]]
+                        if later_exceptions:
+                            err_msg += f"\nDetails: {error_context[later_exceptions[-1]]}"
                     else:
                         real_errors = [
                             e for e in error_context 
@@ -201,6 +230,8 @@ def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action
                         else:
                             err_msg += f"\n{error_context[-1]}"
                         
+                if diagnosis:
+                    err_msg += f"\n[PalBaker Diagnosis] {json.dumps(diagnosis)}"
                 json_print({"type": "result", "status": "error", "message": err_msg})
                 sys.exit(proc.returncode)
             

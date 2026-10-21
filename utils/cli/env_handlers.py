@@ -4,6 +4,7 @@ import sys
 import json
 import shutil
 import glob
+import subprocess
 from utils.config import validate_settings
 from utils.cli.shared import json_print, error_print
 
@@ -404,6 +405,19 @@ def handle_env_command(args, settings):
         except Exception as e:
             error_print(f"Failed to enable Remote Execution: {str(e)}")
             sys.exit(1)
+
+    # 7b2. Handle 'env close-game'
+    elif subcommand == "close-game":
+        # Palworld.exe is a launcher; the game itself runs as Palworld-Win64-Shipping.exe
+        killed = []
+        for image in ["Palworld-Win64-Shipping.exe", "Palworld.exe"]:
+            res = subprocess.run(["taskkill", "/F", "/T", "/IM", image], capture_output=True, text=True, creationflags=0x08000000)
+            if res.returncode == 0:
+                killed.append(image)
+        if killed:
+            json_print({"status": "success", "message": f"Closed Palworld ({', '.join(killed)})."})
+        else:
+            json_print({"status": "success", "message": "Palworld was not running."})
 
     # 7c. Handle 'env inject-assets'
     elif subcommand == "inject-assets":

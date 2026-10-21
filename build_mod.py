@@ -276,6 +276,15 @@ def main():
                 print(log_msg.encode('utf-8', errors='replace').decode('utf-8'), flush=True)
                 
             if not success:
+                # Re-emit materials.py's missing texture report with the folder the PNGs must be placed in
+                tex_match = re.findall(r"\[PalBaker Missing Textures\]\s*(\{.*\})", log_msg)
+                if tex_match:
+                    try:
+                        report = json.loads(tex_match[-1])
+                        report["folder"] = os.path.normpath(target_dir)
+                        print(f"ERROR: [PalBaker Missing Textures] {json.dumps(report)}", flush=True)
+                    except ValueError:
+                        pass
                 print(f"!!! ERROR INSIDE UNREAL ENGINE DURING {os.path.basename(target_dir)} IMPORT !!!", flush=True)
                 sys.exit(1)
 
@@ -361,6 +370,8 @@ def main():
             for err in anim_errors:
                 print(f"  {err}", flush=True)
             print("=" * 70 + "\n", flush=True)
+            # Single-line summary picked up as the result message for the UI
+            print(f"ERROR: [PalBaker Animation Guard] {' | '.join(' '.join(e.split()) for e in anim_errors)}", flush=True)
             sys.exit(1)
 
         restore_palbaker_backup(workspace.uproject_path)
@@ -487,6 +498,8 @@ def main():
             for err in anim_errors:
                 print(f"  {err}", flush=True)
             print("=" * 70 + "\n", flush=True)
+            # Single-line summary picked up as the result message for the UI
+            print(f"ERROR: [PalBaker Animation Guard] {' | '.join(' '.join(e.split()) for e in anim_errors)}", flush=True)
             sys.exit(1)
 
         from utils.blueprint_patcher import patch_actor_blueprint

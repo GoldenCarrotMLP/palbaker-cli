@@ -207,6 +207,9 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
         cat_sanitized = category.replace(" ", "_")
         parent_ue_dir = f"/Game/Pal/Model/Character/{cat_sanitized}/{base_pal}" if base_pal else ""
 
+        # Validate every material before building any, so the user gets the full list of missing textures in one run
+        resolved_textures = {}
+        all_missing = []
         for mat_name, data in materials_metadata.items():
             baseline_cfg = data.get("baseline_settings", {})
             baseline_textures = baseline_cfg.get("textures", {})
@@ -282,19 +285,29 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                     active_paths.pop(p_name, None)
                     continue
 
-                missing_textures.append((p_name, clean_t))
+                missing_textures.append((p_name, clean_t, known_full_path or ""))
 
             for p_k, path_k in skipped_defaults:
                 print(f"  [Material Warning] '{mat_name}': '{p_k}' -> {path_k} not in project; inheriting parent material default.", flush=True)
 
-            if missing_textures:
-                print("\n" + "=" * 70, flush=True)
-                print(f"❌ [PalBaker Material Error] Material '{mat_name}' validation failed!", flush=True)
-                print("The following required textures were not found in Unreal or the workspace:", flush=True)
-                for p_k, t_k in missing_textures:
-                    print(f"  • Parameter '{p_k}': Missing texture '{t_k}'", flush=True)
-                print("=" * 70 + "\n", flush=True)
-                raise RuntimeError(f"Missing required textures for material '{mat_name}': {[t for _, t in missing_textures]}")
+            for p_k, t_k, path_k in missing_textures:
+                all_missing.append({"material": mat_name, "parameter": p_k, "texture": t_k, "game_path": path_k.split(".")[0]})
+            resolved_textures[mat_name] = (active_textures, active_paths)
+
+        if all_missing:
+            print("\n" + "=" * 70, flush=True)
+            print("❌ [PalBaker Material Error] Material validation failed!", flush=True)
+            print("The following required textures were not found in Unreal or the workspace:", flush=True)
+            for m in all_missing:
+                print(f"  • '{m['material']}' parameter '{m['parameter']}': Missing texture '{m['texture']}'", flush=True)
+            print("=" * 70 + "\n", flush=True)
+            # Single-line marker parsed by build_mod.py and the UI diagnostics modal
+            print(f"[PalBaker Missing Textures] {json.dumps({'textures': all_missing})}", flush=True)
+            raise RuntimeError(f"Missing required textures: {sorted({m['texture'] for m in all_missing})}")
+
+        for mat_name, data in materials_metadata.items():
+            baseline_cfg = data.get("baseline_settings", {})
+            active_textures, active_paths = resolved_textures[mat_name]
 
             sanitized_name = sanitize_asset_name(mat_name)
             mi_path = f"{ue_path}/{sanitized_name}"
