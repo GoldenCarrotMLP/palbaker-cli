@@ -195,6 +195,47 @@ def fix_hierarchy_base(armature_name: str = "Armature"):
             obj.name = armature_name
             if obj.data:  # type: ignore
                 obj.data.name = armature_name
+            _remove_duplicate_root_bones(obj)
+
+
+def _remove_duplicate_root_bones(arm_obj):
+    """
+    cue4parse appends skeleton sockets to PSKs as extra bones. A modded skeleton that already has a real
+    bone with the socket's name (e.g. Socket_Mouth) then holds two bones of that name; Blender renames the
+    second 'Socket_Mouth.001' and the importer leaves it unparented, which Unreal rejects as a second root.
+    Drops such parentless duplicates and folds any weights they carry into the original bone.
+    """
+    bones = arm_obj.data.bones
+    dupes = []
+    for b in bones:
+        m = re.match(r"^(.+)\.\d{3}$", b.name)
+        if b.parent is None and m and bones.get(m.group(1)) and bones.get(m.group(1)) != b:
+            dupes.append((b.name, m.group(1)))
+    if not dupes:
+        return
+
+    for mesh_obj in [o for o in bpy.data.objects if o.type == 'MESH' and o.find_armature() == arm_obj]:
+        for dupe, original in dupes:
+            src = mesh_obj.vertex_groups.get(dupe)
+            if not src:
+                continue
+            dst = mesh_obj.vertex_groups.get(original) or mesh_obj.vertex_groups.new(name=original)
+            for v in mesh_obj.data.vertices:  # type: ignore
+                for g in v.groups:
+                    if g.group == src.index and g.weight > 0:
+                        dst.add([v.index], g.weight, 'ADD')
+            mesh_obj.vertex_groups.remove(src)
+
+    prev_active = bpy.context.view_layer.objects.active
+    bpy.context.view_layer.objects.active = arm_obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    for dupe, original in dupes:
+        eb = arm_obj.data.edit_bones.get(dupe)
+        if eb:
+            arm_obj.data.edit_bones.remove(eb)
+            print(f"[PalBaker] Removed duplicate root bone '{dupe}' (a second copy of '{original}' from the PSK socket export).", flush=True)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.context.view_layer.objects.active = prev_active
 
 @translator.register("get_pose_bones_info", (0, 0))
 def get_pose_bones_info_base(armature_name: str = "Armature") -> list[dict]:

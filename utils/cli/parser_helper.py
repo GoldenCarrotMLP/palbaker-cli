@@ -165,6 +165,9 @@ def create_cli_parser() -> argparse.ArgumentParser:
     env_subparsers.add_parser("enable-remote-exec", help="Configure DefaultEngine.ini to enable remote Python execution")
     env_subparsers.add_parser("autodetect", help="Autodetect Unreal Engine, Palworld, and Blender paths")
     env_subparsers.add_parser("extract-icons", help="Extract all vanilla Pal icon textures from game archives")
+    env_extract_tex = env_subparsers.add_parser("extract-textures", help="Extract vanilla textures as PNG into a mod folder")
+    env_extract_tex.add_argument("--paths", required=True, help="JSON list of /Game/... texture package paths")
+    env_extract_tex.add_argument("--folder", required=True, help="Destination mod folder")
     env_subparsers.add_parser("close-game", help="Force close running Palworld processes (releases locked .pak files)")
 
     return parser

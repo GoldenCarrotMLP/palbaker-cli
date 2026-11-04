@@ -38,6 +38,43 @@ def sanitize_asset_name(name):
     sanitized = re.sub(r'_+', '_', sanitized)
     return sanitized.strip('_')
 
+def enforce_texture_role(texture, param_name, ue_path):
+    """
+    Sets a mod texture's compression/sRGB from the material parameter it is bound to.
+    UE's import auto-detection samples the pixels and flags mostly-blue images as normal maps,
+    which ruins blue base colors; the sidecar's parameter name is the real role.
+    Matches vanilla Palworld: only normal maps are TC_NormalMap; everything else (including _M
+    parameter maps, which the master materials sample as Color) is TC_Default with sRGB on.
+    Only touches textures PalBaker imported into this mod's folder, never shared game textures.
+    """
+    try:
+        if not texture or not isinstance(texture, unreal.Texture2D):
+            return
+        if not texture.get_path_name().startswith(f"{ue_path}/"):
+            return
+
+        if "normal" in str(param_name).lower():
+            want_cs, want_srgb = unreal.TextureCompressionSettings.TC_NORMALMAP, False
+        else:
+            want_cs, want_srgb = unreal.TextureCompressionSettings.TC_DEFAULT, True
+
+        cur_cs = texture.get_editor_property("compression_settings")
+        cur_srgb = texture.get_editor_property("srgb")
+        if cur_cs == want_cs and cur_srgb == want_srgb:
+            return
+        texture.set_editor_property("compression_settings", want_cs)
+        texture.set_editor_property("srgb", want_srgb)
+        unreal.EditorAssetLibrary.save_loaded_asset(texture)
+        print(f"  [Texture Role] {texture.get_name()}: {cur_cs} -> {want_cs} (sRGB {want_srgb}) for '{param_name}'", flush=True)
+    except Exception as e:
+        print(f"  Warning: could not set texture role for {param_name}: {e}", flush=True)
+
+
+def bind_texture(mi_asset, param_name, texture, ue_path):
+    enforce_texture_role(texture, param_name, ue_path)
+    unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name(param_name), texture)
+
+
 def find_best_texture_match(slot_name, textures, suffix):
     clean_slot = re.sub(r'^(?:t_mi_|mi_|m_|sk_)', '', slot_name.lower())
     slot_tokens = set(clean_slot.split("_"))
@@ -111,7 +148,7 @@ def build_materials_heuristically(ue_path, textures, material_slots, preserve_ma
                 if tex_b:
                     loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_b))[0]}")
                     if loaded_tex and isinstance(loaded_tex, unreal.Texture):
-                        unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(existing_asset, unreal.Name("Base Texture"), loaded_tex)
+                        bind_texture(existing_asset, "Base Texture", loaded_tex, ue_path)
                 mi_assets.append((sanitized_slot.lower(), existing_asset))
                 continue
                 
@@ -153,21 +190,21 @@ def build_materials_heuristically(ue_path, textures, material_slots, preserve_ma
         if tex_b:
             loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_b))[0]}")
             if loaded_tex and isinstance(loaded_tex, unreal.Texture):
-                unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name("Base Texture"), loaded_tex)
+                bind_texture(mi_asset, "Base Texture", loaded_tex, ue_path)
                 print(f"  Bound BaseColor: {os.path.basename(tex_b)}")
                 
         tex_n = find_best_texture_match(sanitized_slot, textures, "N")
         if tex_n:
             loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_n))[0]}")
             if loaded_tex and isinstance(loaded_tex, unreal.Texture):
-                unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name("Normal Map"), loaded_tex)
+                bind_texture(mi_asset, "Normal Map", loaded_tex, ue_path)
                 print(f"  Bound Normal: {os.path.basename(tex_n)}")
                 
         tex_m = find_best_texture_match(sanitized_slot, textures, "M")
         if tex_m:
             loaded_tex = unreal.EditorAssetLibrary.load_asset(f"{ue_path}/{os.path.splitext(os.path.basename(tex_m))[0]}")
             if loaded_tex and isinstance(loaded_tex, unreal.Texture):
-                unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(mi_asset, unreal.Name("MetallicRoughnessOcclusionSpecularTexture"), loaded_tex)
+                bind_texture(mi_asset, "MetallicRoughnessOcclusionSpecularTexture", loaded_tex, ue_path)
                 print(f"  Bound ParameterMap: {os.path.basename(tex_m)}")
                 
         unreal.EditorAssetLibrary.save_loaded_asset(mi_asset)
@@ -326,7 +363,7 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                             unreal.EditorAssetLibrary.load_asset(f"/Game/Pal/Texture/{clean_tex}")
                         )
                         if loaded_tex and isinstance(loaded_tex, unreal.Texture):
-                            unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(existing_asset, unreal.Name(param_name), loaded_tex)
+                            bind_texture(existing_asset, param_name, loaded_tex, ue_path)
                     mi_assets.append((sanitized_name.lower(), existing_asset))
                     continue
                     
@@ -471,9 +508,7 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                     )
                     
                 if loaded_tex and isinstance(loaded_tex, unreal.Texture):
-                    unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(
-                        mi_asset, unreal.Name(param_name), loaded_tex
-                    )
+                    bind_texture(mi_asset, param_name, loaded_tex, ue_path)
                     print(f"  Bound {param_name}: {loaded_tex.get_name()}")
                     
             unreal.EditorAssetLibrary.save_loaded_asset(mi_asset)

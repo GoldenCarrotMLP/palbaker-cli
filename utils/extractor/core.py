@@ -111,6 +111,48 @@ def extract_game_files(settings: dict, relative_paths: list[str], output_dir: st
     finally:
         shutil.rmtree(staging_dir, ignore_errors=True)
 
+def extract_textures_to_folder(settings: dict, game_paths: list[str], dest_folder: str) -> tuple[list[str], list[str]]:
+    """
+    Extracts vanilla textures (given as /Game/... package paths) as PNGs straight into dest_folder,
+    named <TextureName>.png so the material binder picks them up. Returns (extracted, failed) names.
+    """
+    extracted, failed = [], []
+    wanted = {}
+    for gp in game_paths:
+        clean = (gp or "").split(".")[0].strip()
+        if not clean.startswith("/Game/"):
+            continue
+        # cue4parse matches file names, so a bare package path finds nothing
+        wanted[os.path.basename(clean)] = "Pal/Content/" + clean[len("/Game/"):] + ".uasset"
+    if not wanted:
+        return extracted, failed
+
+    staging = tool_cache.new_staging_dir("extract_textures")
+    try:
+        ok, msg = extract_game_files(settings, list(wanted.values()), staging, format_type="auto")
+        if not ok:
+            print(f"[Extractor] Texture extraction failed: {msg}", flush=True)
+            return extracted, sorted(wanted)
+
+        pngs = {}
+        for root, _, files in os.walk(staging):
+            for name in files:
+                if name.lower().endswith(".png"):
+                    pngs[os.path.splitext(name)[0].lower()] = os.path.join(root, name)
+
+        os.makedirs(dest_folder, exist_ok=True)
+        for tex_name in wanted:
+            src = pngs.get(tex_name.lower())
+            if src:
+                shutil.copyfile(src, os.path.join(dest_folder, f"{tex_name}.png"))
+                extracted.append(tex_name)
+            else:
+                failed.append(tex_name)
+        return extracted, failed
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
 def extract_single_file(settings: dict, relative_path: str, output_dir: str) -> bool:
     """Helper wrapper to extract a single file directly from paks."""
     success, msg = extract_game_files(settings, [relative_path], output_dir)

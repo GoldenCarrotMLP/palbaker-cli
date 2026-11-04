@@ -15,7 +15,7 @@ def handle_env_command(args, settings):
     # 1. Route validation strictly for compile/editor commands only (Exempting 'verify'!)
     if subcommand in ["install-plugin", "launch-unreal", "restart-unreal"]:
         is_valid, err_msg = validate_settings(settings, ["ue_root", "uproject"])
-    elif subcommand in ["ue4ss-install", "extract-icons", "palschema-install"]:
+    elif subcommand in ["ue4ss-install", "extract-icons", "palschema-install", "extract-textures"]:
         is_valid, err_msg = validate_settings(settings, ["palworld_exe", "fmodel_output"])
     elif subcommand == "enable-remote-exec":
         is_valid, err_msg = validate_settings(settings, ["uproject"])
@@ -418,6 +418,26 @@ def handle_env_command(args, settings):
             json_print({"status": "success", "message": f"Closed Palworld ({', '.join(killed)})."})
         else:
             json_print({"status": "success", "message": "Palworld was not running."})
+
+    # 7b3. Handle 'env extract-textures' (Missing Textures diagnostic → Extract button)
+    elif subcommand == "extract-textures":
+        from utils.extractor.core import extract_textures_to_folder
+        try:
+            game_paths = json.loads(args.paths)
+            if not isinstance(game_paths, list):
+                raise ValueError("--paths must be a JSON list")
+        except ValueError as e:
+            error_print(f"Invalid texture path list: {e}")
+            sys.exit(1)
+        if not os.path.isdir(args.folder):
+            error_print(f"Path does not exist: {args.folder}")
+            sys.exit(1)
+        extracted, failed = extract_textures_to_folder(settings, game_paths, args.folder)
+        if failed or not extracted:
+            names = ", ".join(failed) or "none of the requested textures"
+            json_print({"status": "error", "message": f"Couldn't extract {names} from the game files.", "extracted": extracted, "failed": failed})
+            sys.exit(1)
+        json_print({"status": "success", "message": f"Extracted {len(extracted)} texture(s) into the mod folder: {', '.join(extracted)}.", "extracted": extracted})
 
     # 7c. Handle 'env inject-assets'
     elif subcommand == "inject-assets":
