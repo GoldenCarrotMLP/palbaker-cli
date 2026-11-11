@@ -555,7 +555,10 @@ def bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets, harve
                 new_materials.append(skel_mat)
                 continue
 
-        matched_mi = next((mi_asset for mi_name, mi_asset in mi_assets if mi_name == slot_name), None)
+        # MIs are created under sanitize_asset_name() (which collapses "__" etc.), so the
+        # raw FBX slot name must go through the same sanitizer to match them.
+        sanitized_slot = sanitize_asset_name(str(skel_mat.material_slot_name)).lower()
+        matched_mi = next((mi_asset for mi_name, mi_asset in mi_assets if mi_name in (sanitized_slot, slot_name)), None)
             
         if not matched_mi:
             for mi_name, mi_asset in mi_assets:

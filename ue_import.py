@@ -5,8 +5,12 @@ import json
 import unreal  # type: ignore
 
 palbaker_root = globals().get('PALBAKER_ROOT', '')
-if palbaker_root and palbaker_root not in sys.path:
-    sys.path.append(palbaker_root)
+# The editor's sys.path persists across pushes, so a root added by an earlier push (e.g. the
+# installed app's bundled backend) would shadow this one. Always put the current root first.
+if palbaker_root:
+    while palbaker_root in sys.path:
+        sys.path.remove(palbaker_root)
+    sys.path.insert(0, palbaker_root)
 
 for k in list(sys.modules.keys()):
     if k.startswith("unreal_scripts"):
