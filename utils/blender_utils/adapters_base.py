@@ -83,26 +83,33 @@ def clean_scene_base():
 @translator.register("ensure_addon_enabled", (4, 2))
 def ensure_addon_enabled_v4_2(addon_name: str):
     import addon_utils  # type: ignore
-    pkg_id = f"bl_ext.system.{addon_name}"
-    
-    state = addon_utils.check(pkg_id)
-    if state and state[1]:
-        print(f"[PalBaker] Addon {pkg_id} is already active.")
-        return
+    # The addon may live in the system repo (Blender install folder) or, when that folder is
+    # write-protected (e.g. Program Files), in the user repos under AppData.
+    pkg_ids = [f"bl_ext.{repo}.{addon_name}" for repo in ("system", "user_default", "blender_org")]
 
-    try:
-        if hasattr(bpy.ops, "extensions") and hasattr(bpy.ops.extensions, "package_enable"):
-            bpy.ops.extensions.package_enable(pkg_id=pkg_id)  # type: ignore
-            bpy.ops.wm.save_userpref()
+    def _is_active(pid):
+        state = addon_utils.check(pid)
+        return bool(state and state[1])
+
+    for pkg_id in pkg_ids:
+        if _is_active(pkg_id):
+            print(f"[PalBaker] Addon {pkg_id} is already active.")
             return
-    except Exception:
-        pass
 
-    try:
-        addon_utils.enable(pkg_id)
-        bpy.ops.wm.save_userpref()
-    except Exception:
-        pass
+    for pkg_id in pkg_ids:
+        try:
+            addon_utils.enable(pkg_id, default_set=True)
+        except Exception:
+            continue
+        if _is_active(pkg_id):
+            print(f"[PalBaker] Enabled addon {pkg_id}.")
+            try:
+                bpy.ops.wm.save_userpref()
+            except Exception:
+                pass
+            return
+
+    print(f"[PalBaker] WARNING: Could not enable {addon_name} from any extension repository.")
 
 @translator.register("get_addon_name", (4, 2))
 def get_addon_name_v4_2() -> str:
@@ -150,7 +157,9 @@ def get_download_url_v4_2(version_str: str = "4.2") -> str:
 def get_target_addon_directory_v4_2(blender_dir: str, version_str: str, appdata: str) -> str:
     system_path = os.path.join(blender_dir, version_str, "extensions", "system", "io_scene_psk_psa")
     system_version_dir = os.path.join(blender_dir, version_str)
-    if os.path.exists(system_path) or (os.path.exists(system_version_dir) and os.access(system_version_dir, os.W_OK)):
+    # Prefer Blender's own folder; pre_install_psk_addon asks for UAC elevation if it is
+    # write-protected and falls back to AppData if that is declined.
+    if os.path.exists(system_path) or os.path.exists(system_version_dir):
         return system_path
     return os.path.join(appdata, "Blender Foundation", "Blender", version_str, "extensions", "user_default", "io_scene_psk_psa")
 

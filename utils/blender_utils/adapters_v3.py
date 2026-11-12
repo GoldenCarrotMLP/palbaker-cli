@@ -98,6 +98,6 @@ def get_download_url_v4_1(version_str: str = "4.1") -> str:
 def get_target_addon_directory_legacy(blender_dir: str, version_str: str, appdata: str) -> str:
     system_path = os.path.join(blender_dir, version_str, "scripts", "addons", "io_scene_psk_psa")
     system_version_dir = os.path.join(blender_dir, version_str)
-    if os.path.exists(system_path) or (os.path.exists(system_version_dir) and os.access(system_version_dir, os.W_OK)):
+    if os.path.exists(system_path) or os.path.exists(system_version_dir):
         return system_path
     return os.path.join(appdata, "Blender Foundation", "Blender", version_str, "scripts", "addons", "io_scene_psk_psa")
