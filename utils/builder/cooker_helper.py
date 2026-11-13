@@ -302,8 +302,9 @@ def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[
         if os.path.exists(workspace.cooked_dir):
             folders_to_pack.append((workspace.cooked_dir, workspace.ue_virtual_path.replace("/Game/", "")))
 
-        # 2. Variant Dedicated Skeleton (ALWAYS pack if present to satisfy mesh dependency)
-        if os.path.exists(workspace.cooked_skel_dir):
+        # 2. Variant Dedicated Skeleton: only exists with custom anims. Without them, skeleton_virtual_path
+        #    is the VANILLA skeleton folder (cooked only as a mesh dependency) and must never be shipped.
+        if has_anims and os.path.exists(workspace.cooked_skel_dir):
             folders_to_pack.append((workspace.cooked_skel_dir, workspace.skeleton_virtual_path.replace("/Game/", "")))
             print(f"  -> Packed variant dedicated skeleton: {workspace.skeleton_virtual_path}", flush=True)
 
@@ -367,8 +368,9 @@ def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[
         if os.path.exists(workspace.cooked_dir):
             folders_to_pack.append((workspace.cooked_dir, workspace.ue_virtual_path.replace("/Game/", "")))
 
-        # 2. Base Pal Skeleton & Anims (if parent has anims)
-        if os.path.exists(workspace.cooked_skel_dir):
+        # 2. Base Pal Skeleton & Anims: only with custom anims. Otherwise the skeleton is the vanilla one
+        #    (cooked only as a mesh dependency) and must never be shipped.
+        if has_anims and os.path.exists(workspace.cooked_skel_dir):
             folders_to_pack.append((workspace.cooked_skel_dir, workspace.skeleton_virtual_path.replace("/Game/", "")))
         if has_anims and os.path.exists(workspace.cooked_anims_dir):
             folders_to_pack.append((workspace.cooked_anims_dir, workspace.anims_virtual_path.replace("/Game/", "")))
@@ -421,9 +423,9 @@ def resolve_packaging_manifest(workspace, has_anims: bool, extra_packages: list[
             sub_data = load_sidecar(sub_sidecar) if os.path.exists(sub_sidecar) else {}
             sub_has_anims = bool(sub_data.get("custom_animations", {}).get("is_active"))
 
-            # Child variant dedicated skeleton (pack if exists)
+            # Child variant dedicated skeleton (only with custom anims)
             sub_skel_dir = os.path.join(cooked_content, "Pal", "Model", "Character", "Skeleton", workspace.base_pal, sub)
-            if os.path.exists(sub_skel_dir):
+            if sub_has_anims and os.path.exists(sub_skel_dir):
                 folders_to_pack.append((sub_skel_dir, f"Pal/Model/Character/Skeleton/{workspace.base_pal}/{sub}"))
                 print(f"  -> Packed child variant dedicated skeleton: {sub}", flush=True)
 
