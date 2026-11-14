@@ -580,7 +580,7 @@ def harvest_pal_animation_inventory(settings: dict, base_pal: str, temp_dir: str
             samples_list = []
 
             for idx, seq_name in enumerate(anim_seqs):
-                clean_track = extract_track_name(seq_name)
+                clean_track = extract_track_name(seq_name, base_pal=base_pal)
                 calc_speed = round(float(idx * speed_step), 1)
                 rm_enabled = get_root_motion(seq_name, clean_track)
 
