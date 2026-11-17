@@ -189,9 +189,6 @@ def run_build_mod_and_stream(base_pal: str, mod_name: str, category: str, action
             if diagnosis:
                 result["diagnostics"] = diagnosis
             json_print(result)
-            if settings:
-                from utils.notifications import trigger_action_complete
-                trigger_action_complete(action, mod_name, settings, success=True)
         else:
                 err_msg = f"Pipeline action {action} failed with exit code: {proc.returncode}"
                 texture_reports = [e for e in error_context if "[PalBaker Missing Textures]" in e]
@@ -642,9 +639,7 @@ def handle_mod_command(args, settings):
             "status": "success",
             "message": f"Successfully imported animations into Unreal! Montages will compile on Cook."
         })
-        
-        from utils.notifications import trigger_action_complete
-        trigger_action_complete("push-anims", mod_name, settings, success=True)
+
 
     elif action == "set-preserve-materials":
         val_str = getattr(args, "path", "true")
