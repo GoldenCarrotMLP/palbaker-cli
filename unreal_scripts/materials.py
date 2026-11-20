@@ -33,6 +33,30 @@ def resolve_special_parent_material(mat_name: str):
 
     return None
 
+_warned_missing_compile_lib = False
+
+def wait_for_shader_compilation(context=""):
+    """Blocks until all async shader/asset compilation is done (PalBakerEditorUtils plugin).
+
+    A material instance whose BlendMode override changes its static permutation is drawn with its
+    parent's shader map until its own finishes compiling. On a cold shader cache that window crashes
+    the editor (RHICoreShader.cpp: TranslucentBasePass bound where OpaqueBasePass was expected), so
+    we wait before saving MIs and before handing them to the skeletal mesh.
+    """
+    global _warned_missing_compile_lib
+    lib = getattr(unreal, "CompileScriptingLibrary", None)
+    if lib is None:
+        if not _warned_missing_compile_lib:
+            print("  Warning: PalBakerEditorUtils is outdated (no CompileScriptingLibrary); not waiting for shader compilation. Reinstall the plugin from System Settings.")
+            _warned_missing_compile_lib = True
+        return
+    try:
+        pending = lib.finish_all_compilation()
+        if pending:
+            print(f"  [Shaders] Waited for {pending} shader job(s) to finish{f' ({context})' if context else ''}.")
+    except Exception as e:
+        print(f"  Warning: waiting for shader compilation failed: {e}")
+
 def sanitize_asset_name(name):
     sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
     sanitized = re.sub(r'_+', '_', sanitized)
@@ -206,7 +230,8 @@ def build_materials_heuristically(ue_path, textures, material_slots, preserve_ma
             if loaded_tex and isinstance(loaded_tex, unreal.Texture):
                 bind_texture(mi_asset, "MetallicRoughnessOcclusionSpecularTexture", loaded_tex, ue_path)
                 print(f"  Bound ParameterMap: {os.path.basename(tex_m)}")
-                
+
+        wait_for_shader_compilation(mi_asset.get_name())
         unreal.EditorAssetLibrary.save_loaded_asset(mi_asset)
         mi_assets.append((sanitized_slot.lower(), mi_asset))
         
@@ -510,7 +535,8 @@ def build_materials(ue_path, json_path, textures, target_asset_path, preserve_ma
                 if loaded_tex and isinstance(loaded_tex, unreal.Texture):
                     bind_texture(mi_asset, param_name, loaded_tex, ue_path)
                     print(f"  Bound {param_name}: {loaded_tex.get_name()}")
-                    
+
+            wait_for_shader_compilation(mi_asset.get_name())
             unreal.EditorAssetLibrary.save_loaded_asset(mi_asset)
             mi_assets.append((sanitized_name.lower(), mi_asset))
             
@@ -589,6 +615,8 @@ def bind_materials_to_mesh(target_asset_path, target_phys_path, mi_assets, harve
                 print(f"  [Safeguard] Linked empty slot {slot_name} to Master: {fallback_mat.get_name()}")
                 
         new_materials.append(skel_mat)
-    
+
+    wait_for_shader_compilation("before binding to mesh")
     mesh.materials = new_materials
+    wait_for_shader_compilation("after binding to mesh")
     unreal.EditorAssetLibrary.save_loaded_asset(mesh)

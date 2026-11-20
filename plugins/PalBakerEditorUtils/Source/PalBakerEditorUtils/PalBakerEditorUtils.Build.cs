@@ -6,7 +6,7 @@ public class PalBakerEditorUtils : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine" });
+        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "RenderCore" });
         PrivateDependencyModuleNames.AddRange(new string[] { 
             "UnrealEd", "BlueprintGraph", "AnimGraph", "AnimGraphRuntime", "Json", "JsonUtilities" ,
             "MaterialEditor", "IKRig", "IKRigEditor", "AssetTools"
